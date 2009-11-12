@@ -729,7 +729,7 @@ Options: \n\
   		(default /tmp/xnbd-bg.ctl) \n\
   --daemonize	run as a daemon process \n\
   --readonly	export a disk as readonly in target mode \n\
-  --cow		export a disk as copy-on-write in target mode \n\
+  --cow		export a disk as copy-on-write in target mode (Buggy! Don't USE!) \n\
   --logpath	logfile (default /tmp/xnbd.log) \n\
 ";
 
