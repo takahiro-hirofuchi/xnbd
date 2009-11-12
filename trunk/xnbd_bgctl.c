@@ -18,9 +18,8 @@ int main(int argc, char **argv)
 		if (fd < 0)
 			err("open %s, %m", bgctlpath);
 
-		char buf[100];
-		sprintf(buf, "%u", UINT32_MAX);
-		write_all(fd, buf, strlen(buf));
+		uint32_t bindex = UINT32_MAX;
+		write_all(fd, &bindex, sizeof(bindex));
 
 		close(fd);
 	} else
