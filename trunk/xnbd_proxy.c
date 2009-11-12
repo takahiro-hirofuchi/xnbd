@@ -194,7 +194,7 @@ void bgctl_enqueue_bindex(struct xnbd_proxy *proxy, uint32_t bindex)
 			}
 
 			length = g_async_queue_length(proxy->low_queue);
-			if (length >= 1000) {
+			if (length >= 10000) {
 				poll(NULL, 0, 1);
 				continue;
 			} else 
@@ -251,13 +251,19 @@ restart:
 			close(bgctlfd);
 			goto restart;
 		} else if (ret < (int) sizeof(bindex))
-			err("unknown protocol");
+			err("unknown protocol, %d %u", ret, sizeof(bindex));
+
+		/* magic number to terminate */
+		if (bindex == UINT32_MAX - 1)
+			break;
 
 		if (bindex == UINT32_MAX) {
 			info("cache all blocks and exit bgthread");
 
 			for (uint32_t i = 0; i < xnbd->nblocks; i++) 
-				bgctl_enqueue_bindex(proxy, bindex);
+				bgctl_enqueue_bindex(proxy, i);
+
+			info("cache all blocks done");
 
 			break;
 		}
@@ -825,6 +831,8 @@ void xnbd_proxy_initialize(struct xnbd_session *ses, struct xnbd_proxy *proxy)
 	if (ret < 0)
 		err("mkfifo %s, %m", proxy->bgctlpath);
 
+	info("bgctlpath %s created", proxy->bgctlpath);
+
 #if XNBD_STATIC_BGCTL
 	/* only for a test program assuming a static bgctl path */
 	unlink(ses->xnbd->bgctlprefix);
@@ -855,7 +863,7 @@ void xnbd_proxy_shutdown(struct xnbd_proxy *proxy)
 
 	{
 		char *bgctlpath = proxy->bgctlpath;
-		uint32_t bindex = UINT32_MAX;
+		uint32_t bindex = UINT32_MAX - 1;
 
 		int fd = open(bgctlpath, O_WRONLY);
 		if (fd < 0)
@@ -899,7 +907,7 @@ void xnbd_proxy_shutdown(struct xnbd_proxy *proxy)
 
 	int ret = unlink(proxy->bgctlpath);
 	if (ret < 0)
-		err("unlink %s, %d", proxy->bgctlpath, errno);
+		warn("unlink %s, %d", proxy->bgctlpath, errno);
 
 	/* no idea if the last process or not */
 	//unlink(proxy->ses->xnbd->bgctlpath);
