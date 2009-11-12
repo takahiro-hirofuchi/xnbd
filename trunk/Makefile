@@ -16,7 +16,7 @@ CFLAGS_CHECKING=-O2 -Wall -Wextra -std=gnu99 `pkg-config --cflags --libs glib-2.
 
 #CFLAGS=-g3 -fstack-protector -fmudflapth -lmudflapth -Wall -Wextra -std=gnu99
 
-SRC=xnbd.c xnbd_common.c xnbd_cachestat.c xnbd_proxy.c xnbd_target.c xnbd_target_cow.c
+SRC=xnbd.c xnbd_common.c xnbd_cachestat.c xnbd_proxy.c xnbd_target.c
 OBJ=$(SRC:%.c=%.o)
 
 xnbdobj_dbg=$(patsubst %.c, %___dbg.o, $(SRC))
