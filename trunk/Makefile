@@ -12,7 +12,7 @@ CFLAGS_DEBUG=$(CFLAGS_COMMON) -I$(XUTILSPATH) -L$(XUTILSPATH) -lxutils_dbg -DXNB
 
 #CFLAGS_CHECKING=-O2 -Wall -fstack-protector -fstack-check -fmudflapth -lmudflapth -Wextra -std=gnu99 `pkg-config --cflags --libs glib-2.0 gthread-2.0` 
 #CFLAGS_CHECKING=-O2 -Wall -Wextra -std=gnu99 -fmudflapth -lmudflapth  `pkg-config --cflags --libs glib-2.0 gthread-2.0` 
-CFLAGS_CHECKING=-O2 -Wall -Wextra -std=gnu99 `pkg-config --cflags --libs glib-2.0 gthread-2.0` 
+#CFLAGS_CHECKING=-O2 -Wall -Wextra -std=gnu99 `pkg-config --cflags --libs glib-2.0 gthread-2.0` 
 
 #CFLAGS=-g3 -fstack-protector -fmudflapth -lmudflapth -Wall -Wextra -std=gnu99
 
@@ -52,9 +52,9 @@ xnbd-server-debug: $(xnbdobj_dbg)
 	make -C $(XUTILSPATH)
 	$(CC) $^ $(CFLAGS_DEBUG) -o xnbd-server-debug
 
-xnbd-server-test: $(xnbdobj_dbg)
+xnbd-server-test: xnbd_proxy.c $(filter-out xnbd_proxy.o, $(OBJ))
 	make -C $(XUTILSPATH)
-	$(CC) $^ $(CFLAGS_CHECKING) -DXNBD_STATIC_BGCTL -o xnbd-server-test
+	$(CC) $^ $(CFLAGS) -DXNBD_STATIC_BGCTLPATH -o xnbd-server-test
 
 xnbd-server-cachestat: $(OBJ)
 	make -C $(XUTILSPATH)

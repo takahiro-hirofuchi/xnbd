@@ -297,6 +297,8 @@ int test_direct_mode(char *srcdisk, char *tgtdisk, int remotefd, int testmode)
 	nbd_negotiate_with_server(remotefd, &disksize);
 	g_message("remote disk size %llu", disksize);
 
+	sleep(3);
+
 	srcdiskfd = open(srcdisk, O_RDONLY);
 	if (srcdiskfd < 0)
 		err("src disk open");
@@ -499,13 +501,14 @@ int main(int argc, char **argv) {
 	int optind = 1;
 
 	if (argc - optind != 7) {
+		info("make xnbd-server-test xnbd-tester");
 		info("For target mode");
-		info("  ./xnbd-server --direct disk1G.img --lport 8992");
+		info("  ./xnbd-server-test --target disk1G.img --lport 8992");
 		info("  ./xnbd-tester localhost 8992 disk1G.img /tmp/tmp.img 1 0 notexistingfile");
 		info(" ");
 		info("For proxy mode");
-		info("  ./xnbd-server --direct disk1G.img --lport 8992");
-		info("  ./xnbd-server --redirect localhost 8992 /tmp/disk.cache /tmp/disk.cache.bitmap --lport 8521 --bgctlpath /tmp/xnbd-bg.ctl");
+		info("  ./xnbd-server-test --target disk1G.img --lport 8992");
+		info("  ./xnbd-server-test --proxy localhost 8992 /tmp/disk.cache /tmp/disk.cache.bitmap --lport 8521 --bgctlpath /tmp/xnbd-bg.ctl");
 		info("  ./xnbd-tester localhost 8521 /tmp/disk.cache /tmp/tmp.img 1 0 /tmp/xnbd-bg.ctl");
 		info(" ");
 		err("See source code for detail.");
