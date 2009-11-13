@@ -833,13 +833,15 @@ void xnbd_proxy_initialize(struct xnbd_session *ses, struct xnbd_proxy *proxy)
 
 	info("bgctlpath %s created", proxy->bgctlpath);
 
-#if XNBD_STATIC_BGCTL
+#ifdef XNBD_STATIC_BGCTLPATH
 	/* only for a test program assuming a static bgctl path */
 	unlink(ses->xnbd->bgctlprefix);
 
 	ret = symlink(proxy->bgctlpath, ses->xnbd->bgctlprefix);
 	if (ret < 0)
 		err("symlink %s %s, %m", proxy->bgctlpath, ses->xnbd->bgctlprefix);
+
+	info("symlink %s -> %s created", proxy->bgctlpath, ses->xnbd->bgctlprefix);
 #endif
 
 
