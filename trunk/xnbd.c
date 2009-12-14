@@ -559,6 +559,12 @@ int master_server(int port, void *data)
 				xnbd->sessions = g_list_remove(xnbd->sessions, ses);
 				free_session(xnbd, ses);
 				info("session (pid %d) exited", pid);
+
+				if (WIFEXITED(status))
+					info("   with exit status=%d", WEXITSTATUS(status));
+
+				if (WIFSIGNALED(status))
+					info("   killed by signal=%d(%s)", WTERMSIG(status), sys_siglist[WTERMSIG(status)]);
 			}
 		}
 
