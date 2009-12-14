@@ -504,7 +504,7 @@ int main(int argc, char **argv) {
 		info("make xnbd-server-test xnbd-tester");
 		info("For target mode");
 		info("  ./xnbd-server-test --target disk1G.img --lport 8992");
-		info("  ./xnbd-tester localhost 8992 disk1G.img /tmp/tmp.img 1 0 notexistingfile");
+		info("  ./xnbd-tester localhost 8992 disk1G.img /tmp/tmp.img 1 0 dummyarg");
 		info(" ");
 		info("For proxy mode");
 		info("  ./xnbd-server-test --target disk1G.img --lport 8992");
