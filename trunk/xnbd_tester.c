@@ -19,7 +19,7 @@ static int send_request_header(int remotefd, uint32_t iotype, uint64_t iofrom, u
 {
 	struct nbd_request request;
 
-	dbg("send_request_header iofrom %llu len %u", iofrom, len);
+	dbg("send_request_header iofrom %ju len %u", iofrom, len);
 
 	bzero(&request, sizeof(request));
 
@@ -93,7 +93,7 @@ void *bgctl_thread_main(void *data)
 		if (ret != sizeof(bindex))
 			err("write bgctl");
 
-		info("%d bgctl bindex %u (iofrom %llu)\n", bgcopycount, bindex, (uint64_t) bindex * CBLOCKSIZE);
+		info("%d bgctl bindex %u (iofrom %ju)\n", bgcopycount, bindex, (uint64_t) bindex * CBLOCKSIZE);
 
 		bgcopycount += 1;
 
@@ -192,13 +192,13 @@ void *sender_thread_main(void *data)
 		 **/
 		req->iolen  = MIN(tmp_iolen, (params->disksize - req->iofrom));
 
-		g_message("index %d req %p iotype %s iofrom %llu iolen %u", index, req,
+		g_message("index %d req %p iotype %s iofrom %ju iolen %u", index, req,
 				(req->iotype == NBD_CMD_READ) ? "read" : "write",
 				req->iofrom, req->iolen);
 
 		if (req->iofrom + req->iolen > params->disksize) {
-			g_message("disksize %llu", params->disksize);
-			g_error("random, %llu", params->disksize);
+			g_message("disksize %ju", params->disksize);
+			g_error("random, %ju", params->disksize);
 		}
 
 		send_request_header(params->remotefd, req->iotype, req->iofrom, req->iolen, (uint64_t) index);
@@ -508,7 +508,7 @@ int main(int argc, char **argv) {
 		info(" ");
 		info("For proxy mode");
 		info("  ./xnbd-server-test --target disk1G.img --lport 8992");
-		info("  ./xnbd-server-test --proxy localhost 8992 /tmp/disk.cache /tmp/disk.cache.bitmap --lport 8521 --bgctlpath /tmp/xnbd-bg.ctl");
+		info("  ./xnbd-server-test --proxy localhost 8992 /tmp/disk.cache /tmp/disk.cache.bitmap --lport 8521 --bgctlprefix /tmp/xnbd-bg.ctl");
 		info("  ./xnbd-tester localhost 8521 /tmp/disk.cache /tmp/tmp.img 1 0 /tmp/xnbd-bg.ctl");
 		info(" ");
 		err("See source code for detail.");
