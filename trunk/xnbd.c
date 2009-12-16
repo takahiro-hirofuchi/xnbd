@@ -69,7 +69,7 @@ void setup_cachedisk(struct xnbd_info *xnbd, uint64_t disksize, char *cachepath)
 
 	uint64_t size = get_disksize(cachefd);
 	if (size < disksize) {
-		warn("cache disk size is smaller than the target disk size %llu < %llu", size, disksize);
+		warn("cache disk size is smaller than the target disk size %ju < %ju", size, disksize);
 		warn("now expand it");
 		off_t ret = lseek(cachefd, disksize-1, SEEK_SET);
 		if (ret < 0)

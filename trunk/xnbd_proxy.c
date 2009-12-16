@@ -127,12 +127,12 @@ void cbitmap_write_lock(struct xnbd_proxy *proxy)
 
 
 
-void get_bgctlpath(char *bgctlpath, int len, char *prefix)
+void get_bgctlpath(char *bgctlpath, size_t len, char *prefix)
 {
 	pid_t ppid = getppid();
 	pid_t pid  = getpid();
 
-	snprintf(bgctlpath, len, "%s.%d-%d", prefix, ppid, pid);
+	snprintf(bgctlpath, len, "%s.%ld-%ld", prefix, (long) ppid, (long) pid);
 }
 
 
@@ -146,7 +146,8 @@ void bgctl_enqueue_bindex_main(struct xnbd_proxy *proxy, uint32_t bindex)
 
 	{
 		dbg("bgthread enqueue %u", bindex);
-		cread->iofrom = bindex * CBLOCKSIZE;
+		/* casting is essential */
+		cread->iofrom = (uint64_t) bindex * CBLOCKSIZE;
 		cread->iolen  = CBLOCKSIZE;
 
 		cread->block_index_start = bindex;
@@ -251,7 +252,7 @@ restart:
 			close(bgctlfd);
 			goto restart;
 		} else if (ret < (int) sizeof(bindex))
-			err("unknown protocol, %d %u", ret, sizeof(bindex));
+			err("unknown protocol, %d %lu", ret, sizeof(bindex));
 
 		/* magic number to terminate */
 		if (bindex == UINT32_MAX - 1)
@@ -741,7 +742,7 @@ void *redirect_thread(void *arg)
 
 			/* send read request as soon as possible */
 			for (int i = 0; i < cread->nreq; i++) {
-				int ret = send_read_request(ses->remotefd, cread->req[i].bindex_iofrom * CBLOCKSIZE,
+				int ret = send_read_request(ses->remotefd, (uint64_t) cread->req[i].bindex_iofrom * CBLOCKSIZE,
 						cread->req[i].bindex_iolen * CBLOCKSIZE);
 				if (ret < 0) {
 					/*
