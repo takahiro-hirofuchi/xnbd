@@ -5,7 +5,10 @@
 
 CC=gcc
 # -O3 makes a broken binary.
-CFLAGS_COMMON=-g -O2 -Wall -fstack-protector -fstack-check -Wextra -std=gnu99 `pkg-config --cflags --libs glib-2.0 gthread-2.0`
+# CFLAGS_COMMON=-g -O2 -Wall -Wextra -Wstrict-aliasing=2 -Wformat=2 -Wcast-qual -Wcast-align -Wwrite-strings -Wfloat-equal -Wpointer-arith -Wswitch-enum -Wconversion -fstack-protector -fstack-check -Wextra -std=gnu99 `pkg-config --cflags --libs glib-2.0 gthread-2.0` -llzo2
+CFLAGS_COMMON=-g -O2 -Wall -Wextra -Wstrict-aliasing=2 -Wformat=2 -Wcast-qual -Wcast-align -Wwrite-strings -Wfloat-equal -Wpointer-arith -Wswitch-enum -Wconversion -fstack-protector -fstack-check -std=gnu99 `pkg-config --cflags --libs glib-2.0 gthread-2.0` -llzo2 -DXNBD_LZO
+#CFLAGS_COMMON=-g -O2 -Wall -Wextra -fstack-check -std=gnu99 `pkg-config --cflags --libs glib-2.0 gthread-2.0` -llzo2 -DXNBD_LZO
+#CFLAGS_COMMON=-g -O2 -ftrapv -Wall -Wextra -Wstrict-aliasing=2 -Wformat=2 -Wcast-qual -Wcast-align -Wwrite-strings -Wfloat-equal -Wpointer-arith -Wswitch-enum -Wconversion -fstack-protector -fstack-check -std=gnu99 `pkg-config --cflags --libs glib-2.0 gthread-2.0` -llzo2
 XUTILSPATH=./lib
 CFLAGS=$(CFLAGS_COMMON) -I$(XUTILSPATH) -L$(XUTILSPATH) -lxutils
 CFLAGS_DEBUG=$(CFLAGS_COMMON) -I$(XUTILSPATH) -L$(XUTILSPATH) -lxutils_dbg -DXNBD_DEBUG
@@ -16,7 +19,7 @@ CFLAGS_DEBUG=$(CFLAGS_COMMON) -I$(XUTILSPATH) -L$(XUTILSPATH) -lxutils_dbg -DXNB
 
 #CFLAGS=-g3 -fstack-protector -fmudflapth -lmudflapth -Wall -Wextra -std=gnu99
 
-SRC=xnbd.c xnbd_common.c xnbd_cachestat.c xnbd_proxy.c xnbd_target.c xnbd_target_cow.c
+SRC=xnbd.c xnbd_common.c xnbd_cachestat.c xnbd_proxy.c xnbd_target.c xnbd_target_cow_lzo.c
 OBJ=$(SRC:%.c=%.o)
 
 xnbdobj_dbg=$(patsubst %.c, %___dbg.o, $(SRC))
@@ -68,9 +71,21 @@ xnbd-tester: xnbd_tester.c $(filter-out xnbd.o, $(OBJ))
 	make -C $(XUTILSPATH)
 	$(CC) $^ $(CFLAGS) -o xnbd-tester
 
+xnbd-tester2: xnbd_tester2.c $(filter-out xnbd.o, $(OBJ))
+	make -C $(XUTILSPATH)
+	$(CC) $^ $(CFLAGS) -o xnbd-tester2
+
 xnbd-bgctl: xnbd_bgctl.c $(filter-out xnbd.o, $(OBJ))
 	make -C $(XUTILSPATH)
 	$(CC) $^ $(CFLAGS) -o xnbd-bgctl
+
+xnbd-client: xnbd_client.c $(filter-out xnbd.o, $(OBJ))
+	make -C $(XUTILSPATH)
+	$(CC) $^ $(CFLAGS) -o xnbd-client
+
+xnbd-watchdog: xnbd_watchdog.c $(filter-out xnbd.o, $(OBJ))
+	make -C $(XUTILSPATH)
+	$(CC) $^ $(CFLAGS) -o xnbd-watchdog
 
 #$(XUTILSPATH)/libxutils.a: $(wildcard $(XUTILSPATH)/*.c)
 #	make -C $(XUTILSPATH) libxutils.a
