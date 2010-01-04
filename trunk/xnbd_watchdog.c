@@ -206,7 +206,7 @@ Options: \n\
   --recovery-command-reboot	invoke the reboot system call if polling failed \n\
 \n\
 Example: \n\
-  xnbd-watchdog --recovery_command_internal_reboot_call /dev/nbd0 \n\
+  xnbd-watchdog --recovery-command-reboot /dev/nbd0 \n\
 ";
 
 
