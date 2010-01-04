@@ -3,10 +3,14 @@
  */
 #include "xnbd.h"
 
+const unsigned long XNBD_BGCTL_MAGIC_CACHE_ALL = ~(0UL);
+const unsigned long XNBD_BGCTL_MAGIC_SHUTDOWN  = ~(0UL) - 1;
+
+
 struct remote_read_request {
 	/* block index */
-	uint64_t bindex_iofrom;
-	uint32_t bindex_iolen;
+	off_t bindex_iofrom;
+	size_t bindex_iolen;
 };
 
 #define MAXNBLOCK 10
@@ -21,11 +25,11 @@ struct xnbd_cread {
 	int nreq;
 	struct remote_read_request req[MAXNBLOCK];
 
-	uint64_t iofrom;
-	uint32_t iolen;
+	off_t iofrom;
+	size_t iolen;
 
-	uint32_t block_index_start;
-	uint32_t block_index_end;
+	unsigned long block_index_start;
+	unsigned long block_index_end;
 
 	struct nbd_reply reply;
 
@@ -77,14 +81,14 @@ void xnbd_cread_dump(struct xnbd_cread *cread)
 	dbg("cread %p", cread);
 	dbg(" nreq   %d", cread->nreq);
 	for (int i = 0; i < cread->nreq; i++) {
-		dbg("  bindex_iofrom %llu", cread->req[i].bindex_iofrom);
-		dbg("  bindex_iolen  %u", cread->req[i].bindex_iolen);
+		dbg("  bindex_iofrom %ju", cread->req[i].bindex_iofrom);
+		dbg("  bindex_iolen  %lu", cread->req[i].bindex_iolen);
 	}
 
-	dbg(" iofrom %llu", cread->iofrom);
+	dbg(" iofrom %ju", cread->iofrom);
 	dbg(" iolen  %u", cread->iolen);
-	dbg(" block_index_start  %u", cread->block_index_start);
-	dbg(" block_index_end    %u", cread->block_index_end);
+	dbg(" block_index_start  %lu", cread->block_index_start);
+	dbg(" block_index_end    %lu", cread->block_index_end);
 
 	dbg(" reply.magic  %x", cread->reply.magic);
 	dbg(" reply.error  %u", cread->reply.error);
@@ -127,7 +131,7 @@ void cbitmap_write_lock(struct xnbd_proxy *proxy)
 
 
 
-void get_bgctlpath(char *bgctlpath, size_t len, char *prefix)
+void get_bgctlpath(char *bgctlpath, size_t len, const char *prefix)
 {
 	pid_t ppid = getppid();
 	pid_t pid  = getpid();
@@ -136,7 +140,7 @@ void get_bgctlpath(char *bgctlpath, size_t len, char *prefix)
 }
 
 
-void bgctl_enqueue_bindex_main(struct xnbd_proxy *proxy, uint32_t bindex)
+void bgctl_enqueue_bindex_main(struct xnbd_proxy *proxy, unsigned long bindex)
 {
 	struct xnbd_cread *cread = g_malloc0(sizeof(struct xnbd_cread));
 	cread->reply.magic = htonl(NBD_REPLY_MAGIC);
@@ -146,9 +150,9 @@ void bgctl_enqueue_bindex_main(struct xnbd_proxy *proxy, uint32_t bindex)
 
 	{
 		dbg("bgthread enqueue %u", bindex);
-		/* casting is essential */
-		cread->iofrom = (uint64_t) bindex * CBLOCKSIZE;
-		cread->iolen  = CBLOCKSIZE;
+		/* 1st casting is essential */
+		cread->iofrom = (off_t) bindex * CBLOCKSIZE;
+		cread->iolen  = (size_t) CBLOCKSIZE;
 
 		cread->block_index_start = bindex;
 		cread->block_index_end = bindex;
@@ -163,7 +167,7 @@ void bgctl_enqueue_bindex_main(struct xnbd_proxy *proxy, uint32_t bindex)
 
 static uint32_t iocounter = 0;
 
-void bgctl_enqueue_bindex(struct xnbd_proxy *proxy, uint32_t bindex)
+void bgctl_enqueue_bindex(struct xnbd_proxy *proxy, unsigned long bindex)
 {
 	struct xnbd_session *ses = proxy->ses;
 	struct xnbd_info *xnbd = ses->xnbd;
@@ -230,7 +234,7 @@ void *background_thread(void *data)
 	struct xnbd_session *ses = proxy->ses;
 	struct xnbd_info *xnbd = ses->xnbd;
 
-	int ret;
+	ssize_t ret;
 	int bgctlfd;
 
 	block_all_signals();
@@ -242,7 +246,7 @@ restart:
 		err("open %s, %m", proxy->bgctlpath);
 
 	for (;;) {
-		uint32_t bindex = 0;
+		unsigned long bindex = 0;
 
 		ret = read(bgctlfd, &bindex, sizeof(bindex));
 		if (ret < 0) 
@@ -251,17 +255,15 @@ restart:
 			info("bgcopy got eof");
 			close(bgctlfd);
 			goto restart;
-		} else if (ret < (int) sizeof(bindex))
-			err("unknown protocol, %d %lu", ret, sizeof(bindex));
+		} else if (ret < (ssize_t) sizeof(bindex))
+			err("unknown protocol, %zd %zu", ret, sizeof(bindex));
 
-		/* magic number to terminate */
-		if (bindex == UINT32_MAX - 1)
-			break;
 
-		if (bindex == UINT32_MAX) {
+		/* magic number to cache all blocks */
+		if (bindex == XNBD_BGCTL_MAGIC_CACHE_ALL) {
 			info("cache all blocks and exit bgthread");
 
-			for (uint32_t i = 0; i < xnbd->nblocks; i++) 
+			for (unsigned long i = 0; i < xnbd->nblocks; i++) 
 				bgctl_enqueue_bindex(proxy, i);
 
 			info("cache all blocks done");
@@ -269,8 +271,12 @@ restart:
 			break;
 		}
 
+		/* magic number to terminate */
+		if (bindex == XNBD_BGCTL_MAGIC_SHUTDOWN)
+			break;
+
 		if (bindex >= xnbd->nblocks) {
-			warn("too large block index %u, skip", bindex);
+			warn("too large block index %lu, skip", bindex);
 			continue;
 		}
 
@@ -284,7 +290,7 @@ restart:
 	return NULL;
 }
 		
-void add_read_block_to_tail(struct xnbd_cread *cread, uint32_t i)
+void add_read_block_to_tail(struct xnbd_cread *cread, unsigned long i)
 {
 	int cur_nreq = cread->nreq;
 
@@ -321,11 +327,11 @@ void push_to_high_queue(struct xnbd_proxy *proxy, struct xnbd_cread *cread)
 int proxy_mode_main_read(struct xnbd_proxy *proxy, struct xnbd_cread *cread)
 {
 	struct xnbd_info *xnbd = proxy->ses->xnbd;
-	uint32_t block_index_start = cread->block_index_start;
-	uint32_t block_index_end   = cread->block_index_end;
+	unsigned long block_index_start = cread->block_index_start;
+	unsigned long block_index_end   = cread->block_index_end;
 
 	cbitmap_write_lock(proxy);
-	for (uint32_t i = block_index_start; i <= block_index_end; i++) {
+	for (unsigned long i = block_index_start; i <= block_index_end; i++) {
 		/* counter */
 		cachestat_read_block();
 
@@ -361,10 +367,10 @@ int proxy_mode_main_read(struct xnbd_proxy *proxy, struct xnbd_cread *cread)
 int proxy_mode_main_write(struct xnbd_proxy *proxy, struct xnbd_cread *cread)
 {
 	struct xnbd_info *xnbd = proxy->ses->xnbd;
-	uint32_t block_index_start = cread->block_index_start;
-	uint32_t block_index_end   = cread->block_index_end;
-	uint64_t iofrom = cread->iofrom;
-	uint32_t iolen  = cread->iolen;
+	unsigned long block_index_start = cread->block_index_start;
+	unsigned long block_index_end   = cread->block_index_end;
+	off_t iofrom = cread->iofrom;
+	size_t iolen  = cread->iolen;
 
 
 	/*
@@ -400,7 +406,7 @@ int proxy_mode_main_write(struct xnbd_proxy *proxy, struct xnbd_cread *cread)
 		 * Mark all write data blocks as cached. The following I/O
 		 * requests to this area never retrieve these blocks.
 		 **/
-		for (uint32_t i = block_index_start; i <= block_index_end; i++) {
+		for (unsigned long i = block_index_start; i <= block_index_end; i++) {
 			/* counter */
 			cachestat_write_block();
 
@@ -490,8 +496,8 @@ int proxy_mode_main(struct xnbd_proxy *proxy)
 	struct xnbd_session *ses = proxy->ses;
 
 	uint32_t iotype = 0;
-	uint64_t iofrom = 0;
-	uint32_t iolen  = 0;
+	off_t iofrom = 0;
+	size_t iolen  = 0;
 	int ret = 0;
 
 
@@ -507,7 +513,7 @@ int proxy_mode_main(struct xnbd_proxy *proxy)
 	cread->reply.magic = htonl(NBD_REPLY_MAGIC);
 	cread->reply.error = 0;
 
-	ret = recv_request(ses->clientfd, ses->xnbd->disksize, &iotype, &iofrom, &iolen, &cread->reply);
+	ret = nbd_server_recv_request(ses->clientfd, ses->xnbd->disksize, &iotype, &iofrom, &iolen, &cread->reply);
 	if (ret == -1) {
 		cread->notify_error = 1;
 		push_to_high_queue(proxy, cread);
@@ -524,12 +530,12 @@ int proxy_mode_main(struct xnbd_proxy *proxy)
 	dbg("++++recv new request");
 
 
-	uint32_t block_index_start;
-	uint32_t block_index_end;
+	unsigned long block_index_start;
+	unsigned long block_index_end;
 
 	get_io_range_index(iofrom, iolen, &block_index_start, &block_index_end);
-	dbg("disk io iofrom %llu iolen %u", iofrom, iolen);
-	dbg("block_index_start %u stop %u", block_index_start, block_index_end);
+	dbg("disk io iofrom %ju iolen %u", iofrom, iolen);
+	dbg("block_index_start %lu stop %lu", block_index_start, block_index_end);
 
 	cread->iotype = iotype;
 	cread->iofrom = iofrom;
@@ -585,27 +591,27 @@ int complete_thread_main(struct xnbd_proxy *proxy)
 
 	/* large file support on 32bit architecutre */
 	char *mmaped_buf = NULL;
-	uint32_t mmaped_len = 0;
-	uint64_t mmaped_offset = 0;
+	size_t mmaped_len = 0;
+	off_t mmaped_offset = 0;
 	char *iobuf = NULL;
 
 	iobuf = mmap_iorange(xnbd, xnbd->cachefd, cread->iofrom, cread->iolen, &mmaped_buf, &mmaped_len, &mmaped_offset);
-	dbg("#mmaped_buf %p iobuf %p mmaped_len %u iolen %u", mmaped_buf, iobuf, mmaped_len, cread->iolen);
+	dbg("#mmaped_buf %p iobuf %p mmaped_len %u iolen %zu", mmaped_buf, iobuf, mmaped_len, cread->iolen);
 	dbg("#mapped %p -> %p", mmaped_buf, mmaped_buf + mmaped_len);
 
 
 	for (int i = 0; i < cread->nreq; i++) {
 		dbg("cread req %d", i);
-		uint64_t block_iofrom = cread->req[i].bindex_iofrom * CBLOCKSIZE;
-		uint32_t block_iolen  = cread->req[i].bindex_iolen  * CBLOCKSIZE;
+		off_t block_iofrom = cread->req[i].bindex_iofrom * CBLOCKSIZE;
+		size_t block_iolen  = cread->req[i].bindex_iolen  * CBLOCKSIZE;
 		char *iobuf_partial = NULL;
 
 		iobuf_partial = mmaped_buf + (block_iofrom - mmaped_offset);
 
-		dbg("i %u block_iofrom %llu iobuf_partial %p", i, block_iofrom, iobuf_partial);
+		dbg("i %u block_iofrom %ju iobuf_partial %p", i, block_iofrom, iobuf_partial);
 
 		/* recv from server */
-		ret = recv_read_reply(ses->remotefd, iobuf_partial, block_iolen);
+		ret = nbd_client_recv_read_reply(ses->remotefd, iobuf_partial, block_iolen);
 		if (ret < 0) {
 			warn("recv_read_reply error");
 			cread->reply.error = htonl(EPIPE);
@@ -712,7 +718,7 @@ void *redirect_thread(void *arg)
 						err("bug");
 
 					cbitmap_write_lock(proxy);
-					for (uint32_t i = cread->block_index_start; i <= cread->block_index_end; i++) {
+					for (unsigned long i = cread->block_index_start; i <= cread->block_index_end; i++) {
 						//info("get a req queued by bg, %u", i);
 						if (bitmap_test(xnbd->cbitmap, i)) {
 							dbg("already queued %u", i);
@@ -740,10 +746,12 @@ void *redirect_thread(void *arg)
 
 			dbg("%lu --- process new queue element", pthread_self());
 
+
 			/* send read request as soon as possible */
 			for (int i = 0; i < cread->nreq; i++) {
-				int ret = send_read_request(ses->remotefd, (uint64_t) cread->req[i].bindex_iofrom * CBLOCKSIZE,
-						cread->req[i].bindex_iolen * CBLOCKSIZE);
+				size_t length = cread->req[i].bindex_iolen * CBLOCKSIZE;
+
+				int ret = nbd_client_send_read_request(ses->remotefd, cread->req[i].bindex_iofrom * CBLOCKSIZE, length);
 				if (ret < 0) {
 					/*
 					 * TODO
@@ -866,13 +874,13 @@ void xnbd_proxy_shutdown(struct xnbd_proxy *proxy)
 
 	{
 		char *bgctlpath = proxy->bgctlpath;
-		uint32_t bindex = UINT32_MAX - 1;
+		unsigned long bindex = XNBD_BGCTL_MAGIC_SHUTDOWN;  // UINT32_MAX - 1;
 
 		int fd = open(bgctlpath, O_WRONLY);
 		if (fd < 0)
 			err("open %s, %m", bgctlpath);
 
-		int ret = write(fd, &bindex, sizeof(bindex));
+		ssize_t ret = write(fd, &bindex, sizeof(bindex));
 		if (ret < 0)
 			err("write good bye");
 

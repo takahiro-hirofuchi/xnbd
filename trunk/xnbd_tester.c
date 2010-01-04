@@ -4,43 +4,21 @@
 
 #include "xnbd.h"
 
-int bgctl_mode = 0;
-char *bgctlpath;
 
-static void fill_random(char *buff, uint32_t len)
+static void fill_random(char *buff, size_t len)
 {
-	for (uint32_t i = 0; i < len; i++) {
-		uint32_t rvalue = random();
+	for (size_t i = 0; i < len; i++) {
+		long int rvalue = random();
 		buff[i] = (char) rvalue;
 	}
-}
-
-static int send_request_header(int remotefd, uint32_t iotype, uint64_t iofrom, uint32_t len, uint64_t handle)
-{
-	struct nbd_request request;
-
-	dbg("send_request_header iofrom %ju len %u", iofrom, len);
-
-	bzero(&request, sizeof(request));
-
-	request.magic = htonl(NBD_REQUEST_MAGIC);
-	request.type = htonl(iotype);
-	request.from = htonll(iofrom);
-	request.len = htonl(len);
-
-	/* handle is 'char handle[8]' */
-	memcpy(request.handle, &handle, 8);
-
-	net_send_all_or_abort(remotefd, &request, sizeof(request));
-
-	return 0;
 }
 
 
 struct crequest {
 	uint32_t iotype;
-	uint64_t iofrom;
-	uint32_t iolen;
+
+	off_t  iofrom;
+	size_t iolen;
 
 	char *write_buff;
 
@@ -51,57 +29,71 @@ struct crequest {
 struct crequest eofmarker = { .write_buff = NULL };
 
 
-uint64_t bgctl_disksize = 0;
-pthread_mutex_t bgthread_lock = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t  bgthread_init_done = PTHREAD_COND_INITIALIZER;
-pthread_t bgthread_tid;
-int bgctlfd = 0;
 
-int bgcopycount = 0;
+
+struct bginfo_struct {
+	off_t disksize;
+	pthread_mutex_t lock;
+	pthread_cond_t  init_done;
+	pthread_t       tid;
+
+	const char *ctlpath;
+	int count;
+} bginfo_data;
+
+// uint64_t bgctl_disksize = 0;
+// pthread_mutex_t bgthread_lock = PTHREAD_MUTEX_INITIALIZER;
+// pthread_cond_t  bgthread_init_done = PTHREAD_COND_INITIALIZER;
+// pthread_t bgthread_tid;
+
 
 void *bgctl_thread_main(void *data)
 {
-	uint64_t disksize = bgctl_disksize;
-	uint32_t nblocks = disksize / CBLOCKSIZE;
-	int ret;
+	struct bginfo_struct *bginfo = (struct bginfo_struct *) data;
 
+	int bgctlfd = 0;
 
-	bgcopycount = 0;
 
 	for (;;) {
-		info("try open %s", bgctlpath);
-		bgctlfd = open(bgctlpath, O_WRONLY);
+		info("try open %s", bginfo->ctlpath);
+		bgctlfd = open(bginfo->ctlpath, O_WRONLY);
 		if (bgctlfd < 0) {
-			warn("open bgctl %s, %m", bgctlpath);
+			warn("open bgctl %s, %m", bginfo->ctlpath);
 			sleep(1);
 			continue;
 		}
 		break;
 	}
 
-	info("open %s done", bgctlpath);
+	info("open %s done", bginfo->ctlpath);
 
-	pthread_mutex_lock(&bgthread_lock);
-	pthread_cond_signal(&bgthread_init_done);
-	pthread_mutex_unlock(&bgthread_lock);
+	pthread_mutex_lock(&bginfo->lock);
+	pthread_cond_signal(&bginfo->init_done);
+	pthread_mutex_unlock(&bginfo->lock);
 
 
 	for (;;) {
-		uint32_t bindex =  ((uint64_t) nblocks) * random() / RAND_MAX;
+		off_t nblocks = bginfo->disksize / CBLOCKSIZE;
+		unsigned long bindex =  (unsigned long) (1.0L * nblocks * random() / RAND_MAX);
 
-		ret = write(bgctlfd, &bindex, sizeof(bindex));
+#if 0
+		/* this stops bgctl threads, so io with tester will fail */
+		if (random() % 1000 == 0)
+			bindex = XNBD_BGCTL_MAGIC_CACHE_ALL;
+#endif
+
+		ssize_t ret = write(bgctlfd, &bindex, sizeof(bindex));
 		if (ret != sizeof(bindex))
 			err("write bgctl");
 
-		info("%d bgctl bindex %u (iofrom %ju)\n", bgcopycount, bindex, (uint64_t) bindex * CBLOCKSIZE);
+		info("%d bgctl bindex %lu (iofrom %ju)\n", bginfo->count, bindex, (off_t) bindex * CBLOCKSIZE);
 
-		bgcopycount += 1;
+		bginfo->count += 1;
 
-		//poll(NULL, 0, ((int) (2.0 * random() / (RAND_MAX + 1.0))));
-		poll(NULL, 0, ((int) (20LL * random() / (RAND_MAX + 1.0))));
+		poll(NULL, 0, (int) (20.0L * random() / RAND_MAX));
 
 
-		if (bgcopycount > 1000)
+		if (bginfo->count > 1000)
 			break;
 	}
 
@@ -112,53 +104,74 @@ void *bgctl_thread_main(void *data)
 	return NULL;
 }
 
-void bgctl_thread_create(uint64_t disksize)
-{
-	int ret;
 
-	bgctl_disksize = disksize;
+void bgctl_thread_create(off_t disksize, const char *bgctlpath)
+{
+	struct bginfo_struct *bginfo = &bginfo_data;
+
+	bzero(bginfo, sizeof(struct bginfo_struct));
+	pthread_mutex_init(&bginfo->lock, NULL);
+	pthread_cond_init(&bginfo->init_done, NULL);
+	bginfo->disksize  = disksize;
+	bginfo->ctlpath   = bgctlpath;
+
+	if (!bginfo->ctlpath)
+		return;
+
+	g_message("bgctl is on");
+	// unlink(bginfo->ctlpath);
+
 
 	/* mutex_lock must come before pthread_create. Before cond_wait() is
 	 * called, cond_signal() cannot notify anyone. Without mutex here, if
 	 * bgthread finishes rapidly before cond_wait() is called, cond_wait()
 	 * never wakes up. */
-	pthread_mutex_lock(&bgthread_lock);
+	pthread_mutex_lock(&bginfo->lock);
 
-	ret = pthread_create(&bgthread_tid, NULL, bgctl_thread_main, NULL);
+	int ret = pthread_create(&bginfo->tid, NULL, bgctl_thread_main, bginfo);
 	if (ret < 0)
 		err("create thread");
 
+	pthread_cond_wait(&bginfo->init_done, &bginfo->lock);
+	pthread_mutex_unlock(&bginfo->lock);
 
-	pthread_cond_wait(&bgthread_init_done, &bgthread_lock);
-	pthread_mutex_unlock(&bgthread_lock);
 	g_message("bgthread creation done");
 }
 
 void bgctl_wait_shutdown(void)
 {
+	struct bginfo_struct *bginfo = &bginfo_data;
+
+	if (!bginfo->ctlpath)
+		return;
+
+
 	g_message("wait bgctl");
-	pthread_join(bgthread_tid, NULL);
-	g_message("wait done");
+	pthread_join(bginfo->tid, NULL);
+	g_message("wait done, count %d done", bginfo->count);
+
+	pthread_mutex_destroy(&bginfo->lock);
+	pthread_cond_destroy(&bginfo->init_done);
+	bzero(bginfo, sizeof(struct bginfo_struct));
 }
 
 
 GAsyncQueue *reply_pendings;
 GAsyncQueue *check_pendings;
 
+enum xnbd_tester_rwmode {
+	TESTRDONLY = 1,
+	TESTWRONLY,
+	TESTRDWR,
+};
 
 struct parameters {
 	uint32_t nreq;
-	enum TestMode {
-		TESTRDONLY = 1,
-		TESTWRONLY,
-		TESTRDWR,
-	} testmode;
-	uint64_t disksize;
+	enum xnbd_tester_rwmode rwmode;
+	off_t disksize;
 	int remotefd;
 
-	char *tgtbuf;
-
-
+	int tgtdiskfd;
 };
 
 void *sender_thread_main(void *data)
@@ -170,38 +183,35 @@ void *sender_thread_main(void *data)
 		struct crequest *req = g_malloc0(sizeof(struct crequest));
 		dbg("address %p", req);
 
-		if (params->testmode == TESTRDWR)
+		if (params->rwmode == TESTRDWR)
 			if (random() % 2)
 				req->iotype = NBD_CMD_READ;
 			else
 				req->iotype = NBD_CMD_WRITE;
-		else if (params->testmode == TESTRDONLY)
+		else if (params->rwmode == TESTRDONLY)
 			req->iotype = NBD_CMD_READ;
-		else if (params->testmode == TESTWRONLY)
+		else if (params->rwmode == TESTWRONLY)
 			req->iotype = NBD_CMD_WRITE;
 		else
-			err("unkown testmode");
+			err("unkown rwmode");
 
 
-		req->iofrom = params->disksize * random() / RAND_MAX;
-		uint32_t tmp_iolen = 1 + ((uint32_t) (10000.0 * (random() / (RAND_MAX + 1.0))));
+		req->iofrom = (off_t) (1.0L * params->disksize * random() / RAND_MAX);
 
+		size_t tmp_iolen = (size_t) (1 + 10000.0L * random() / RAND_MAX);
 		/*
 		 * MIN() is a macro. So, calling random() in its
 		 * argument may result in twice calling of it.
 		 **/
-		req->iolen  = MIN(tmp_iolen, (params->disksize - req->iofrom));
+		req->iolen  = (size_t) MIN((off_t) tmp_iolen, params->disksize - req->iofrom);
 
 		g_message("index %d req %p iotype %s iofrom %ju iolen %u", index, req,
 				(req->iotype == NBD_CMD_READ) ? "read" : "write",
 				req->iofrom, req->iolen);
 
-		if (req->iofrom + req->iolen > params->disksize) {
-			g_message("disksize %ju", params->disksize);
-			g_error("random, %ju", params->disksize);
-		}
+		g_assert(req->iofrom + req->iolen <= params->disksize);
 
-		send_request_header(params->remotefd, req->iotype, req->iofrom, req->iolen, (uint64_t) index);
+		nbd_client_send_request_header(params->remotefd, req->iotype, req->iofrom, req->iolen, (uint64_t) index);
 
 		if (req->iotype == NBD_CMD_WRITE) {
 			req->write_buff = g_malloc(req->iolen);
@@ -212,7 +222,7 @@ void *sender_thread_main(void *data)
 		req->index = index;
 		g_async_queue_push(reply_pendings, req);
 
-		poll(NULL, 0, ((int) (10LL * random() / (RAND_MAX + 1.0))));
+		poll(NULL, 0, (int) (10.0L * random() / RAND_MAX));
 	}
 
 
@@ -224,6 +234,31 @@ void *sender_thread_main(void *data)
 	return NULL;
 }
 
+void recv_reply_header(int remotefd, uint64_t expected_index)
+{
+	struct nbd_reply reply;
+	bzero(&reply, sizeof(reply));
+
+
+	net_recv_all_or_abort(remotefd, &reply, sizeof(reply));
+
+	if (ntohl(reply.magic) != NBD_REPLY_MAGIC)
+		err("unknown reply magic, %x %x", reply.magic, ntohl(reply.magic));
+
+	uint32_t error = ntohl(reply.error);
+	if (error)
+		err("reply state error %d", error);
+
+	uint64_t reply_index = 0;
+	memcpy(&reply_index, reply.handle, 8);
+
+
+	dbg("index %ju", reply_index);
+
+	if (reply_index != expected_index)
+		err("wrong reply ordering");
+}
+
 void *receiver_thread_main(void *data)
 {
 	struct parameters *params = (struct parameters *) data;
@@ -233,43 +268,27 @@ void *receiver_thread_main(void *data)
 		if (req == &eofmarker)
 			break;
 
-		struct nbd_reply reply;
-		bzero(&reply, sizeof(reply));
+		recv_reply_header(params->remotefd, req->index);
 
-		net_recv_all_or_abort(params->remotefd, &reply, sizeof(reply));
 
-		if (ntohl(reply.magic) != NBD_REPLY_MAGIC)
-			err("unknown reply magic, %x %x", reply.magic, ntohl(reply.magic));
+		dbg("req %p index %d iofrom %ju iolen %u", req, req->index, req->iofrom, req->iolen);
 
-		uint32_t error = ntohl(reply.error);
-		if (error)
-			err("reply state error %d", error);
 
-		uint64_t reply_index = 0;
-
-		memcpy(&reply_index, reply.handle, 8);
-		dbg("index %llu", reply_index);
-
-		if (req->index != reply_index)
-			err("wrong reply ordering");
-
-		dbg("address %p", req);
-		dbg("index %d iofrom %llu iolen %u", req->index, req->iofrom, req->iolen);
+		struct mmap_partial *tgtmp = mmap_partial_map(params->tgtdiskfd, req->iofrom, req->iolen, 0);
 
 		if (req->iotype == NBD_CMD_WRITE) {
 			g_message("index %d req %p write done", req->index, req);
+			memcpy(tgtmp->iobuf, req->write_buff, req->iolen);
 
-			memcpy(params->tgtbuf + req->iofrom, req->write_buff, req->iolen);
-
-			//g_free(req->write_buff);
 
 		} else if (req->iotype == NBD_CMD_READ) {
-			net_recv_all_or_abort(params->remotefd, params->tgtbuf + req->iofrom, req->iolen);
-
+			net_recv_all_or_abort(params->remotefd, tgtmp->iobuf, req->iolen);
 			g_message("index %d req %p read done", req->index, req);
 
 		} else
 			err("bug");
+
+		mmap_partial_unmap(tgtmp);
 
 
 		g_async_queue_push(check_pendings, req);
@@ -282,54 +301,188 @@ void *receiver_thread_main(void *data)
 	return NULL;
 }
 
-int test_direct_mode(char *srcdisk, char *tgtdisk, int remotefd, int testmode)
+static int CoWID = 0;
+
+int check_consistency_by_partial_mmap_for_cowdisk(char *srcdisk, int tgtdiskfd, struct crequest *req)
 {
-	int srcdiskfd;
-	uint64_t disksize = 0;
+	int result = 0;
+
+	struct disk_stack *ds = open_cow_disk(srcdisk, 0, CoWID);
+
+	struct disk_stack_io *io = disk_stack_mmap(ds, req->iofrom, req->iolen, 1);
+
+
+	struct mmap_partial *tgtmp = mmap_partial_map(tgtdiskfd, req->iofrom, req->iolen, 0);
+	char *tgtiobuf = tgtmp->iobuf;
+
+	unsigned long offset = 0;
+
+	for (size_t i = 0; i < io->iov_size; i++) {
+		int ret = memcmp(io->iov[i].iov_base, tgtiobuf + offset, io->iov[i].iov_len);
+		if (ret)
+			err("mismatch");
+
+		offset += io->iov[i].iov_len;
+	}
+
+	if (req->iolen != offset)
+		err("io size mismatch");
+
+	free_disk_stack_io(io);
+	close_cow_disk(ds, 0);
+
+	mmap_partial_unmap(tgtmp);
+
+#if 0
+	if (ret) {
+		g_warning("mismatch index %d iotype %s iofrom %ju iolen %u",
+				req->index, (req->iotype == NBD_CMD_READ) ? "read" : "write",
+				req->iofrom, req->iolen);
+
+		unsigned long block_index_start;
+		unsigned long block_index_end;
+		get_io_range_index(req->iofrom, req->iolen, &block_index_start, &block_index_end);
+
+		g_message("iofrom %ju (%ju KB), block_index_start %lu offset_in_start_block %ju",
+				req->iofrom, req->iofrom / 1024,
+				block_index_start, req->iofrom % CBLOCKSIZE);
+
+		g_message("ioend %ju (%ju KB), block_index_end %lu offset_in_end_block %ju",
+				req->iofrom + req->iolen, (req->iofrom + req->iolen) / 1024,
+				block_index_end, (req->iofrom + req->iolen) % CBLOCKSIZE);
+
+		g_message("srcbuf ...");
+		dump_buffer_all(srciobuf, req->iolen);
+		g_message("tgtbuf ...");
+		dump_buffer_all(tgtiobuf, req->iolen);
+		if (req->iotype == NBD_CMD_WRITE) {
+			g_message("req->write_buff");
+			dump_buffer_all(req->write_buff, req->iolen);
+		}
+
+
+		int found = 0;
+		for (uint32_t j = 0; j < req->iolen; j++) {
+			char x0 = *(srciobuf + j);
+			char x1 = *(tgtiobuf + j);
+			if (x0 != x1) {
+				g_message("mismatch at %d byte, %c %c", j, x0, x1);
+				found = 1;
+				break;
+			}
+		}
+		if (!found)
+			g_message("not mismatched !?");
+
+		result = -1;
+	}
+#endif
+
+
+
+
+	return result;
+}
+
+int check_consistency_by_partial_mmap(char *srcdisk, int tgtdiskfd, struct crequest *req)
+{
+	int result = 0;
+
+	int srcdiskfd = open(srcdisk, O_RDONLY);
+	if (srcdiskfd < 0)
+		err("open srcdisk %s", srcdisk);
+
+	struct mmap_partial *srcmp = mmap_partial_map(srcdiskfd, req->iofrom, req->iolen, 1);
+	struct mmap_partial *tgtmp = mmap_partial_map(tgtdiskfd, req->iofrom, req->iolen, 0);
+	char *srciobuf = srcmp->iobuf;
+	char *tgtiobuf = tgtmp->iobuf;
+
+
+
+	int ret = memcmp(srciobuf, tgtiobuf, req->iolen);
+
+	if (ret) {
+		g_warning("mismatch index %d iotype %s iofrom %ju iolen %u",
+				req->index, (req->iotype == NBD_CMD_READ) ? "read" : "write",
+				req->iofrom, req->iolen);
+
+		unsigned long block_index_start;
+		unsigned long block_index_end;
+		get_io_range_index(req->iofrom, req->iolen, &block_index_start, &block_index_end);
+
+		g_message("iofrom %ju (%ju KB), block_index_start %lu offset_in_start_block %ju",
+				req->iofrom, req->iofrom / 1024,
+				block_index_start, req->iofrom % CBLOCKSIZE);
+
+		g_message("ioend %ju (%ju KB), block_index_end %lu offset_in_end_block %ju",
+				req->iofrom + req->iolen, (req->iofrom + req->iolen) / 1024,
+				block_index_end, (req->iofrom + req->iolen) % CBLOCKSIZE);
+
+		g_message("srcbuf ...");
+		dump_buffer_all(srciobuf, req->iolen);
+		g_message("tgtbuf ...");
+		dump_buffer_all(tgtiobuf, req->iolen);
+		if (req->iotype == NBD_CMD_WRITE) {
+			g_message("req->write_buff");
+			dump_buffer_all(req->write_buff, req->iolen);
+		}
+
+
+		int found = 0;
+		for (uint32_t j = 0; j < req->iolen; j++) {
+			char x0 = *(srciobuf + j);
+			char x1 = *(tgtiobuf + j);
+			if (x0 != x1) {
+				g_message("mismatch at %d byte, %c %c", j, x0, x1);
+				found = 1;
+				break;
+			}
+		}
+		if (!found)
+			g_message("not mismatched !?");
+
+		result = -1;
+	}
+
+
+	mmap_partial_unmap(srcmp);
+	mmap_partial_unmap(tgtmp);
+
+	close(srcdiskfd);
+
+	return result;
+}
+
+
+
+
+int test_direct_mode(char *srcdisk, char *tgtdisk, int remotefd, int cowmode, enum xnbd_tester_rwmode rwmode, const char *bgctlpath)
+{
 	int result = 0;
 
 	time_t now = time(NULL);
-	srandom(now);
+	srandom((unsigned int) now);
 
 	reply_pendings = g_async_queue_new();
 	check_pendings = g_async_queue_new();
 
-	nbd_negotiate_with_server(remotefd, &disksize);
-	g_message("remote disk size %llu", disksize);
+	off_t disksize = nbd_negotiate_with_server(remotefd);
+	g_message("remote disk size %ju", disksize);
 
 	sleep(3);
 
-	srcdiskfd = open(srcdisk, O_RDONLY);
-	if (srcdiskfd < 0)
-		err("src disk open");
-
-	uint64_t srcdisksize = get_disksize(srcdiskfd);
-	if (disksize != srcdisksize)
-		err("disk size not match, %llu", srcdisksize);
-
-	char *srcbuf = mmap(NULL, srcdisksize, PROT_READ, MAP_SHARED, srcdiskfd, 0);
-	if (srcbuf == MAP_FAILED)
-		err("srcdisk %s mapping failed, %s", srcdisk, strerror(errno));
+	if (disksize != get_disksize_of_path(srcdisk))
+		err("%s size not match to %ju", srcdisk, disksize);
 
 
 	int tgtdiskfd = open(tgtdisk, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
 	if (tgtdiskfd < 0)
 		err("tgt disk open %s", strerror(errno));
 
-	{
-		off_t ret = lseek(tgtdiskfd, disksize-1, SEEK_SET);
-		if (ret < 0)
-			err("lseek");
-		
-		ret = write(tgtdiskfd, "\0", 1);
-		if (ret < 0)
-			err("write");
-	}
+	int ret = ftruncate(tgtdiskfd, disksize);
+	if (ret < 0)
+		err("ftruncate %m");
 
-
-	char *tgtbuf = mmap(NULL, disksize, PROT_READ | PROT_WRITE, MAP_SHARED, tgtdiskfd, 0);
-	if (tgtbuf == MAP_FAILED)
-		err("tgtdisk %s mapping failed, %s", tgtdisk, strerror(errno));
 
 
 	uint64_t testcount = 0;
@@ -339,18 +492,18 @@ int test_direct_mode(char *srcdisk, char *tgtdisk, int remotefd, int testmode)
 		.nreq = 1000,
 		.remotefd = remotefd,
 		.disksize = disksize,
-		.testmode = testmode,
-		.tgtbuf = tgtbuf,
+		.rwmode = rwmode,
+		.tgtdiskfd = tgtdiskfd,
 	};
 
 
 	for (int loop_per_session = 0; loop_per_session < 100; loop_per_session++) {
 		g_message("io start");
-		if (bgctl_mode)
-			bgctl_thread_create(disksize);
+
+		bgctl_thread_create(disksize, bgctlpath);
 
 
-		int aaa = ((int) (1000LL * random() / (RAND_MAX + 1.0)));
+		int aaa = (int) (1000.0L * random() / RAND_MAX);
 		poll(NULL, 0, aaa);
 
 		pthread_t tid_sender = pthread_create_or_abort(sender_thread_main, &params);
@@ -360,8 +513,7 @@ int test_direct_mode(char *srcdisk, char *tgtdisk, int remotefd, int testmode)
 		pthread_join(tid_sender, NULL);
 		pthread_join(tid_receiver, NULL);
 
-		if (bgctl_mode)
-			bgctl_wait_shutdown();
+		bgctl_wait_shutdown();
 
 
 		g_message("sender and receiver finished");
@@ -369,60 +521,18 @@ int test_direct_mode(char *srcdisk, char *tgtdisk, int remotefd, int testmode)
 		//sleep(1);
 		g_message("checking start ...");
 
+
 		for (;;) {
-			//struct crequest *req = pendings[i];
 			struct crequest *req = g_async_queue_pop(check_pendings);
 			if (req == &eofmarker)
 				break;
 
-			char *srciobuf = srcbuf + req->iofrom;
-			char *tgtiobuf = tgtbuf + req->iofrom;
-
-			int ret = memcmp(srciobuf, tgtiobuf, req->iolen);
-
-			if (ret) {
-				g_warning("mismatch index %d iotype %s iofrom %llu iolen %u",
-						req->index, (req->iotype == NBD_CMD_READ) ? "read" : "write",
-						req->iofrom, req->iolen);
-
-				uint32_t block_index_start;
-				uint32_t block_index_end;
-				get_io_range_index(req->iofrom, req->iolen, &block_index_start, &block_index_end);
-
-				g_message("iofrom %llu (%llu KB), block_index_start %u offset_in_start_block %llu",
-						req->iofrom, req->iofrom / 1024,
-						block_index_start, req->iofrom % CBLOCKSIZE);
-
-				g_message("ioend %llu (%llu KB), block_index_end %u offset_in_end_block %llu",
-						req->iofrom + req->iolen, (req->iofrom + req->iolen) / 1024,
-						block_index_end, (req->iofrom + req->iolen) % CBLOCKSIZE);
-
-				g_message("srcbuf ...");
-				dump_buffer_all(srciobuf, req->iolen);
-				g_message("tgtbuf ...");
-				dump_buffer_all(tgtiobuf, req->iolen);
-				if (req->iotype == NBD_CMD_WRITE) {
-					g_message("req->write_buff");
-					dump_buffer_all(req->write_buff, req->iolen);
-				}
-
-
-				int found = 0;
-				for (uint32_t j = 0; j < req->iolen; j++) {
-					char x0 = *(srciobuf + j);
-					char x1 = *(tgtiobuf + j);
-					if (x0 != x1) {
-						g_message("mismatch at %d byte, %c %c", j, x0, x1);
-						found = 1;
-						break;
-					}
-				}
-				if (!found)
-					g_message("not mismatched !?");
-
-				result = -1;
+			if (cowmode)
+				result = check_consistency_by_partial_mmap_for_cowdisk(srcdisk, tgtdiskfd, req);
+			else
+				result = check_consistency_by_partial_mmap(srcdisk, tgtdiskfd, req);
+			if (result < 0)
 				goto err_out;
-			}
 
 			if (req->iotype == NBD_CMD_WRITE)
 				g_free(req->write_buff);
@@ -430,63 +540,21 @@ int test_direct_mode(char *srcdisk, char *tgtdisk, int remotefd, int testmode)
 		}
 
 
+
 		g_message("checking done");
 
-		g_message("## test %llu done, bgcopycount %d", testcount, bgcopycount);
+		g_message("## test %ju done", testcount);
 		sleep(1);
-		//sleep(1);
 		testcount +=1;
 	}
 
 err_out:
-	close(srcdiskfd);
 	close(tgtdiskfd);
-	munmap(srcbuf, disksize);
-	munmap(tgtbuf, disksize);
 
 	return result;
 }
 
 
-#if 0
-int tester2(int remotefd, uint64_t iofrom, uint32_t iolen, char *filename, int isread)
-{
-	char *buf;
-	int localfd;
-	int ret;
-
-	g_message("%s iofrom %llu size %u", (isread ? "read" : "write"), iofrom, iolen);
-
-	buf = g_malloc(iolen);
-
-	localfd = open(filename, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
-	if (localfd < 0)
-		err("open localfd");
-
-	if (isread) {
-		diskio_remote(remotefd, iofrom, buf, iolen, 1);
-
-		ret = write(localfd, buf, iolen);
-		if (ret < 0)
-			err("write error");
-
-		g_message("read  %d bytes from remote", iolen);
-		g_message("write %d bytes to   %s", ret, filename);
-	} else {
-		ret = read(localfd, buf, iolen);
-		if (ret < 0)
-			err("read error");
-
-		diskio_remote(remotefd, iofrom, buf, ret, 0);
-		g_message("read  %d bytes from %s", ret, filename);
-		g_message("write %d bytes to   remote", ret);
-	}
-
-	close(localfd);
-
-	return 0;
-}
-#endif
 
 static void set_sigactions()
 {
@@ -497,35 +565,75 @@ static void set_sigactions()
 	sigaction(SIGPIPE, &act, NULL);
 }
 
-int main(int argc, char **argv) {
-	int optind = 1;
+#include <getopt.h>
 
-	if (argc - optind != 7) {
-		info("make xnbd-server-test xnbd-tester");
-		info("For target mode");
-		info("  ./xnbd-server-test --target disk1G.img --lport 8992");
-		info("  ./xnbd-tester localhost 8992 disk1G.img /tmp/tmp.img 1 0 dummyarg");
-		info(" ");
-		info("For proxy mode");
-		info("  ./xnbd-server-test --target disk1G.img --lport 8992");
-		info("  ./xnbd-server-test --proxy localhost 8992 /tmp/disk.cache /tmp/disk.cache.bitmap --lport 8521 --bgctlprefix /tmp/xnbd-bg.ctl");
-		info("  ./xnbd-tester localhost 8521 /tmp/disk.cache /tmp/tmp.img 1 0 /tmp/xnbd-bg.ctl");
-		info(" ");
-		err("See source code for detail.");
+static struct option longopts[] = {
+	{"bgctlpath", required_argument, NULL, 'B'},
+	{"rwmode", required_argument, NULL, 'm'},
+	{"cow", required_argument, NULL, 'c'},
+	{NULL, 0, NULL, 0},
+};
+
+void show_help_and_exit(const char *msg)
+{
+	if (msg)
+		info("%s\n", msg);
+
+	info("make xnbd-server-test xnbd-tester");
+	info("For target mode");
+	info("  ./xnbd-server-test --target disk1G.img --lport 8992");
+	info("  ./xnbd-tester --rwmode 1 localhost 8992 disk1G.img /tmp/tmp.img");
+	info(" ");
+	info("For proxy mode");
+	info("  ./xnbd-server-test --target disk1G.img --lport 8992");
+	info("  ./xnbd-server-test --proxy localhost 8992 /tmp/disk.cache /tmp/disk.cache.bitmap --lport 8521 --bgctlprefix /tmp/xnbd-bg.ctl");
+	info("  ./xnbd-tester --rwmode 1 --bgctlpath /tmp/xnbd-bg.ctl localhost 8521 /tmp/disk.cache /tmp/tmp.img");
+	info(" ");
+	err("See source code for detail.");
+}
+
+int main(int argc, char **argv) {
+	enum xnbd_tester_rwmode rwmode  = TESTRDONLY;
+	int cowmode = 0;
+	char *bgctlpath = NULL;
+
+	for (;;) {
+		int c;
+		int index = 0;
+
+		c = getopt_long(argc, argv, "tphB:cm:", longopts, &index);
+		if (c == -1)
+			break;
+
+		switch (c) {
+			case 'm':
+				rwmode = atoi(optarg);
+				/* test readonly(1), writeonly(2), readwrite(3) */
+				info("rw mode (%d)", rwmode);
+				break;
+
+			case 'c':
+				cowmode = 1;
+				CoWID = atoi(optarg);
+				info("copy-on-write enabled, cowid %d", CoWID);
+				break;
+
+			case 'B':
+				bgctlpath = optarg;
+				info("enable background copy with %s", optarg);
+
+				break;
+		}
 	}
+
+
+	if (argc - optind != 4)
+		show_help_and_exit("argument error");
 
 	char *remotehost = argv[optind];
 	char *remoteport = argv[optind + 1];
 	char *srcpath = argv[optind + 2];     /* disk file (target), cache file (proxy) */
 	char *dstpath = argv[optind + 3];     /* temporary space */
-	int mode = atoi(argv[optind + 4]);    /* test readonly(1), writeonly(2), readwrite(3) */
-	bgctl_mode = atoi(argv[optind + 5]);  /* test bgctl(1) or not(0) */
-	bgctlpath = argv[optind + 6];
-
-	if (bgctl_mode)
-		g_message("bgctl is on");
-	else
-		g_message("bgctl is off");
 
 
 	set_sigactions();
@@ -536,16 +644,15 @@ int main(int argc, char **argv) {
 	g_message("srcdisk %s dstdisk %s", srcpath, dstpath);
 
 
-	unlink(bgctlpath);
 
 	for (;;) {
 		int remotefd = net_tcp_connect(remotehost, remoteport);
 
-		int ret = test_direct_mode(srcpath, dstpath, remotefd, mode);
+		int ret = test_direct_mode(srcpath, dstpath, remotefd, cowmode, rwmode, bgctlpath);
 		if (ret < 0)
 			return 1;
 
-		send_disc_request(remotefd);
+		nbd_client_send_disc_request(remotefd);
 		close(remotefd);
 	}
 
