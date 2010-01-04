@@ -12,8 +12,8 @@ int target_mode_main_mmap(struct xnbd_session *ses)
 	struct nbd_reply reply;
 	int csock = ses->clientfd;
 	uint32_t iotype = 0;
-	uint64_t iofrom = 0;
-	uint32_t iolen  = 0;
+	off_t iofrom = 0;
+	size_t iolen  = 0;
 	int ret;
 
 	bzero(&reply, sizeof(reply));
@@ -25,7 +25,7 @@ int target_mode_main_mmap(struct xnbd_session *ses)
 	if (ret < 0)
 		return -1;
 
-	ret = recv_request(csock, xnbd->disksize, &iotype, &iofrom, &iolen, &reply);
+	ret = nbd_server_recv_request(csock, xnbd->disksize, &iotype, &iofrom, &iolen, &reply);
 	if (ret == -1) {
 		net_send_all_or_abort(csock, &reply, sizeof(reply));
 		return 0;
@@ -42,8 +42,8 @@ int target_mode_main_mmap(struct xnbd_session *ses)
 	dbg("direct mode");
 
 	char *mmaped_buf = NULL;
-	uint32_t mmaped_len = 0;
-	uint64_t mmaped_offset = 0;
+	size_t mmaped_len = 0;
+	off_t mmaped_offset = 0;
 	char *iobuf = NULL;
 
 
@@ -56,7 +56,7 @@ int target_mode_main_mmap(struct xnbd_session *ses)
 
 	switch (iotype) {
 		case NBD_CMD_WRITE:
-			dbg("disk write iofrom %llu iolen %u", iofrom, iolen);
+			dbg("disk write iofrom %ju iolen %u", iofrom, iolen);
 
 			net_recv_all_or_abort(csock, iobuf, iolen);
 
@@ -65,7 +65,7 @@ int target_mode_main_mmap(struct xnbd_session *ses)
 			break;
 
 		case NBD_CMD_READ:
-			dbg("disk read iofrom %llu iolen %u", iofrom, iolen);
+			dbg("disk read iofrom %ju iolen %u", iofrom, iolen);
 
 			bzero(&iov, sizeof(iov));
 			iov[0].iov_base = &reply;

@@ -7,22 +7,22 @@
 
 /* must be a multiple of PAGESIZE for mmap. */
 /* A PAGESIZE is plused to include a header */
-#define logsize PAGESIZE
+#define logsize ((size_t) PAGESIZE)
 
 
 struct cachestat {
-	uint32_t nblocks;
+	unsigned long nblocks;
 
-	uint32_t cache_odread;
-	uint32_t cache_odwrite;
-	uint32_t cache_bgcopy;
+	unsigned long cache_odread;
+	unsigned long cache_odwrite;
+	unsigned long cache_bgcopy;
 
-	uint32_t io_blocks;
-	uint32_t read_blocks;
-	uint32_t written_blocks;
+	unsigned long io_blocks;
+	unsigned long read_blocks;
+	unsigned long written_blocks;
 
-	uint32_t cache_hit;
-	uint32_t cache_miss;
+	unsigned long cache_hit;
+	unsigned long cache_miss;
 };
 
 void cachestat_dump(char *path)
@@ -41,20 +41,20 @@ void cachestat_dump(char *path)
 	
 	struct cachestat *st = (struct cachestat *) buf;
 
-	printf("nblocks %u\n", st->nblocks);
-	printf("cached_by_ondemand_read %u\n", st->cache_odread);
-	printf("cached_by_ondemand_write %u\n", st->cache_odwrite);
-	printf("cached_by_bgcopy %u\n", st->cache_bgcopy);
+	printf("nblocks %lu\n", st->nblocks);
+	printf("cached_by_ondemand_read %lu\n", st->cache_odread);
+	printf("cached_by_ondemand_write %lu\n", st->cache_odwrite);
+	printf("cached_by_bgcopy %lu\n", st->cache_bgcopy);
 
-	printf("io_blocks %u\n", st->io_blocks);
-	printf("read_blocks %u\n", st->read_blocks);
-	printf("written_blocks  %u\n", st->written_blocks);
+	printf("io_blocks %lu\n", st->io_blocks);
+	printf("read_blocks %lu\n", st->read_blocks);
+	printf("written_blocks  %lu\n", st->written_blocks);
 
-	printf("cache_hit %u\n", st->cache_hit);
-	printf("cache_miss %u\n", st->cache_miss);
+	printf("cache_hit %lu\n", st->cache_hit);
+	printf("cache_miss %lu\n", st->cache_miss);
 
-	printf("cache_hit_ratio %f\n", 100.0 * st->cache_hit / (st->cache_hit + st->cache_miss));
-	printf("transferred blocks %u\n", st->cache_miss + st->cache_bgcopy);
+	printf("cache_hit_ratio %lf\n", 100.0 * (double) st->cache_hit / (double) (st->cache_hit + st->cache_miss));
+	printf("transferred blocks %lu\n", st->cache_miss + st->cache_bgcopy);
 
 	ret = munmap(buf, logsize);
 	if (ret < 0) 
@@ -64,7 +64,7 @@ void cachestat_dump(char *path)
 }
 
 
-void cachestat_dump_loop(char *path, int interval)
+void cachestat_dump_loop(char *path, unsigned int interval)
 {
 	int fd;
 	char *buf;
@@ -100,39 +100,39 @@ void cachestat_dump_loop(char *path, int interval)
 	printf("transferred_blocks_per_sec\n");
 
 
-	uint32_t io_blocks_prev = 0;
-	uint32_t cache_hit_prev = 0;
-	uint32_t cache_miss_prev = 0;
-	uint32_t transferred_blocks_prev = 0;
+	unsigned long io_blocks_prev = 0;
+	unsigned long cache_hit_prev = 0;
+	unsigned long cache_miss_prev = 0;
+	unsigned long transferred_blocks_prev = 0;
 
 	for (;;) {
 		time_t now = time(NULL);
 
 		printf("%lu ", now);
-		printf("%u ", st->nblocks);
-		printf("%u ", st->cache_odread);
-		printf("%u ", st->cache_odwrite);
-		printf("%u ", st->cache_bgcopy);
-		printf("%f  ", (st->cache_odread + st->cache_odwrite + st->cache_bgcopy) * 100.0 / st->nblocks);
+		printf("%lu ", st->nblocks);
+		printf("%lu ", st->cache_odread);
+		printf("%lu ", st->cache_odwrite);
+		printf("%lu ", st->cache_bgcopy);
+		printf("%lf  ", (double) (st->cache_odread + st->cache_odwrite + st->cache_bgcopy) * 100.0 / (double) st->nblocks);
 
 		/* on-demand I/O */
-		printf("%u ", st->io_blocks);
-		printf("%u ", st->read_blocks);
-		printf("%u ", st->written_blocks);
-		printf("%f  ", 1.0 * (st->io_blocks - io_blocks_prev) / interval);
+		printf("%lu ", st->io_blocks);
+		printf("%lu ", st->read_blocks);
+		printf("%lu ", st->written_blocks);
+		printf("%lf  ", 1.0 * (double) (st->io_blocks - io_blocks_prev) / (double) interval);
 
 
-		printf("%u ", st->cache_hit);
-		printf("%u ", st->cache_miss);
-		uint32_t cache_hit_diff = st->cache_hit - cache_hit_prev;
-		uint32_t cache_miss_diff = st->cache_miss - cache_miss_prev;
-		printf("%f ", 100.0 * cache_hit_diff / (cache_hit_diff + cache_miss_diff));
-		printf("%f  ", 100.0 * st->cache_hit / (st->cache_hit + st->cache_miss));
+		printf("%lu ", st->cache_hit);
+		printf("%lu ", st->cache_miss);
+		unsigned long cache_hit_diff = st->cache_hit - cache_hit_prev;
+		unsigned long cache_miss_diff = st->cache_miss - cache_miss_prev;
+		printf("%lf ", 100.0 * (double) cache_hit_diff / (double) (cache_hit_diff + cache_miss_diff));
+		printf("%lf  ", 100.0 * (double) st->cache_hit / (double) (st->cache_hit + st->cache_miss));
 
-		uint32_t transferred_blocks = st->cache_miss + st->cache_bgcopy;
-		float transferred_blocks_per_sec  = 1.0 * (transferred_blocks - transferred_blocks_prev) / interval;
-		printf("%u ", transferred_blocks);
-		printf("%f\n", transferred_blocks_per_sec);
+		unsigned long transferred_blocks = st->cache_miss + st->cache_bgcopy;
+		double transferred_blocks_per_sec  = 1.0 * (double) (transferred_blocks - transferred_blocks_prev) / interval;
+		printf("%lu ", transferred_blocks);
+		printf("%lf\n", transferred_blocks_per_sec);
 
 		io_blocks_prev = st->io_blocks;
 		cache_hit_prev = st->cache_hit;
@@ -195,7 +195,7 @@ inline void cachestat_miss(void)
 	cachest->cache_miss += 1;
 }
 
-int cachestat_initialize(char *path, uint32_t nblocks)
+int cachestat_initialize(const char *path, unsigned long nblocks)
 {
 	cachestfd = open(path, O_CREAT | O_RDWR | O_TRUNC, S_IRUSR | S_IWUSR);
 	if (cachestfd < 0) {
@@ -252,7 +252,7 @@ inline void cachestat_read_block(void) { return; }
 inline void cachestat_write_block(void) { return; }
 inline void cachestat_miss(void) { return; }
 inline void cachestat_hit(void) { return; }
-int cachestat_initialize(char *path __attribute__((unused)), uint32_t nblocks __attribute__((unused))) { return 0; }
+int cachestat_initialize(const char *path __attribute__((unused)), unsigned long nblocks __attribute__((unused))) { return 0; }
 int cachestat_shutdown(void) { return 0; }
 
 #endif

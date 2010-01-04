@@ -12,18 +12,7 @@ const int XNBD_PORT = 8520;
 void setup_disk(char *diskpath, struct xnbd_info *xnbd)
 {
 	int diskfd;
-	uint64_t disksize;
 
-#if 0
-	int ret;
-	struct stat st;
-	ret = stat(diskpath, &st);
-	if (ret < 0) {
-		if (errno == EOVERFLOW)
-			warn("enable large file support!");
-		err("stat diskfile, %s", strerror(errno));
-	}
-#endif
 
 	if (xnbd->readonly)
 		diskfd = open(diskpath, O_RDONLY | O_NOATIME);
@@ -35,7 +24,8 @@ void setup_disk(char *diskpath, struct xnbd_info *xnbd)
 		err("open, %s", strerror(errno));
 	}
 
-	disksize = get_disksize(diskfd);
+
+	off_t disksize = get_disksize(diskfd);
 
 	check_disksize(diskpath, disksize);
 
@@ -48,7 +38,6 @@ void setup_disk(char *diskpath, struct xnbd_info *xnbd)
 
 
 	xnbd->diskfd = diskfd;
-	/* uint64_t xnbd->disksize always covers (off_t (32/64bit int signed)) disksize */
 	xnbd->disksize = disksize;
 	xnbd->diskopened = 1;
 
@@ -58,7 +47,7 @@ void setup_disk(char *diskpath, struct xnbd_info *xnbd)
 
 
 
-void setup_cachedisk(struct xnbd_info *xnbd, uint64_t disksize, char *cachepath)
+void setup_cachedisk(struct xnbd_info *xnbd, off_t disksize, char *cachepath)
 {
 	int cachefd;
 
@@ -67,11 +56,11 @@ void setup_cachedisk(struct xnbd_info *xnbd, uint64_t disksize, char *cachepath)
 		err("open");
 	
 
-	uint64_t size = get_disksize(cachefd);
+	off_t size = get_disksize(cachefd);
 	if (size < disksize) {
 		warn("cache disk size is smaller than the target disk size %ju < %ju", size, disksize);
 		warn("now expand it");
-		off_t ret = lseek(cachefd, disksize-1, SEEK_SET);
+		off_t ret = lseek(cachefd, disksize - 1, SEEK_SET);
 		if (ret < 0)
 			err("lseek");
 		
@@ -91,7 +80,7 @@ void setup_cachedisk(struct xnbd_info *xnbd, uint64_t disksize, char *cachepath)
 
 
 
-
+#if 0
 void get_event_connecter(int *notifier, int *listener)
 {
 	int pipefds[2];
@@ -102,19 +91,20 @@ void get_event_connecter(int *notifier, int *listener)
 	*notifier = pipefds[1];
 	*listener = pipefds[0];
 }
+#endif
 
 
 void xnbd_session_initialize_connections(struct xnbd_info *xnbd, struct xnbd_session *ses)
 {
 	if (xnbd->proxymode) {
-		uint64_t disksize = 0;
+		off_t disksize = 0;
 
 		ses->remotefd = net_tcp_connect(xnbd->remotehost, xnbd->remoteport);
 		if (ses->remotefd < 0)
 			err("connecting %s:%s failed", xnbd->remotehost, xnbd->remoteport);
 
 		/* negotiate and get disksize from remote server */
-		nbd_negotiate_with_server(ses->remotefd, &disksize);
+		disksize = nbd_negotiate_with_server(ses->remotefd);
 		if (disksize != xnbd->disksize)
 			err("The remote host answered a different disksize.");
 	}
@@ -138,14 +128,13 @@ void xnbd_initialize(struct xnbd_info *xnbd)
 			err("connecting %s:%s failed", xnbd->remotehost, xnbd->remoteport);
 
 		/* check the remote server and get a disksize */
-		nbd_negotiate_with_server(remotefd, &xnbd->disksize);
-		send_disc_request(remotefd);
+		xnbd->disksize = nbd_negotiate_with_server(remotefd);
+		nbd_client_send_disc_request(remotefd);
 		close(remotefd);
 
-		/* setup bitmap */
-		xnbd->nblocks = xnbd->disksize / CBLOCKSIZE + ((xnbd->disksize % CBLOCKSIZE) ? 1 : 0);
-		xnbd->cbitmap = bitmap_create(xnbd->cbitmappath, xnbd->nblocks, &xnbd->cbitmapfd, &xnbd->cbitmaplen);
-		xnbd->cbitmapopened = 1;
+		xnbd->nblocks = get_disk_nblocks(xnbd->disksize);
+		xnbd->cbitmap = bitmap_open_file(xnbd->cbitmappath, xnbd->nblocks, &xnbd->cbitmaplen, 0, 1);
+		// xnbd->cbitmapopened = 1;
 
 		/* setup cachefile */
 		setup_cachedisk(xnbd, xnbd->disksize, xnbd->cachepath);
@@ -160,12 +149,13 @@ void xnbd_initialize(struct xnbd_info *xnbd)
 		if (!xnbd->diskpath)
 			err("insuffcient info");
 
-		if (xnbd->cow)
-			setup_cow_disk(xnbd->diskpath, xnbd);
-		else
+		if (xnbd->cow) {
+			xnbd->ds = open_cow_disk(xnbd->diskpath, 1, 0);
+			xnbd->disksize = xnbd->ds->disksize;
+		} else
 			setup_disk(xnbd->diskpath, xnbd);
 
-		xnbd->nblocks = xnbd->disksize / CBLOCKSIZE + ((xnbd->disksize % CBLOCKSIZE) ? 1 : 0);
+		xnbd->nblocks = get_disk_nblocks(xnbd->disksize);
 	}
 
 	// monitor_init(xnbd->nblocks);
@@ -178,8 +168,6 @@ void xnbd_initialize(struct xnbd_info *xnbd)
 
 void xnbd_shutdown(struct xnbd_info *xnbd)
 {
-	int ret;
-
 	info("xnbd_shutdowning ...");
 
 	if (xnbd->diskopened)
@@ -188,33 +176,19 @@ void xnbd_shutdown(struct xnbd_info *xnbd)
 
 
 	if (xnbd->ds)
-		destroy_disk_stack(xnbd->ds);
+		close_cow_disk(xnbd->ds, 1);
 	xnbd->ds = NULL;
 
-
-	if (xnbd->cowpath)
-		g_free(xnbd->cowpath);
-	xnbd->cowpath = NULL;
 
 
 	if (xnbd->cacheopened)
 		close(xnbd->cachefd);
 	xnbd->cacheopened = 0;
 
-	if (xnbd->cbitmapopened) {
-		dbg("msync %s", xnbd->cbitmappath);
-		ret = msync(xnbd->cbitmap, xnbd->cbitmaplen, MS_SYNC);
-		if (ret < 0) 
-			warn("msync failed");
 
-		ret = munmap(xnbd->cbitmap, xnbd->cbitmaplen);
-		if (ret < 0) 
-			warn("munmap failed");
-
-		close(xnbd->cbitmapfd);
-	}
-
-	xnbd->cbitmapopened = 0;
+	if (xnbd->cbitmap)
+		bitmap_close_file(xnbd->cbitmap, xnbd->cbitmaplen);
+	xnbd->cbitmap = NULL;
 
 
 
@@ -283,7 +257,7 @@ struct xnbd_session *find_session_with_pid(struct xnbd_info *xnbd, pid_t pid)
 void free_session(struct xnbd_info *xnbd, struct xnbd_session *ses)
 {
 	if (xnbd->proxymode) {
-		send_disc_request(ses->remotefd);
+		nbd_client_send_disc_request(ses->remotefd);
 		close(ses->remotefd);
 	}
 
@@ -338,7 +312,7 @@ static void set_sigactions()
 
 
 static struct pollfd eventfds[MAXLISTENSOCK];
-static int nlistened = 0;
+static nfds_t nlistened = 0;
 
 void invoke_new_session(struct xnbd_info *xnbd, int csockfd)
 {
@@ -376,7 +350,7 @@ void invoke_new_session(struct xnbd_info *xnbd, int csockfd)
 		}
 
 
-		for (int j = 0; j < nlistened; j++) 
+		for (nfds_t j = 0; j < nlistened; j++) 
 			close(eventfds[j].fd);
 
 
@@ -419,7 +393,7 @@ void shutdown_all_sessions(struct xnbd_info *xnbd)
 		/* TODO: notify gracefully, then send SIGKILL */
 
 		info("notify %d of termination", s->pid);
-		int ret = write(s->event_notifier_fd, "0", 1);
+		ssize_t ret = write(s->event_notifier_fd, "0", 1);
 		if (ret < 0)
 			warn("notifiy failed");
 
@@ -466,12 +440,12 @@ int master_server(int port, void *data)
 	freeaddrinfo(ai_head);
 
 
-	for (int i = 0; i < nlistened; i++) {
+	for (nfds_t i = 0; i < nlistened; i++) {
 		eventfds[i].fd     = lsock[i];
 		eventfds[i].events = POLLRDNORM;
 	}
 
-	for (int i = nlistened; i < MAXLISTENSOCK; i++)
+	for (nfds_t i = nlistened; i < MAXLISTENSOCK; i++)
 		eventfds[i].fd     = -1;
 
 
@@ -578,7 +552,7 @@ int master_server(int port, void *data)
 			 * instead of xnbd->sessions.
 			 **/
 			for (GList *list = g_list_first(socklist); list != NULL; list = g_list_next(list)) {
-				int csockfd = (int) list->data;
+				int csockfd = (int) ((long) list->data);  /* See below */
 				invoke_new_session(xnbd, csockfd);
 			}
 
@@ -616,10 +590,11 @@ int master_server(int port, void *data)
 				if (csockfd < 0)
 					err("dup %d, %m", csockfd);
 
-				socklist = g_list_append(socklist, (void *) csockfd);
+				/* it's ok because sizeof(void *) >= sizeof(int); 32bit =, 64bit > */
+				socklist = g_list_append(socklist, (void *) ((long) csockfd));
 
 				info("notify %d of termination", s->pid);
-				int ret = write(s->event_notifier_fd, "0", 1);
+				ssize_t ret = write(s->event_notifier_fd, "0", 1);
 				if (ret < 0)
 					warn("notifiy failed");
 			}
@@ -643,7 +618,7 @@ int master_server(int port, void *data)
 		}
 
 
-		for (int i = 0; i < nlistened; i++) {
+		for (nfds_t i = 0; i < nlistened; i++) {
 			int sockfd = eventfds[i].fd;
 
 			if (sockfd < 0)
@@ -735,120 +710,21 @@ Options: \n\
   		(default /tmp/xnbd-bg.ctl) \n\
   --daemonize	run as a daemon process \n\
   --readonly	export a disk as readonly in target mode \n\
-  --cow		export a disk as copy-on-write in target mode (Buggy! Don't USE!) \n\
+  --cow		export a disk as copy-on-write in target mode \n\
   --logpath	logfile (default /tmp/xnbd.log) \n\
 ";
 
 
 static const char *version = "$Id$";
 
-#define _GNU_SOURCE
-#include <unistd.h>
-#include <sys/syscall.h>
-#include <sys/types.h>
-
-pid_t mygettid(void)
-{
-	return syscall(SYS_gettid);
-}
-
-
-
-#define ALERT_LEVELS            (G_LOG_LEVEL_ERROR | G_LOG_LEVEL_CRITICAL | G_LOG_LEVEL_WARNING)
-
-
-void log_handler(const gchar   *log_domain, GLogLevelFlags log_level,
-		const gchar   *message, gpointer       data)
-{
-	GString *gstring = g_string_new(NULL);
-
-	/* we may not call _any_ GLib functions here */
-
-	if (log_domain) {
-		g_string_append(gstring, log_domain);
-		g_string_append(gstring, "logdomain");
-	}
-
-	switch (log_level & G_LOG_LEVEL_MASK)
-	{
-		case G_LOG_LEVEL_ERROR:
-			g_string_append(gstring, "ERR ");
-			break;
-
-		case G_LOG_LEVEL_CRITICAL:
-			g_string_append(gstring, "CRIT");
-			break;
-
-		case G_LOG_LEVEL_WARNING:
-			g_string_append(gstring, "WARN");
-			break;
-
-		case G_LOG_LEVEL_MESSAGE:
-			g_string_append(gstring, "msg ");
-			break;
-
-		case G_LOG_LEVEL_INFO:
-			g_string_append(gstring, "info");
-			break;
-
-		case G_LOG_LEVEL_DEBUG:
-			g_string_append(gstring, "dbg ");
-			break;
-
-		default:
-			g_string_append(gstring, "log ");
-			break;
-	}
-
-
-
-	{
-		pid_t pid = getpid();
-		pid_t tid = syscall(SYS_gettid);
-
-		if (pid == tid)
-			g_string_append_printf(gstring, " %d", pid);
-		else
-			g_string_append_printf(gstring, " %d.%d", pid, tid);
-	}
-
-	if (log_level & G_LOG_FLAG_RECURSION)
-		g_string_append(gstring, " (recursed)");
-
-	g_string_append(gstring, ": ");
-
-	//if (log_level & ALERT_LEVELS)
-	//	g_string_append(gstring, "** ");
-
-
-	if (message)
-		g_string_append_printf(gstring, "%s", message);
-	else
-		g_string_append(gstring, "(NULL) message");
-
-
-	gboolean is_fatal = (log_level & G_LOG_FLAG_FATAL) != 0;
-	if (is_fatal)
-		g_string_append(gstring, "\naborting...\n");
-	else
-		g_string_append(gstring, "\n");
-
-
-	//struct xnbd_info *xnbd = (struct xnbd_info *) data;
-	//printf("%d %d\n", gstring->len, strlen(gstring->str));
-
-	write(2, gstring->str, gstring->len);
-
-	g_string_free(gstring, TRUE);
-}
 
 		
 
 
-static void show_help_and_exit(char *msg)
+static void show_help_and_exit(const char *msg)
 {
 	if (msg)
-		g_warning(msg);
+		g_warning("%s", msg);
 
 	fprintf(stderr, "%s", help_string);
 	exit(EXIT_SUCCESS);
@@ -864,7 +740,7 @@ int main(int argc, char **argv) {
 	int daemonize = 0;
 	int readonly = 0;
 	int cow = 0;
-	char *logpath = NULL;
+	const char *logpath = NULL;
 	int logfd = -1;
 
 	if (g_thread_supported())
@@ -873,11 +749,11 @@ int main(int argc, char **argv) {
 	bzero(&xnbd, sizeof(xnbd));
 
 	//g_log_set_default_handler("xnbd_master", G_LOG_LEVEL_WARNING | G_LOG_FLAG_FATAL | G_LOG_FLAG_RECURSION, log_handler, NULL);
-	g_log_set_default_handler(log_handler, (void *) &xnbd);
+	g_log_set_default_handler(xutil_log_handler, (void *) &xnbd);
 
-	PAGESIZE = getpagesize();
+	PAGESIZE = (unsigned int) getpagesize();
 	if (CBLOCKSIZE % PAGESIZE != 0)
-		warn("CBLOCKSIZE %d PAGESIZE %d", CBLOCKSIZE, PAGESIZE);
+		warn("CBLOCKSIZE %u PAGESIZE %u", CBLOCKSIZE, PAGESIZE);
 
 
 	for (;;) {
@@ -971,6 +847,9 @@ int main(int argc, char **argv) {
 			printf("%s\n", version);
 			exit(EXIT_SUCCESS);
 
+		case cmd_unknown:
+			 err("bug");
+
 		case cmd_target:
 		case cmd_proxy:
 			break;
@@ -986,9 +865,9 @@ int main(int argc, char **argv) {
 
 
 			xnbd.diskpath   = argv[optind];
-			xnbd.proxymode   = 0;
-			xnbd.cow = cow;
-			xnbd.readonly = readonly;
+			xnbd.proxymode  = 0;
+			xnbd.cow        = cow;
+			xnbd.readonly   = readonly;
 
 
 			break;
@@ -1001,7 +880,7 @@ int main(int argc, char **argv) {
 			xnbd.remoteport  = argv[optind + 1];
 			xnbd.cachepath   = argv[optind + 2];
 			xnbd.cbitmappath = argv[optind + 3];
-			xnbd.proxymode    = 1;
+			xnbd.proxymode   = 1;
 
 
 			if (bgctlprefix)
@@ -1013,6 +892,9 @@ int main(int argc, char **argv) {
 
 			break;
 
+		case cmd_version:
+		case cmd_help:
+		case cmd_unknown:
 		default:
 			err("not reached");
 	}
@@ -1023,7 +905,6 @@ int main(int argc, char **argv) {
 	if (xnbd.proxymode)
 		cachestat_initialize(DEFAULT_CACHESTAT_PATH, xnbd.nblocks);
 
-
 	if (daemonize) {
 		int ret = daemon(0, 0);
 		if (ret < 0)
@@ -1031,7 +912,8 @@ int main(int argc, char **argv) {
 	}
 
 	if (logpath || daemonize) {
-		logpath = logpath ? logpath : "/tmp/xnbd.log";
+		if (!logpath)
+			logpath = "/tmp/xnbd.log";
 
 		logfd = open(logpath, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
 		if (logfd < 0)

@@ -18,7 +18,7 @@ int main(int argc, char **argv)
 		if (fd < 0)
 			err("open %s, %m", bgctlpath);
 
-		uint32_t bindex = UINT32_MAX;
+		unsigned long bindex = ~(0UL) - 1;
 		write_all(fd, &bindex, sizeof(bindex));
 
 		close(fd);

@@ -61,16 +61,22 @@
 #include <poll.h>
 
 
+#ifdef XNBD_LZO
+#include <lzo/lzoconf.h>
+#include <lzo/lzo1x.h>
+#endif
 
 
 struct disk_image {
 	char *path;
+	// char path[PATH_MAX];
 	int diskfd;
 
-	char bmpath[PATH_MAX];
-	int bmfd;
-	uint32_t *bm;
-	int bmlen;
+	// char bmpath[PATH_MAX];
+	char *bmpath;
+	// int bmfd;
+	unsigned long *bm;
+	size_t bmlen;
 };
 
 #define MAX_DISKIMAGESTACK 10
@@ -78,20 +84,21 @@ struct disk_stack {
 	int nlayers;
 	struct disk_image *image[MAX_DISKIMAGESTACK];
 
-	uint64_t disksize;
-
-
+	off_t disksize;
 };
 
 struct disk_stack_io {
 	struct disk_stack *ds;
 
 	char *bufs[MAX_DISKIMAGESTACK];
-	uint32_t buflen;
+	size_t buflen;
 	struct iovec *iov;
-	int iov_size;
+	unsigned int iov_size;
 };
 
+
+struct disk_stack_io *disk_stack_mmap(struct disk_stack *ds, off_t iofrom, size_t iolen, int reading);
+void free_disk_stack_io(struct disk_stack_io *io);
 
 
 
@@ -105,13 +112,13 @@ struct xnbd_info {
 	int readonly;
 
 	/* local disk and remote disk */
-	uint64_t disksize;
-	uint32_t nblocks;
+	off_t disksize;
+	// uint32_t nblocks;
+	unsigned long nblocks;
 
 	/* CoW */
 	struct disk_stack *ds;
 	int cow;
-	char *cowpath;
 
 
 	/* listen port as a nbd server */
@@ -124,12 +131,11 @@ struct xnbd_info {
 
 	/* cached bitmap file */
 	char *cbitmappath;
-	int cbitmapfd;
-	int cbitmapopened;
+	// int cbitmapopened;
 
 	/* cached bitmap array (mmaped) */
-	uint32_t *cbitmap;
-	int cbitmaplen;
+	unsigned long *cbitmap;
+	size_t cbitmaplen;
 
 	/* remote nbd sever for caching */
 	char *remotehost;
@@ -138,7 +144,7 @@ struct xnbd_info {
 	/* proxy mode */
 	int proxymode;
 
-	char *bgctlprefix;
+	const char *bgctlprefix;
 
 	GList *sessions;
 };
@@ -169,11 +175,13 @@ struct xnbd_session {
 
 
 
-extern const uint32_t CBLOCKSIZE;
+extern const unsigned int CBLOCKSIZE;
 extern unsigned int PAGESIZE;
 
 
 
+extern const unsigned long XNBD_BGCTL_MAGIC_CACHE_ALL;
+extern const unsigned long XNBD_BGCTL_MAGIC_SHUTDOWN;
 
 
 
@@ -181,16 +189,25 @@ extern unsigned int PAGESIZE;
 
 
 
-void get_io_range_index(uint64_t iofrom, uint32_t iolen, uint32_t *index_start, uint32_t *index_end);
 
 
 
+struct mmap_partial {
+	void *iobuf;
+
+	void *buf;
+	size_t len;
+	off_t offset;
+};
+
+struct mmap_partial *mmap_partial_map(int fd, off_t iofrom, size_t iolen, int readonly);
+void mmap_partial_unmap(struct mmap_partial *mpinfo);
 
 
 
 #define DEFAULT_CACHESTAT_PATH "/tmp/xnbd_cachestat"
 void cachestat_dump(char *path);
-void cachestat_dump_loop(char *path, int);
+void cachestat_dump_loop(char *path, unsigned int);
 void cachestat_cache_odread(void);
 void cachestat_cache_odwrite(void);
 void cachestat_cache_bgcopy(void);
@@ -198,19 +215,21 @@ void cachestat_read_block(void);
 void cachestat_write_block(void);
 void cachestat_miss(void);
 void cachestat_hit(void);
-int cachestat_initialize(char *path, uint32_t blocks);
+int cachestat_initialize(const char *path, unsigned long blocks);
 int cachestat_shutdown(void);
 
 
 
 
-void *mmap_iorange(struct xnbd_info *xnbd, int fd, uint64_t iofrom, uint32_t iolen, char **mmaped_buf, uint32_t *mmaped_len, uint64_t *mmaped_offset);
+void get_io_range_index(off_t iofrom, size_t iolen, unsigned long *index_start, unsigned long *index_end);
+void *mmap_iorange(struct xnbd_info *xnbd, int fd, off_t iofrom, size_t iolen, char **mmaped_buf, size_t *mmaped_len, off_t *mmaped_offset);
 int poll_request_arrival(struct xnbd_session *ses);
-void check_disksize(char *diskpath, uint64_t disksize);
+void check_disksize(char *diskpath, off_t disksize);
+unsigned long get_disk_nblocks(off_t disksize);
 
 int proxy_server(struct xnbd_session *);
 int target_server(struct xnbd_session *);
 int target_server_cow(struct xnbd_session *);
-void setup_cow_disk(char *diskpath, struct xnbd_info *xnbd);
-void destroy_disk_stack(struct disk_stack *ds);
+struct disk_stack *open_cow_disk(char *diskpath, int newfile, int cowid);
+void close_cow_disk(struct disk_stack *ds, int delete_cow);
 #endif
