@@ -47,7 +47,7 @@ struct addrinfo *net_getaddrinfo(char *host, int port, int ai_family)
 	return ai_head;
 }
 
-int net_listen_all_addrinfo(struct addrinfo *ai_head, int lsock[])
+unsigned int net_listen_all_addrinfo(struct addrinfo *ai_head, int lsock[])
 {
 	struct addrinfo *ai;
 	int n = 0;		/* number of sockets */
@@ -90,7 +90,7 @@ int net_listen_all_addrinfo(struct addrinfo *ai_head, int lsock[])
 
 	if (n == 0) {
 		g_warning("no socket to listen to");
-		return -1;
+		return 0;
 	}
 
 	dbg("listen %d address%s", n, (n==1)?"":"es");
@@ -162,7 +162,7 @@ int net_set_keepalive(int sockfd)
 }
 
 /* IPv6 Ready */
-int net_tcp_connect(char *hostname, char *service)
+int net_tcp_connect(const char *hostname, const char *service)
 {
 	struct addrinfo hints, *res, *res0;
 	int sockfd;
@@ -434,7 +434,7 @@ int check_fin(int ret, int errcode, size_t len)
 	return -1;
 }
 
-void net_writev_all_or_abort(int fd, struct iovec *iov, int count)
+void net_writev_all_or_abort(int fd, struct iovec *iov, unsigned int count)
 {
 	int ret = net_writev_all(fd, iov, count);
 	check_done(ret, errno);
@@ -459,10 +459,10 @@ int net_send_all_or_error(int sockfd, void *buff, size_t bufflen)
 	return ret;
 }
 
-void net_readv_all_or_abort(int fd, struct iovec *iov, int count)
+void net_readv_all_or_abort(int fd, struct iovec *iov, unsigned int count)
 {
 	size_t bufflen = 0;
-	for (int i = 0; i < count; i++)
+	for (unsigned int i = 0; i < count; i++)
 		bufflen += iov->iov_len;
 
 	int ret = net_readv_all(fd, iov, count);
@@ -504,3 +504,21 @@ uint64_t ntohll(uint64_t a) {
 	return ((uint64_t) lo) << 32U | hi;
 }
 #endif
+
+
+int unix_connect(char *path)
+{
+	int fd = socket(AF_LOCAL, SOCK_STREAM, 0);
+	if (fd < 0)
+		err("socket %m");
+
+	struct sockaddr_un cliaddr;
+	cliaddr.sun_family = AF_LOCAL;
+	strcpy(cliaddr.sun_path, path);
+
+	int ret = connect(fd, (struct sockaddr *) &cliaddr, sizeof(cliaddr));
+	if (ret < 0)
+		err("connect %m");
+
+	return fd;
+}
