@@ -63,15 +63,6 @@ struct nbd_reply {
 	char handle[8];         /* handle you got from request  */
 };
 
-/* excerpt from nbd-server.c */
-/* Copyright 1996-1998 Pavel Machek, distribute under GPL
- * <pavel@atrey.karlin.mff.cuni.cz>
- * Copyright 2001-2004 Wouter Verhelst <wouter@debian.org>
- * Copyright 2002 Anton Altaparmakov <aia21@cam.ac.uk>
- */
-#define OFFT_MAX ~((off_t)1<<(sizeof(off_t)*8-1))
-#define BUFSIZE (1024*1024) /**< Size of buffer that can hold requests */
-
 
 /* end excerpt from the original nbd */
 
@@ -89,9 +80,10 @@ enum {
 };
 
 
-int nbd_negotiate_with_client(int sockfd, uint64_t exportsize);
-int nbd_negotiate_with_client_readonly(int sockfd, uint64_t exportsize);
-void nbd_negotiate_with_server(int sockfd, uint64_t *exportsize);
+int nbd_negotiate_with_client(int sockfd, off_t exportsize);
+int nbd_negotiate_with_client_readonly(int sockfd, off_t exportsize);
+off_t nbd_negotiate_with_server(int sockfd);
+int nbd_negotiate_with_server2(int sockfd, off_t *exportsize, uint32_t *exportflags);
 
 #define INIT_PASSWD "NBDMAGIC"
 
@@ -109,10 +101,11 @@ void nbd_request_dump(struct nbd_request *request);
 void nbd_reply_dump(struct nbd_reply *reply);
 
 
-int recv_request(int clientfd, uint64_t disksize, uint32_t *iotype_arg, uint64_t *iofrom_arg,
-		uint32_t *iolen_arg, struct nbd_reply *reply);
-int send_read_request(int remotefd, uint64_t iofrom, uint32_t len);
-void send_disc_request(int remotefd);
-int recv_read_reply(int remotefd, char *buf, uint32_t len);
+int  nbd_server_recv_request(int clientfd, off_t disksize, uint32_t *iotype_arg, off_t *iofrom_arg,
+		size_t *iolen_arg, struct nbd_reply *reply);
+int nbd_client_send_request_header(int remotefd, uint32_t iotype, off_t iofrom, size_t len, uint64_t handle);
+int  nbd_client_send_read_request(int remotefd, off_t iofrom, size_t len);
+void nbd_client_send_disc_request(int remotefd);
+int  nbd_client_recv_read_reply(int remotefd, char *buf, size_t len);
 
 #endif
