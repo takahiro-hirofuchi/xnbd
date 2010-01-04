@@ -52,9 +52,9 @@ void write_all(int fd, void *buf, size_t len)
 }
 
 
-static void dump_buffer_main(const char *buff, int bufflen, int all)
+static void dump_buffer_main(const char *buff, size_t bufflen, int all)
 {
-	int i;
+	unsigned int i;
 
 	if (bufflen > 128 && !all) {
 		for (i = 0; i< 128; i++) {
@@ -64,7 +64,7 @@ static void dump_buffer_main(const char *buff, int bufflen, int all)
 			if (i%4 == 3) printf("| ");
 			if (i%24 == 23) printf("\n");
 		}
-		printf("... (%d byte)\n", bufflen);
+		printf("... (%zu byte)\n", bufflen);
 		return;
 	}
 
@@ -81,12 +81,12 @@ static void dump_buffer_main(const char *buff, int bufflen, int all)
 
 }
 
-void dump_buffer_all(const char *buff, int bufflen)
+void dump_buffer_all(const char *buff, size_t bufflen)
 {
 	dump_buffer_main(buff, bufflen, 1);
 }
 
-void dump_buffer(const char *buff, int bufflen)
+void dump_buffer(const char *buff, size_t bufflen)
 {
 	dump_buffer_main(buff, bufflen, 0);
 }
@@ -102,43 +102,46 @@ pthread_t pthread_create_or_abort(void * (*start_routine)(void *), void *arg)
 	return tid;
 }
 
-uint64_t get_disksize(int fd) {
+pid_t fork_or_abort(void)
+{
+	pid_t pid = fork();
+	if (pid < 0)
+		err("fork() %m");
+
+	return pid;
+}
+
+off_t get_disksize(int fd) {
 	struct stat st;
-	uint64_t disksize = 0;
-	int ret;
+	off_t disksize = 0;
 
 
-	dbg("get disk size by fstat\n");
-	bzero(&st, sizeof(struct stat));
-
-	ret = fstat(fd, &st);
+	int ret = fstat(fd, &st);
 	if (ret < 0) {
 		if (errno == EOVERFLOW)
 			err("enable 64bit offset support");
 	}
 
-
 	/* device file may return st_size == 0 */
 	if (S_ISREG(st.st_mode)) {
-		disksize = (uint64_t) st.st_size;
-		dbg("st_size %llu", (uint64_t) disksize);
+		disksize = st.st_size;
+
 		return disksize;
 
 	} else if (S_ISBLK(st.st_mode)) {
-		off_t offset = 0;
-
-		dbg("looking for fd size with lseek SEEK_END\n");
-		offset = lseek(fd, 0, SEEK_END);
-		if (offset < 0)
+		disksize = lseek(fd, 0, SEEK_END);
+		if (disksize < 0)
 			err("lseek failed: %d", errno);
-
-		disksize = (uint64_t) offset;
 
 		return disksize;
 
-	} else {
+	} else if (S_ISCHR(st.st_mode)) {
+		/* for our special device */
+		if (major(st.st_rdev) == 259)
+			return lseek(fd, 0, SEEK_END);
+
+	} else
 		err("file type %d not supported", st.st_mode);
-	}
 
 
 	err("failed to detect disk size");
@@ -147,10 +150,27 @@ uint64_t get_disksize(int fd) {
 	return 0;
 }
 
-void calc_block_index(const uint32_t blocksize, uint64_t iofrom, uint32_t iolen, uint32_t *index_start, uint32_t *index_end)
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
+off_t get_disksize_of_path(char *path)
 {
-	uint32_t block_index_start = iofrom / blocksize;
-	uint32_t block_index_end;
+	int fd = open(path, O_RDONLY);
+	if (fd < 0)
+		err("disk open, %s", path);
+
+	off_t disksize = get_disksize(fd);
+
+	close(fd);
+
+	return disksize;
+}
+
+void calc_block_index(const unsigned int blocksize, const off_t iofrom, const size_t iolen, unsigned long *index_start, unsigned long *index_end)
+{
+	unsigned long block_index_start = iofrom / blocksize;
+	unsigned long block_index_end;
 
 	if ((iofrom + iolen) % blocksize == 0) {
 		block_index_end   = (iofrom + iolen) / blocksize - 1;
@@ -212,7 +232,7 @@ err:
 	return NULL;
 }
 
-int put_line(int fd, char *msg)
+int put_line(int fd, const char *msg)
 {
 	char line[MAX_LINE]; /* msg + '\n' + '\0' */
 
@@ -230,4 +250,60 @@ int put_line(int fd, char *msg)
 		return -1;
 
 	return 0;
+}
+
+void sigmask_all(void)
+{
+	sigset_t sig;
+	int ret = sigfillset(&sig);
+	if (ret < 0) 
+		err("sigfillset");
+
+	ret = pthread_sigmask(SIG_SETMASK, &sig, NULL);
+	if (ret < 0)
+		err("sigmask");
+}
+
+int poll_data_and_event(int datafd, int event_listener_fd)
+{
+	struct pollfd eventfds[2];
+
+	dbg("datafd %d event_listener_fd %d", datafd, event_listener_fd);
+	for (;;) {
+		eventfds[0].fd = datafd;
+		eventfds[0].events = POLLRDNORM | POLLRDHUP;
+		eventfds[1].fd = event_listener_fd;
+		eventfds[1].events = POLLRDNORM | POLLRDHUP;
+
+		int nready = poll(eventfds, 2, -1);
+		if (nready == -1) {
+			if (errno == EINTR) {
+				info("polling signal cached");
+				return -1;
+			} else
+				err("polling, %s, (%d)", strerror(errno), errno);
+		}
+
+
+		if (eventfds[1].revents & (POLLRDNORM | POLLRDHUP)) {
+			info("notified");
+			return -1;
+		}
+
+		if (eventfds[0].revents & (POLLRDNORM | POLLRDHUP)) {
+			/* request arrived */
+			return 0;
+		}
+	}
+}
+
+void get_event_connecter(int *notifier, int *listener)
+{
+	int pipefds[2];
+	int ret = pipe(pipefds);
+	if (ret == -1)
+		err("pipe, %m");
+
+	*notifier = pipefds[1];
+	*listener = pipefds[0];
 }

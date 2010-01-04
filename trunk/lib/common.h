@@ -64,5 +64,15 @@ static inline void null_logger(const gchar *domain __attribute__((unused)),
 // 		const gchar *message __attribute__((unused)),
 // 		gpointer data __attribute__((unused)));
 
+void xutil_log_handler(const gchar   *log_domain, GLogLevelFlags log_level,
+		const gchar   *message, gpointer       data);
 
 #endif
+
+
+#if _FILE_OFFSET_BITS == 64
+#define OFF_MAX INT64_MAX
+#else
+#define OFF_MAX INT32_MAX
+#endif
+
