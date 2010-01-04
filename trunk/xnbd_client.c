@@ -194,7 +194,7 @@ const char *recovery_command_internal_reboot_call = "reboot now";
 static int xnbd_connect(const char *devpath, unsigned long blocksize, unsigned int timeout, GList *dst_list, int max_retry, const char *recovery_command)
 {
 	int sockfd;
-	uint64_t disksize;
+	off_t disksize;
 	uint32_t flags;
 	int retry = 0;
 
@@ -246,7 +246,7 @@ static int xnbd_connect(const char *devpath, unsigned long blocksize, unsigned i
 
 	nbddev_set_sockfd(nbd, sockfd);
 
-	nbddev_set_sizes(nbd, disksize, blocksize);
+	nbddev_set_sizes(nbd, (uint64_t) disksize, blocksize);
 
 	if (flags & NBD_FLAG_READ_ONLY)
 		nbddev_set_readonly(nbd);
