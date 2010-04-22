@@ -18,7 +18,7 @@ int main(int argc, char **argv)
 		if (fd < 0)
 			err("open %s, %m", bgctlpath);
 
-		unsigned long bindex = ~(0UL) - 1;
+		unsigned long bindex = XNBD_BGCTL_MAGIC_CACHE_ALL;
 		write_all(fd, &bindex, sizeof(bindex));
 
 		close(fd);
