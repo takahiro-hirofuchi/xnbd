@@ -55,8 +55,15 @@ void setup_cachedisk(struct xnbd_info *xnbd, off_t disksize, char *cachepath)
 	if (cachefd < 0)
 		err("open");
 	
-
 	off_t size = get_disksize(cachefd);
+	if (size != disksize) {
+		warn("cache disk size (%ju) != target disk size (%ju)", size, disksize);
+		warn("now ftruncate() it");
+		int ret = ftruncate(cachefd, disksize);
+		if (ret < 0)
+			err("ftruncate");
+	}
+#if 0
 	if (size < disksize) {
 		warn("cache disk size is smaller than the target disk size %ju < %ju", size, disksize);
 		warn("now expand it");
@@ -68,6 +75,7 @@ void setup_cachedisk(struct xnbd_info *xnbd, off_t disksize, char *cachepath)
 		if (ret < 0)
 			err("write");
 	}
+#endif
 	
 
 
@@ -225,7 +233,7 @@ void do_service(struct xnbd_session *ses)
 //		goto serve_again;
 //	}
 //
-	info("shutdown xnbd done");
+	info("shutdown xnbd (%s mode) done", xnbd->proxymode ? "proxy" : "target");
 }
 
 
@@ -356,7 +364,7 @@ void invoke_new_session(struct xnbd_info *xnbd, int csockfd)
 
 
 		dbg("new connection");
-		info("do service %d", getpid());
+		info("do service %d (%s mode)", getpid(), xnbd->proxymode ? "proxy" : "target");
 		//{
 		//	pid_t mypid = getpid();
 		//	char buf[100];
@@ -544,8 +552,13 @@ int master_server(int port, void *data)
 
 		if (restarting && g_list_length(xnbd->sessions) == 0) {
 			/* All sessions are stopped. Now start new sessions with existing sockets. */
-
 			info("All sessions are stopped. Now restart.");
+
+			xnbd_shutdown(xnbd);
+			xnbd->proxymode = 0;
+			xnbd->diskpath = xnbd->cachepath;
+			xnbd_initialize(xnbd);
+
 			/*
 			 * invoke_new_session() manipulates xnbd->sessions,
 			 * adding an entry to it. The fixed list is used here
