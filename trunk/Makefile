@@ -38,7 +38,7 @@ xnbdobj_dbg=$(patsubst %.c, %___dbg.o, $(SRC))
 	$(CC) -MM $(CFLAGS_DEBUG) $< -MQ $@ -MQ $(patsubst %.d, %.o, $@) -MF $@
 
 
-default: xnbd-server xnbd-bgctl
+default: xnbd-server xnbd-bgctl xnbd-client xnbd-watchdog
 
 # 1. Put $(OBJ) before $(CFLAGS). To avoid undefined reference error, object
 # files must be followed by static libraries to be linked with them.
