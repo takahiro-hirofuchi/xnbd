@@ -97,6 +97,6 @@ xnbd-watchdog: xnbd_watchdog.c $(filter-out xnbd.o, $(OBJ))
 .PHONY: clean
 clean:
 	make -C $(XUTILSPATH) clean
-	rm -rf *.o *.d xnbd-server xnbd-server-debug xnbd-server-test xnbd-server-cachestat xnbd-cachestatdump xnbd-bgctl xnbd-tester
+	rm -rf *.o *.d xnbd-server xnbd-server-debug xnbd-server-test xnbd-server-cachestat xnbd-cachestatdump xnbd-bgctl xnbd-tester xnbd-client xnbd-watchdog
 
 -include $(patsubst %.c, %.d, $(SRC))
