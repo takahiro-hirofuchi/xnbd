@@ -450,7 +450,7 @@ int master_server(int port, void *data)
 
 	for (nfds_t i = 0; i < nlistened; i++) {
 		eventfds[i].fd     = lsock[i];
-		eventfds[i].events = POLLRDNORM;
+		eventfds[i].events = POLLIN;
 	}
 
 	for (nfds_t i = nlistened; i < MAXLISTENSOCK; i++)
@@ -630,7 +630,6 @@ int master_server(int port, void *data)
 				err("poll, %s", strerror(errno));
 		}
 
-
 		for (nfds_t i = 0; i < nlistened; i++) {
 			int sockfd = eventfds[i].fd;
 
@@ -640,7 +639,7 @@ int master_server(int port, void *data)
 			if (eventfds[i].revents & (POLLHUP | POLLNVAL)) 
 				err("unknown events, %x", eventfds[i].revents);
 
-			if (eventfds[i].revents & (POLLRDNORM | POLLERR)) {
+			if (eventfds[i].revents & (POLLIN | POLLERR)) {
 				/* if POLLERR, the next read() returns -1 */
 				/* POLLERR never occurs because we wait new connections */
 
@@ -662,10 +661,11 @@ int master_server(int port, void *data)
 
 				info("csockfd %d", csockfd);
 				invoke_new_session(xnbd, csockfd);
+
+				/* for short cut */
+				nready -= 1;
 			}
 
-			/* short cut */
-			nready -= 1;
 			if (nready == 0)
 				break;
 		}
@@ -850,7 +850,9 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	info("cmd %s mode", longopts[cmd].name);
+
+	if (cmd != cmd_unknown)
+		info("cmd %s mode", longopts[cmd].name);
 
 	switch (cmd) {
 		case cmd_help:
@@ -860,12 +862,10 @@ int main(int argc, char **argv) {
 			printf("%s\n", version);
 			exit(EXIT_SUCCESS);
 
-		case cmd_unknown:
-			 err("bug");
-
 		case cmd_target:
 		case cmd_proxy:
 			break;
+		case cmd_unknown:
 		default:
 			show_help_and_exit("give one command");
 	}
