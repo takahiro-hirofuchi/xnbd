@@ -169,16 +169,16 @@ void check_disksize(char *diskpath, off_t disksize)
 	int pgsize = getpagesize();
 
 	if (disksize % 1024)
-		warn("disksize is not a multiple of 1024 (nbd's default block size)");
+		warn("disksize %jd is not a multiple of 1024 (nbd's default block size)", disksize);
 
 	if (disksize % pgsize)
-		warn("disksize is not a multiple of a page size (%d)", pgsize);
+		warn("disksize %jd is not a multiple of a page size (%d)", disksize, pgsize);
 
 	/* A known issue is the end block of the disk; the size of which is not
 	 * a multiple of CBLOCKSIZE. */
 	if (disksize % CBLOCKSIZE)
-		err("disksize is not a multiple of %d (xnbd's cache block size)",
-				CBLOCKSIZE);
+		err("disksize %jd is not a multiple of %d (xnbd's cache block size)",
+				disksize, CBLOCKSIZE);
 
 	/* off_t becomes 32bit singed integer when no large file support */
 	info("disk %s size %ju B (%ju MB)", diskpath, disksize, disksize /1024 /1024);
