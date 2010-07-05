@@ -397,6 +397,7 @@ void free_disk_stack_io(struct disk_stack_io *io)
 			err("munmap");
 	}
 	g_free(io->iov);
+	g_free(io);
 }
 
 struct disk_stack_io *disk_stack_mmap(struct disk_stack *ds, off_t iofrom, size_t iolen, int reading)

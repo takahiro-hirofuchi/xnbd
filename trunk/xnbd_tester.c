@@ -549,6 +549,9 @@ int test_direct_mode(char *srcdisk, char *tgtdisk, int remotefd, int cowmode, en
 	}
 
 err_out:
+	g_async_queue_unref(reply_pendings);
+	g_async_queue_unref(check_pendings);
+
 	close(tgtdiskfd);
 
 	return result;
