@@ -2,6 +2,7 @@
  * Copyright (C) 2008-2010 National Institute of Advanced Industrial Science and Technology
  */
 #include "xnbd.h"
+#include <sys/ioctl.h>
 
 /* IPTOS */
 #include <netinet/in.h>
@@ -11,6 +12,91 @@
 
 const int XNBD_PORT = 8520;
 
+
+/* clone_file() is a snippet from coreutils. modified. */
+/* Perform the O(1) btrfs clone operation, if possible.
+ * Upon success, return 0.  Otherwise, return -1 and set errno.  */
+static int clone_file_by_reflink(int dstfd, int srcfd)
+{
+#ifdef __linux__ 
+#undef BTRFS_IOCTL_MAGIC
+#define BTRFS_IOCTL_MAGIC 0x94
+#undef BTRFS_IOC_CLONE
+#define BTRFS_IOC_CLONE _IOW (BTRFS_IOCTL_MAGIC, 9, int)
+	return ioctl(dstfd, BTRFS_IOC_CLONE, srcfd);
+#else
+	(void) dstfd;
+	(void) srcfd;
+	errno = ENOTSUP;
+	return -1;
+#endif
+}
+
+static void clone_file_by_copy(int dstfd, int srcfd)
+{
+	off_t total = 0;
+	char buf[1024];
+	ssize_t ret;
+
+	for (;;) {
+		ret = pread(srcfd, buf, sizeof(buf), total);
+		if (ret < 0)
+			err("read, %m");
+		else if (ret == 0) {
+			/* eof */
+			break;
+		}
+
+		write_all(dstfd, buf, (size_t) ret);
+		total += ret;
+	}
+
+	struct stat st;
+	ret = fstat(srcfd, &st);
+	if (ret < 0)
+		err("fstat, %m");
+
+	if (st.st_size != total)
+		err("size mismatch");
+
+}
+
+static void make_snapshot(struct xnbd_info *xnbd)
+{
+	time_t now = time(NULL);
+	/* clone_file_by_copy() is not atomic. so use hardlink */
+	char *dstpath = g_strdup_printf("%s.snapshot.%08lu", xnbd->diskpath, now);
+	char *tmpdstpath = g_strdup_printf("%s.snapshot.%08lu.tmp", xnbd->diskpath, now);
+
+	int dstfd = open(tmpdstpath, O_RDWR | O_CREAT | O_EXCL, 0600);
+	if (dstfd < 0) {
+		warn("snapshot: opening %s failed, %m", tmpdstpath);
+		goto err;
+	}
+
+	int ret = clone_file_by_reflink(dstfd, xnbd->diskfd);
+	if (ret) {
+		warn("snapshot: cloning %s to %s by reflink failed, %m", xnbd->diskpath, tmpdstpath);
+		warn("snapshot: fall back to normal copy ...");
+		clone_file_by_copy(dstfd, xnbd->diskfd);
+	}
+
+	close(dstfd);
+
+
+	ret = link(tmpdstpath, dstpath);
+	if (ret < 0)
+		err("hardlink, %m");
+
+	ret = unlink(tmpdstpath);
+	if (ret < 0)
+		err("unlink, %m");
+	
+	info("snapshot: %s", dstpath);
+err:
+	g_free(dstpath);
+	g_free(tmpdstpath);
+}
 
 
 void setup_disk(char *diskpath, struct xnbd_info *xnbd)
@@ -289,6 +375,7 @@ void free_session(struct xnbd_info *xnbd, struct xnbd_session *ses)
 
 static volatile sig_atomic_t got_sigchld = 0;
 static volatile sig_atomic_t got_sighup = 0;
+static volatile sig_atomic_t got_sigusr1 = 0;
 static volatile sig_atomic_t need_exit = 0;
 
 
@@ -301,6 +388,8 @@ static void signal_handler(int signum)
 		got_sigchld = 1;
 	else if (signum == SIGHUP)
 		got_sighup = 1;
+	else if (signum == SIGUSR1)
+		got_sigusr1 = 1;
 	else
 		need_exit = 1;
 }
@@ -317,6 +406,7 @@ static void set_sigactions()
 	sigaction(SIGINT, &act, NULL);
 	sigaction(SIGCHLD, &act, NULL);
 	sigaction(SIGHUP, &act, NULL);
+	sigaction(SIGUSR1, &act, NULL);
 
 	act.sa_handler = SIG_IGN;
 	sigaction(SIGPIPE, &act, NULL);
@@ -483,10 +573,12 @@ int master_server(int port, void *data)
 	sigaddset(&sigs_blocked, SIGINT);
 	sigaddset(&sigs_blocked, SIGTERM);
 	sigaddset(&sigs_blocked, SIGHUP);
+	sigaddset(&sigs_blocked, SIGUSR1);
 	pthread_sigmask(SIG_BLOCK, &sigs_blocked, &orig_sigmask);
 
 	GList *socklist = NULL;
-	int restarting = 0;
+	int restarting_for_mode_change = 0;
+	int restarting_for_snapshot = 0;
 
 	for (;;) {
 		int nready;
@@ -562,14 +654,21 @@ int master_server(int port, void *data)
 			}
 		}
 
-		if (restarting && g_list_length(xnbd->sessions) == 0) {
+		if ((restarting_for_mode_change || restarting_for_snapshot) && g_list_length(xnbd->sessions) == 0) {
 			/* All sessions are stopped. Now start new sessions with existing sockets. */
 			info("All sessions are stopped. Now restart.");
 
-			xnbd_shutdown(xnbd);
-			xnbd->proxymode = 0;
-			xnbd->diskpath = xnbd->cachepath;
-			xnbd_initialize(xnbd);
+			if (restarting_for_mode_change) {
+				/* become target mode */
+				xnbd_shutdown(xnbd);
+				xnbd->proxymode = 0;
+				xnbd->diskpath = xnbd->cachepath;
+				xnbd_initialize(xnbd);
+			} else {
+				/* take a snapshot */
+				make_snapshot(xnbd);
+			}
+
 
 			/*
 			 * invoke_new_session() manipulates xnbd->sessions,
@@ -588,12 +687,41 @@ int master_server(int port, void *data)
 
 			info("restarting has done");
 
-			restarting = 0;
+			if (restarting_for_mode_change)
+				restarting_for_mode_change = 0;
+			else
+				restarting_for_snapshot = 0;
 		}
 
-		if (got_sighup) {
-			info("got SIGHUP, restart %d process(es)", g_list_length(xnbd->sessions));
-			got_sighup = 0;
+
+		if (got_sighup || got_sigusr1) {
+			if (got_sighup) {
+				got_sighup = 0;
+
+				if (!xnbd->proxymode) {
+					warn("ignoring SIGHUP in target mode");
+					goto skip_restarting;
+				}
+
+				info("got SIGHUP, restart %d process(es)", g_list_length(xnbd->sessions));
+				restarting_for_mode_change = 1;
+			}
+
+			if (got_sigusr1) {
+				got_sigusr1 = 0;
+
+				if (xnbd->proxymode || xnbd->cow) {
+					warn("ignoring SIGUSR1 in proxy mode or CoW target mode");
+					goto skip_restarting;
+				}
+
+				info("got SIGUSR1, restart %d process(es)", g_list_length(xnbd->sessions));
+				restarting_for_snapshot = 1;
+			}
+
+			/* if there are no sessions, ready for restart */
+			if (g_list_length(xnbd->sessions) == 0)
+				continue;
 
 			/* notify all sessions of termination */
 			for (GList *list = g_list_first(xnbd->sessions); list != NULL; list = g_list_next(list)) {
@@ -624,7 +752,8 @@ int master_server(int port, void *data)
 					warn("notifiy failed");
 			}
 
-			restarting = 1;
+skip_restarting:
+			;
 		}
 
 		/* SIGCHLD must be blocked here, so that only this ppoll() detects that */
