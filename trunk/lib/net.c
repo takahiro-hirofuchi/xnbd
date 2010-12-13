@@ -255,31 +255,53 @@ static int net_iov_all(int fd, struct iovec *iov, int count, int reading)
 
 
 	/* all bytes we have read */
-	int total  = 0;
+	ssize_t total  = 0;
 
 
 #ifdef XNBD_DEBUG
-	{
-		int total_expected_size = 0;
-		for (int i = 0; i < count; i++)
-			total_expected_size += iov[i].iov_len;
+	int total_expected_size = 0;
+	for (int i = 0; i < count; i++)
+		total_expected_size += iov[i].iov_len;
 
-		dbg("net_iov start %s, count %d expect %d",
-				mode, count, total_expected_size);
-	}
+	dbg("net_iov start %s, count %d expect %d",
+			mode, count, total_expected_size);
 #endif
 
 	for (;;) {
-		int sent = 0;
+		ssize_t sent = 0;
 		int expected = 0;
 		int do_next = 0;
 
 		dbg("perform %d iovec(s)", next_count);
 
+#ifdef XNBD_DEBUG
+		/* check readv/write is broken or not */
+		struct iovec *iov_org = g_malloc(sizeof(struct iovec) * count);
+
+		for (int i = 0; i < next_count; i++) {
+			iov_org[i].iov_base = next_iov[i].iov_base;
+			iov_org[i].iov_len  = next_iov[i].iov_len;
+		}
+#endif
+
 		if (reading)
 			sent = readv(fd, next_iov, next_count);
 		else
 			sent = writev(fd, next_iov, next_count);
+
+#ifdef XNBD_DEBUG
+		for (int i = 0; i < next_count; i++) {
+			if (iov_org[i].iov_base != next_iov[i].iov_base ||
+				iov_org[i].iov_len != next_iov[i].iov_len) {
+				warn("iov_org[%d].iov_base %p, next_iov[%d].iov_base %p", 
+						i, iov_org[i].iov_base, i, next_iov[i].iov_base);
+				warn("iov_org[%d].iov_len %zd, next_iov[%d].iov_len %zd", 
+						i, iov_org[i].iov_len, i, next_iov[i].iov_len);
+			}
+		}
+
+		g_free(iov_org);
+#endif
 
 		if (sent == 0) {
 			g_message("%s() returned 0 (fd %d)", mode, fd);
@@ -310,12 +332,13 @@ static int net_iov_all(int fd, struct iovec *iov, int count, int reading)
 		for (int i = 0; i < next_count; i++) {
 			expected += next_iov[i].iov_len;
 			if (sent < expected) {
-
-				dbg("partial io (count %d/%d)", i, next_count);
+				dbg("partial io (count %d/%d), %s %zd bytes", i, next_count,
+						reading ? "read" : "sent", sent);
 				/* we have the rest of sent data from iov[i] */
 
 				int rest_in_block = expected - sent;
-				int sent_in_block = iov[i].iov_len - rest_in_block;
+				// int sent_in_block = iov[i].iov_len - rest_in_block;
+				int sent_in_block = next_iov[i].iov_len - rest_in_block;
 				next_iov[i].iov_base += sent_in_block;
 				next_iov[i].iov_len  = rest_in_block;
 
@@ -330,6 +353,12 @@ static int net_iov_all(int fd, struct iovec *iov, int count, int reading)
 		if (!do_next)
 			break;
 	}
+
+
+#ifdef XNBD_DEBUG
+	if (total_expected_size != total)
+		dbg("total_expected_size %d, total %zd", total_expected_size, total);
+#endif
 
 	dbg("net_iov end %s", mode);
 
@@ -470,6 +499,19 @@ void net_readv_all_or_abort(int fd, struct iovec *iov, unsigned int count)
 		exit(EXIT_SUCCESS);
 }
 
+int net_readv_all_or_error(int fd, struct iovec *iov, unsigned int count)
+{
+	size_t bufflen = 0;
+	for (unsigned int i = 0; i < count; i++)
+		bufflen += iov->iov_len;
+
+	int ret = net_readv_all(fd, iov, count);
+	if (ret != (int) bufflen)
+		return -1;
+
+	return ret;
+}
+
 void net_recv_all_or_abort(int sockfd, void *buff, size_t bufflen)
 {
 	int ret = net_recv_all(sockfd, buff, bufflen);
@@ -506,7 +548,7 @@ uint64_t ntohll(uint64_t a) {
 #endif
 
 
-int unix_connect(char *path)
+int unix_connect(const char *path)
 {
 	int fd = socket(AF_LOCAL, SOCK_STREAM, 0);
 	if (fd < 0)
@@ -514,7 +556,7 @@ int unix_connect(char *path)
 
 	struct sockaddr_un cliaddr;
 	cliaddr.sun_family = AF_LOCAL;
-	strcpy(cliaddr.sun_path, path);
+	g_strlcpy(cliaddr.sun_path, path, sizeof(cliaddr.sun_path));
 
 	int ret = connect(fd, (struct sockaddr *) &cliaddr, sizeof(cliaddr));
 	if (ret < 0)

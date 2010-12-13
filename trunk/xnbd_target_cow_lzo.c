@@ -311,7 +311,7 @@ static void update_block_with_found(struct disk_stack *ds, struct disk_stack_io 
 		struct disk_image *di = ds->image[i];
 
 		if (bitmap_test(di->bm, index)) {
-			dbg("index %u found at layer %d", index, i);
+			dbg("index %lu found at layer %d", index, i);
 
 			char *dstptr = io->bufs[ds->nlayers - 1] + CBLOCKSIZE * (index - start_index);
 			char *srcptr = io->bufs[i] + CBLOCKSIZE * (index - start_index);
@@ -406,8 +406,8 @@ struct disk_stack_io *disk_stack_mmap(struct disk_stack *ds, off_t iofrom, size_
 
 	get_io_range_index(iofrom, iolen, &index_start, &index_end);
 
-	dbg("iofrom %llu iofrom + iolen %llu", iofrom, iofrom + iolen);
-	dbg("index_start %u end %u", index_start, index_end);
+	dbg("iofrom %ju iofrom + iolen %ju", iofrom, iofrom + iolen);
+	dbg("index_start %lu end %lu", index_start, index_end);
 
 	/* need casting to off_t */
 	off_t mapping_start  = (off_t) index_start * CBLOCKSIZE;
@@ -594,6 +594,7 @@ void compress_iovec(struct iovec *iov, int count, uint32_t rawlen, char *cmpbuf,
 }
 #endif
 
+#if 0
 void compress_iovec_and_send(int csock, struct iovec *iov, unsigned int count)
 {
 	for (unsigned int i = 0; i < count; i++) {
@@ -621,8 +622,99 @@ void compress_iovec_and_send(int csock, struct iovec *iov, unsigned int count)
 		g_free(cmpbuf);
 	}
 }
+#endif
+
+static int is_unicolor(unsigned char *buf, size_t len)
+{
+	int samebyte = 1;
+	unsigned long *array = (unsigned long *) buf;
+	unsigned long value = array[0];
+
+	if (len % sizeof(unsigned long)) {
+		warn("len %zu is not a multiple of sizeof(unsigned long). is_unicolor() returns false", len);
+		return 0;
+	}
+
+	for (unsigned int i = 1; i < len / sizeof(unsigned long); i++) {
+		if (value != array[i]) {
+			samebyte = 0;
+			break;
+		}
+	}
+
+	return samebyte;
+}
+
+void compress_iovec_and_send_advanced(int csock, const struct iovec *iov, const unsigned int count, int lzo_enabled)
+{
+	// uint32_t count_n = htonl(count);
+	// net_send_all_or_abort(csock, &count_n, sizeof(count_n));
+
+	dbg("nchunks %u", count);
+
+	for (unsigned int i = 0; i < count; i++) {
+		unsigned char *rawbuf = iov[i].iov_base;
+		size_t rawlen         = iov[i].iov_len;
+		lzo_uint cmplen;
+
+		if (is_unicolor(rawbuf, rawlen)) {
+			dbg("%u / %u: unicolor", i, count);
+			/* cmplen == 0 means the buffer will be filled with a uint32_t value. */
+			cmplen = 0;
+
+			uint32_t *array = (uint32_t *) rawbuf;
+			uint32_t value = htonl(array[0]);
+
+			uint32_t cmplen_n = htonl((uint32_t) cmplen);
+			uint32_t rawlen_n = htonl((uint32_t) rawlen);
+			net_send_all_or_abort(csock, &cmplen_n, sizeof(cmplen_n));
+			net_send_all_or_abort(csock, &rawlen_n, sizeof(rawlen_n));
+
+			net_send_all_or_abort(csock, &value, sizeof(value));
+
+		} else {
+			if (lzo_enabled) {
+				dbg("%u / %u: lzo", i, count);
+				unsigned char *cmpbuf = g_malloc0(get_max_outlen(rawlen));
+
+				int ret = lzo1x_1_compress(rawbuf, rawlen, cmpbuf, &cmplen, wrkmem);
+				if (ret == LZO_E_OK)
+					dbg("compressed: %d -> %lu", rawlen, cmplen);
+				else
+					err("compression failed, %d", ret);
+
+				g_assert(cmplen <= UINT32_MAX && rawlen <= UINT32_MAX);
+				uint32_t cmplen_n = htonl((uint32_t) cmplen);
+				uint32_t rawlen_n = htonl((uint32_t) rawlen);
+				net_send_all_or_abort(csock, &cmplen_n, sizeof(cmplen_n));
+				net_send_all_or_abort(csock, &rawlen_n, sizeof(rawlen_n));
+
+				net_send_all_or_abort(csock, cmpbuf, cmplen);
+
+				g_free(cmpbuf);
+
+			} else {
+				dbg("%u / %u: plain", i, count);
+
+				cmplen = UINT32_MAX;
+
+				uint32_t cmplen_n = htonl((uint32_t) cmplen);
+				uint32_t rawlen_n = htonl((uint32_t) rawlen);
+				net_send_all_or_abort(csock, &cmplen_n, sizeof(cmplen_n));
+				net_send_all_or_abort(csock, &rawlen_n, sizeof(rawlen_n));
+
+				net_send_all_or_abort(csock, rawbuf, rawlen);
+			}
+		}
+	}
+}
 
 #else
+
+void compress_iovec_and_send_advanced(int csock, const struct iovec *iov, const unsigned int count, int lzo_enabled)
+{
+	err("compression support was not compiled");
+}
 
 void compress_iovec_and_send(int csock, struct iovec *iov, int count)
 {
@@ -662,11 +754,20 @@ int target_mode_main_cow(struct xnbd_session *ses)
 	else if (ret == -3)
 		return ret;
 
-	/* the MSB of iotype is a xnbd's special flag for lzo compression */
-	uint32_t lzo_enabled = iotype >> (sizeof(iotype) - 1);
-	iotype = iotype & 0x7fffffff;  /* clear flag */
-	if (lzo_enabled)
-		dbg("lzo_enabled request");
+
+	int compression_enabled = 0;
+	int compression_lzo = 0;
+	if (iotype == NBD_CMD_READ_COMPRESS || iotype == NBD_CMD_READ_COMPRESS_LZO) {
+		dbg("compression_enabled request");
+		compression_enabled = 1;
+
+		if (iotype == NBD_CMD_READ_COMPRESS_LZO) {
+			compression_lzo = 1;
+			dbg("lzo enabled");
+		}
+
+		iotype = NBD_CMD_READ;
+	}
 
 
 	if (xnbd->readonly && iotype == NBD_CMD_WRITE) {
@@ -700,19 +801,13 @@ int target_mode_main_cow(struct xnbd_session *ses)
 		case NBD_CMD_READ:
 			dbg("disk read iofrom %llu iolen %u", iofrom, iolen);
 
-			if (lzo_enabled) {
-				uint32_t nchunks = htonl(io->iov_size);
+			/* send normal header */
+			net_send_all_or_abort(csock, &reply, sizeof(reply));
 
-				/* send normal header */
-				net_send_all_or_abort(csock, &reply, sizeof(reply));
-
+			if (compression_enabled) {
 				/* send compressed data */
-				net_send_all_or_abort(csock, &nchunks, sizeof(nchunks));
-				compress_iovec_and_send(csock, io->iov, io->iov_size);
-
+				compress_iovec_and_send_advanced(csock, io->iov, io->iov_size, compression_lzo);
 			} else {
-				net_send_all_or_abort(csock, &reply, sizeof(reply));
-
 #ifdef DEBUG_COW
 				compare_iov_and_buf(io->iov, io->iov_size, debug_buf + iofrom, iolen);
 #endif

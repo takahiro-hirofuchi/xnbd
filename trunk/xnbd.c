@@ -3,6 +3,10 @@
  */
 #include "xnbd.h"
 
+/* IPTOS */
+#include <netinet/in.h>
+#include <netinet/ip.h>
+
 
 
 const int XNBD_PORT = 8520;
@@ -373,6 +377,14 @@ void invoke_new_session(struct xnbd_info *xnbd, int csockfd)
 		//	sleep(10);
 		//}
 
+
+		if (xnbd->tos) {
+			const int val = IPTOS_THROUGHPUT;
+			int ret = setsockopt(csockfd, IPPROTO_IP, IP_TOS, (const void *) &val, sizeof(val));
+			if (ret < 0)
+				err("setsockopt, %m");
+		}
+
 		do_service(ses);
 
 		close(csockfd);
@@ -697,6 +709,7 @@ static struct option longopts[] = {
 	{"readonly", no_argument, NULL, 'r'},
 	{"cow", no_argument, NULL, 'c'},
 	{"logpath", required_argument, NULL, 'L'},
+	{"tos", no_argument, NULL, 'T'},
 	{NULL, 0, NULL, 0},
 };
 
@@ -753,6 +766,7 @@ int main(int argc, char **argv) {
 	int daemonize = 0;
 	int readonly = 0;
 	int cow = 0;
+	int tos = 0;
 	const char *logpath = NULL;
 	int logfd = -1;
 
@@ -773,7 +787,7 @@ int main(int argc, char **argv) {
 		int c;
 		int index = 0;
 
-		c = getopt_long(argc, argv, "tphvl:B:G:drcL:", longopts, &index);
+		c = getopt_long(argc, argv, "tphvl:B:G:drcL:T", longopts, &index);
 		if (c == -1)
 			break;
 
@@ -840,6 +854,11 @@ int main(int argc, char **argv) {
 			case 'L':
 				logpath = optarg;
 				info("log file %s", logpath);
+				break;
+
+			case 'T':
+				tos = 1;
+				info("ToS enabled");
 				break;
 
 			case '?':
@@ -912,7 +931,7 @@ int main(int argc, char **argv) {
 			err("not reached");
 	}
 
-
+	xnbd.tos = tos;
 	xnbd_initialize(&xnbd);
 
 	if (xnbd.proxymode)
