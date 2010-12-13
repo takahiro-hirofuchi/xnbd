@@ -86,7 +86,7 @@ void xnbd_cread_dump(struct xnbd_cread *cread)
 	}
 
 	dbg(" iofrom %ju", cread->iofrom);
-	dbg(" iolen  %u", cread->iolen);
+	dbg(" iolen  %zu", cread->iolen);
 	dbg(" block_index_start  %lu", cread->block_index_start);
 	dbg(" block_index_end    %lu", cread->block_index_end);
 
@@ -149,7 +149,7 @@ void bgctl_enqueue_bindex_main(struct xnbd_proxy *proxy, unsigned long bindex)
 	cread->nreq = 0;
 
 	{
-		dbg("bgthread enqueue %u", bindex);
+		dbg("bgthread enqueue %lu", bindex);
 		/* 1st casting is essential */
 		cread->iofrom = (off_t) bindex * CBLOCKSIZE;
 		cread->iolen  = (size_t) CBLOCKSIZE;
@@ -173,7 +173,7 @@ void bgctl_enqueue_bindex(struct xnbd_proxy *proxy, unsigned long bindex)
 	struct xnbd_info *xnbd = ses->xnbd;
 	int need_copy;
 
-	dbg("try to bgcopy %u", bindex);
+	dbg("try to bgcopy %lu", bindex);
 	cbitmap_read_lock(proxy);
 	{
 		if (bitmap_test(xnbd->cbitmap, bindex)) {
@@ -534,7 +534,7 @@ int proxy_mode_main(struct xnbd_proxy *proxy)
 	unsigned long block_index_end;
 
 	get_io_range_index(iofrom, iolen, &block_index_start, &block_index_end);
-	dbg("disk io iofrom %ju iolen %u", iofrom, iolen);
+	dbg("disk io iofrom %ju iolen %zu", iofrom, iolen);
 	dbg("block_index_start %lu stop %lu", block_index_start, block_index_end);
 
 	cread->iotype = iotype;
@@ -596,7 +596,7 @@ int complete_thread_main(struct xnbd_proxy *proxy)
 	char *iobuf = NULL;
 
 	iobuf = mmap_iorange(xnbd, xnbd->cachefd, cread->iofrom, cread->iolen, &mmaped_buf, &mmaped_len, &mmaped_offset);
-	dbg("#mmaped_buf %p iobuf %p mmaped_len %u iolen %zu", mmaped_buf, iobuf, mmaped_len, cread->iolen);
+	dbg("#mmaped_buf %p iobuf %p mmaped_len %zu iolen %zu", mmaped_buf, iobuf, mmaped_len, cread->iolen);
 	dbg("#mapped %p -> %p", mmaped_buf, mmaped_buf + mmaped_len);
 
 
@@ -721,7 +721,7 @@ void *redirect_thread(void *arg)
 					for (unsigned long i = cread->block_index_start; i <= cread->block_index_end; i++) {
 						//info("get a req queued by bg, %u", i);
 						if (bitmap_test(xnbd->cbitmap, i)) {
-							dbg("already queued %u", i);
+							dbg("already queued %lu", i);
 						} else {
 							bitmap_on(xnbd->cbitmap, i);
 							/* counter */

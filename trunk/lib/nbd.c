@@ -101,19 +101,15 @@ int send_read_request(int remotefd, off_t iofrom, size_t len)
 #endif
 
 
-int nbd_client_recv_read_reply(int remotefd, char *buf, size_t len)
+int nbd_client_recv_header(int remotefd)
 {
 	struct nbd_reply reply;
-	int ret;
 
 	dbg("now reciving read reply");
 
-	g_assert(buf);
-	g_assert(len <= UINT32_MAX);
-
 	bzero(&reply, sizeof(reply));
 
-	ret = net_recv_all_or_error(remotefd, &reply, sizeof(reply));
+	int ret = net_recv_all_or_error(remotefd, &reply, sizeof(reply));
 	if (ret < 0) {
 		warn("proxy error: redirect tcp down");
 		return -EPIPE;
@@ -142,15 +138,43 @@ int nbd_client_recv_read_reply(int remotefd, char *buf, size_t len)
 		return -error;
 	}
 
-	dbg("recv data %p %zu\n", buf, len);
-	ret = net_recv_all_or_error(remotefd, buf, len);
+	return 0;
+}
+
+int nbd_client_recv_read_reply_iov(int remotefd, struct iovec *iov, unsigned int count)
+{
+	int ret;
+
+	ret = nbd_client_recv_header(remotefd);
 	if (ret < 0) {
-		warn("proxy error: read remote data");
+		warn("recv header");
+		return -EPIPE;
+	}
+
+	dbg("recv data iov %p %u\n", iov, count);
+	ret = net_readv_all_or_error(remotefd, iov, count);
+	if (ret < 0) {
+		warn("recv data");
 		return -EPIPE;
 	}
 
 	return 0;
 }
+
+int nbd_client_recv_read_reply(int remotefd, char *buf, size_t len)
+{
+	dbg("now reciving read reply");
+
+	g_assert(buf);
+	g_assert(len <= UINT32_MAX);
+
+	struct iovec iov[1];
+	iov[0].iov_base = buf;
+	iov[0].iov_len = len;
+
+	return nbd_client_recv_read_reply_iov(remotefd, iov, 1);
+}
+
 
 
 void nbd_client_send_disc_request(int remotefd)

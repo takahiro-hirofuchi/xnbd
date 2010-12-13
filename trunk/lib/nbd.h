@@ -76,7 +76,10 @@ enum {
 	NBD_CMD_WRITE = 1,
 	NBD_CMD_DISC = 2,
 
-	NBD_CMD_BGCOPY = 3
+	NBD_CMD_BGCOPY = 3,
+
+	NBD_CMD_READ_COMPRESS = 4,
+	NBD_CMD_READ_COMPRESS_LZO = 5
 };
 
 
@@ -106,6 +109,8 @@ int  nbd_server_recv_request(int clientfd, off_t disksize, uint32_t *iotype_arg,
 int nbd_client_send_request_header(int remotefd, uint32_t iotype, off_t iofrom, size_t len, uint64_t handle);
 int  nbd_client_send_read_request(int remotefd, off_t iofrom, size_t len);
 void nbd_client_send_disc_request(int remotefd);
+int nbd_client_recv_read_reply_iov(int remotefd, struct iovec *iov, unsigned int count);
 int  nbd_client_recv_read_reply(int remotefd, char *buf, size_t len);
+int nbd_client_recv_header(int remotefd);
 
 #endif

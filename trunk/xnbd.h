@@ -147,6 +147,10 @@ struct xnbd_info {
 	const char *bgctlprefix;
 
 	GList *sessions;
+
+
+	/* use IPTOS_ flag for IP packets */
+	int tos;
 };
 
 

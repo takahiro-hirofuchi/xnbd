@@ -48,7 +48,7 @@ int target_mode_main_mmap(struct xnbd_session *ses)
 
 
 	iobuf = mmap_iorange(xnbd, xnbd->diskfd, iofrom, iolen, &mmaped_buf, &mmaped_len, &mmaped_offset);
-	dbg("mmaped_buf %p iobuf %p mmaped_len %u iolen %u", mmaped_buf, iobuf, mmaped_len, iolen);
+	dbg("mmaped_buf %p iobuf %p mmaped_len %zu iolen %zu", mmaped_buf, iobuf, mmaped_len, iolen);
 
 
 
@@ -56,7 +56,7 @@ int target_mode_main_mmap(struct xnbd_session *ses)
 
 	switch (iotype) {
 		case NBD_CMD_WRITE:
-			dbg("disk write iofrom %ju iolen %u", iofrom, iolen);
+			dbg("disk write iofrom %ju iolen %zu", iofrom, iolen);
 
 			net_recv_all_or_abort(csock, iobuf, iolen);
 
@@ -65,7 +65,7 @@ int target_mode_main_mmap(struct xnbd_session *ses)
 			break;
 
 		case NBD_CMD_READ:
-			dbg("disk read iofrom %ju iolen %u", iofrom, iolen);
+			dbg("disk read iofrom %ju iolen %zu", iofrom, iolen);
 
 			bzero(&iov, sizeof(iov));
 			iov[0].iov_base = &reply;
