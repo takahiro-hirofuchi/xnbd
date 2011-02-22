@@ -58,8 +58,9 @@ int net_readv_all_or_error(int fd, struct iovec *iov, unsigned int count);
 void check_done(int ret, int errcode);
 int check_fin(int ret, int errcode, size_t len);
 
-uint64_t ntohll(uint64_t a);
-#define htonll ntohll
+#include <endian.h>
+#define ntohll(x) be64toh(x)
+#define htonll(x) htobe64(x)
 
 int unix_connect(const char *path);
 

@@ -532,22 +532,6 @@ int net_recv_all_or_error(int sockfd, void *buff, size_t bufflen)
 	return ret;
 }
 
-/* from nbd-2.9.10 */
-#ifdef WORDS_BIGENDIAN
-uint64_t ntohll(uint64_t a) {
-	return a;
-}
-#else
-uint64_t ntohll(uint64_t a) {
-	uint32_t lo = a & 0xffffffff;
-	uint32_t hi = a >> 32U;
-	lo = ntohl(lo);
-	hi = ntohl(hi);
-	return ((uint64_t) lo) << 32U | hi;
-}
-#endif
-
-
 int unix_connect(const char *path)
 {
 	int fd = socket(AF_LOCAL, SOCK_STREAM, 0);
