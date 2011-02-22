@@ -1,10 +1,31 @@
-# Copyright (C) 2008-2010 National Institute of Advanced Industrial Science and Technology
-#
-
+#  xNBD - an enhanced Network Block Device program
+# 
+#  Copyright (C) 2008-2011 National Institute of Advanced Industrial Science
+#  and Technology
+# 
+#  Author: Takahiro Hirofuchi <t.hirofuchi _at_ aist.go.jp>
+# 
+#  This program is free software; you can redistribute it and/or modify it
+#  under the terms of the GNU General Public License as published by the Free
+#  Software Foundation; either version 2 of the License, or (at your option)
+#  any later version.
+# 
+#  This program is distributed in the hope that it will be useful, but WITHOUT
+#  ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+#  FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+#  more details.
+# 
+#  You should have received a copy of the GNU General Public License along with
+#  this program; if not, write to the Free Software Foundation, Inc., 59 Temple
+#  Place - Suite 330, Boston, MA 02111-1307, USA.
 
 
 CC=gcc
-# -O3 makes a broken binary.
+INSTALL=install
+MAKE=make
+RM=rm
+
+# -O3 $(MAKE)s a broken binary.
 # CFLAGS_COMMON=-g -O2 -Wall -Wextra -Wstrict-aliasing=2 -Wformat=2 -Wcast-qual -Wcast-align -Wwrite-strings -Wfloat-equal -Wpointer-arith -Wswitch-enum -Wconversion -fstack-protector -fstack-check -Wextra -std=gnu99 `pkg-config --cflags --libs glib-2.0 gthread-2.0` -llzo2
 CFLAGS_COMMON=-g -O2 -Wall -Wextra -Wstrict-aliasing=2 -Wformat=2 -Wcast-qual -Wcast-align -Wwrite-strings -Wfloat-equal -Wpointer-arith -Wswitch-enum -Wconversion -fstack-protector -fstack-check -std=gnu99 `pkg-config --cflags --libs glib-2.0 gthread-2.0`
 #CFLAGS_COMMON=-g -O2 -Wall -Wextra -fstack-check -std=gnu99 `pkg-config --cflags --libs glib-2.0 gthread-2.0` -llzo2 -DXNBD_LZO
@@ -43,60 +64,72 @@ default: xnbd-server xnbd-bgctl xnbd-client xnbd-watchdog
 # 1. Put $(OBJ) before $(CFLAGS). To avoid undefined reference error, object
 # files must be followed by static libraries to be linked with them.
 #
-# 2. Do make -C $(XUTILSPATH). This makes sure static libraries are always
+# 2. Do $(MAKE) -C $(XUTILSPATH). This makes sure static libraries are always
 # up-to-date for their source files. The dependency files created by gcc -MM do
 # not cover the dependency related to *.c of libraries; only cover header
 # files.
 xnbd-server: $(OBJ)
-	make -C $(XUTILSPATH)
+	$(MAKE) -C $(XUTILSPATH)
 	$(CC) $^ $(CFLAGS) -o xnbd-server 
 
 xnbd-server-debug: $(xnbdobj_dbg)
-	make -C $(XUTILSPATH)
+	$(MAKE) -C $(XUTILSPATH)
 	$(CC) $^ $(CFLAGS_DEBUG) -o xnbd-server-debug
 
 xnbd-server-test: xnbd_proxy.c $(filter-out xnbd_proxy.o, $(OBJ))
-	make -C $(XUTILSPATH)
+	$(MAKE) -C $(XUTILSPATH)
 	$(CC) $^ $(CFLAGS) -DXNBD_STATIC_BGCTLPATH -o xnbd-server-test
 
 xnbd-server-cachestat: $(OBJ)
-	make -C $(XUTILSPATH)
+	$(MAKE) -C $(XUTILSPATH)
 	$(CC) $^ $(CFLAGS) -DCACHESTAT_ENABLED -o xnbd-server-cachestat
 
 xnbd-cachestatdump: xnbd_cachestatdump.c $(filter-out xnbd.o, $(OBJ))
-	make -C $(XUTILSPATH)
+	$(MAKE) -C $(XUTILSPATH)
 	$(CC) $^ $(CFLAGS) -o xnbd-cachestatdump
 
 xnbd-tester: xnbd_tester.c $(filter-out xnbd.o, $(OBJ))
-	make -C $(XUTILSPATH)
+	$(MAKE) -C $(XUTILSPATH)
 	$(CC) $^ $(CFLAGS) -o xnbd-tester
 
 xnbd-tester2: xnbd_tester2.c $(filter-out xnbd.o, $(OBJ))
-	make -C $(XUTILSPATH)
+	$(MAKE) -C $(XUTILSPATH)
 	$(CC) $^ $(CFLAGS) -o xnbd-tester2
 
 xnbd-bgctl: xnbd_bgctl.c $(filter-out xnbd.o, $(OBJ))
-	make -C $(XUTILSPATH)
+	$(MAKE) -C $(XUTILSPATH)
 	$(CC) $^ $(CFLAGS) -o xnbd-bgctl
 
 xnbd-client: xnbd_client.c $(filter-out xnbd.o, $(OBJ))
-	make -C $(XUTILSPATH)
+	$(MAKE) -C $(XUTILSPATH)
 	$(CC) $^ $(CFLAGS) -o xnbd-client
 
 xnbd-watchdog: xnbd_watchdog.c $(filter-out xnbd.o, $(OBJ))
-	make -C $(XUTILSPATH)
+	$(MAKE) -C $(XUTILSPATH)
 	$(CC) $^ $(CFLAGS) -o xnbd-watchdog
 
+.PHONY: manpages
+manpages:
+	$(MAKE) -C doc
+
 #$(XUTILSPATH)/libxutils.a: $(wildcard $(XUTILSPATH)/*.c)
-#	make -C $(XUTILSPATH) libxutils.a
+#	$(MAKE) -C $(XUTILSPATH) libxutils.a
 #
 #$(XUTILSPATH)/libxutils_dbg.a:
-#	make -C $(XUTILSPATH) libxutils_dbg.a
+#	$(MAKE) -C $(XUTILSPATH) libxutils_dbg.a
 
 
-.PHONY: clean
+.PHONY: clean install
 clean:
-	make -C $(XUTILSPATH) clean
-	rm -rf *.o *.d xnbd-server xnbd-server-debug xnbd-server-test xnbd-server-cachestat xnbd-cachestatdump xnbd-bgctl xnbd-tester xnbd-client xnbd-watchdog
+	$(MAKE) -C $(XUTILSPATH) clean
+	$(MAKE) -C doc clean
+	$(RM) -rf *.o *.d xnbd-server xnbd-server-debug xnbd-server-test xnbd-server-cachestat xnbd-cachestatdump xnbd-bgctl xnbd-tester xnbd-client xnbd-watchdog
+
+install: default
+	$(INSTALL) -D --mode=0755 xnbd-server $(DESTDIR)/usr/sbin/xnbd-server
+	$(INSTALL) -D --mode=0755 xnbd-bgctl  $(DESTDIR)/usr/sbin/xnbd-bgctl
+	$(INSTALL) -D --mode=0755 xnbd-client  $(DESTDIR)/usr/bin/xnbd-client
+	$(INSTALL) -D --mode=0755 xnbd-watchdog $(DESTDIR)/usr/bin/xnbd-watchdog
+
 
 -include $(patsubst %.c, %.d, $(SRC))
