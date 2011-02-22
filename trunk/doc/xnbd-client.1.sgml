@@ -1,0 +1,254 @@
+<!doctype refentry PUBLIC "-//OASIS//DTD DocBook V4.5//EN" [
+
+<!-- Process this file with docbook-to-man to generate an nroff manual
+     page: `docbook-to-man manpage.sgml > manpage.1'.  You may view
+     the manual page with: `docbook-to-man manpage.sgml | nroff -man |
+     less'.  A typical entry in a Makefile or Makefile.am is:
+
+manpage.1: manpage.sgml
+	docbook-to-man $< > $@
+  -->
+
+  <!-- Fill in your name for FIRSTNAME and SURNAME. -->
+  <!ENTITY dhfirstname "<firstname>Arno</firstname>">
+  <!ENTITY dhsurname   "<surname>Toell</surname>">
+  <!-- Please adjust the date whenever revising the manpage. -->
+  <!ENTITY dhdate      "<date>$Date$</date>">
+  <!-- SECTION should be 1-8, maybe w/ subsection other parameters are
+       allowed: see man(7), man(1). -->
+  <!ENTITY dhsection   "<manvolnum>1</manvolnum>">
+  <!ENTITY dhemail     "<email>debian@toell.net</email>">
+  <!ENTITY dhusername  "Arno Toell">
+  <!ENTITY dhucpackage "<refentrytitle>XNBD-CLIENT</refentrytitle>">
+  <!ENTITY dhpackage   "xnbd-client">
+
+  <!ENTITY debian      "<productname>Debian GNU/Linux</productname>">
+  <!ENTITY gnu         "<acronym>GNU</acronym>">
+]>
+
+<refentry>
+  <refentryinfo>
+    <address>
+      &dhemail;
+    </address>
+    <author>
+      &dhfirstname;
+      &dhsurname;
+    </author>
+    <copyright>
+      <year>2011</year>
+      <holder>&dhusername;</holder>
+    </copyright>
+    &dhdate;
+  </refentryinfo>
+  <refmeta>
+    &dhucpackage;
+
+    &dhsection;
+  </refmeta>
+  <refnamediv>
+    <refname>&dhpackage;</refname>
+
+    <refpurpose>connect to a server running <command>xnbd-server</command>(8), to use its
+    exported block device</refpurpose>
+  </refnamediv>
+  <refsynopsisdiv>
+    <cmdsynopsis>
+      <command>&dhpackage;</command>
+      <arg>--connect</arg>
+      <arg>--timeout <replaceable>seconds</replaceable></arg>
+      <arg>--blocksize <replaceable>size</replaceable></arg>
+      <arg>--retry <replaceable>count</replaceable></arg>
+      <arg>--recovery-command <replaceable>command</replaceable></arg>
+      <arg>--recovery-command-reboot <replaceable>command</replaceable></arg>
+      <arg choice=plain><replaceable>host</replaceable></arg>
+      <arg choice=plain><replaceable>port</replaceable></arg>
+      <arg choice=plain><replaceable>nbd-device</replaceable></arg>
+    </cmdsynopsis>
+    <cmdsynopsis>
+      <command>&dhpackage;</command>
+      <arg>bs=<replaceable>size</replaceable></arg>
+      <arg>timeout=<replaceable>seconds</replaceable></arg>
+      <arg choice=plain><option><replaceable>host</replaceable> <replaceable>port</replaceable> <replaceable>nbd-device</replaceable></option></arg>
+    </cmdsynopsis>
+    <cmdsynopsis>
+      <command>&dhpackage;</command>
+      <arg choice=plain> --disconnect <replaceable>nbd-device</replaceable></arg>
+    </cmdsynopsis>
+    <cmdsynopsis>
+      <command>&dhpackage;</command>
+      <arg choice=plain> --check <replaceable>nbd-device</replaceable></arg>
+    </cmdsynopsis>
+  </refsynopsisdiv>
+  <refsect1>
+    <title>DESCRIPTION</title>
+
+    <para>With <command>&dhpackage;</command>, you can connect to a
+    server running <command>xnbd-server</command>, thus using raw
+    diskspace from that server as a blockdevice on the local
+    client.</para>
+
+    <para>To do this, support from the Linux Kernel is necessary, in
+    the form of the Network Block Device (NBD). When you have that,
+    either in the kernel, or as a module, you can connect to an NBD
+    server and use its exported file through a block special file with
+    major mode 43.</para>
+
+    <para>Long options can also be specified with two
+      leading dashes. Some options are call compatible to <command>nbd-client</command>(1)
+      as are most behavioural switches. This makes xnbd-client a plug-in
+      replacement for nbd-client.</para>
+  </refsect1>
+  <refsect1>
+    <title>OPTIONS</title>
+
+    <para>The following options are supported:</para>
+
+    <variablelist>
+      <varlistentry>
+	<term><option>--connect</option>|<option>-C</option></term>
+	<listitem>
+	  <para>Connect to the nbd-server</para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+	<term><option>--check</option>|<option>-c</option></term>
+	<listitem>
+	  <para>Check whether the specified nbd device is
+	  connected.</para>
+	  <para>If the device is connected, &dhpackage; will exit
+	  with an exit state of 0 and print the PID of the &dhpackage;
+	  instance that connected it to stdout. </para>
+	  <para>If the device is not connected or does not exist 
+          (for example because the nbd module was not loaded), 
+          &dhpackage; will exit with an exit state of 1 and not print 
+          anything on stdout.</para>
+	  <para>If an error occurred, &dhpackage; will exit with an exit
+	  state of 2, and not print anything on stdout either.</para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+	<term><option>--disconnect</option>|<option>-d</option></term>
+	<listitem>
+	  <para>Disconnect the specified nbd device from the
+	  server. Terminates execution with an exit state of 0 on success.</para>
+	</listitem>
+      </varlistentry>
+
+      <varlistentry>
+	<term><option>--timeout</option> <replaceable>seconds</replaceable></term>
+	<listitem>
+	  <para>Use a timeout period (default is 0 which means not to use a timeout). 
+	  Please do not use this option for now, as it seems not to work due to a bug 
+	  in the kernel module.</para>
+
+	  <para>
+		For compatibility to <command>nbd-client</command>(1) you can also use <option>timeout=<replaceable>seconds</replaceable></option>
+	  </para>
+	</listitem>
+      </varlistentry>
+
+      <varlistentry>
+	<term><option>--retry <replaceable>count</replaceable></option></term>
+	<listitem>
+	  <para>Try up to "<replaceable>count</replaceable>" times to connect to 
+		the associated nbd-server. Default is 1, that is nbd-client will 
+		stop after the first unsuccessful try.</para>
+	</listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><option>--recovery-command-reboot</option></term>
+        <listitem>
+          <para>Invoke the <command>reboot</command>(8) system call on unexpected disconnection</para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><option>--recovery-command</option></term>
+        <listitem>
+          <para>invoke a specified command "<replaceable>command</replaceable>" on unexpected disconnection</para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+	<term><option>--block-size <replaceable>block size</replaceable></option></term>
+	<listitem>
+	  <para>Use the provided value as "<replaceable>block size</replaceable>". 
+	    Default is 1024; allowed values are either 512, 1024, 2048 or 4096. 
+	    For best retults use a block size value of 4096</para>
+	  <para>
+		For compatibility to <command>nbd-client</command>(1) you can also use <option>bs=<replaceable>block size</replaceable></option>
+	  </para>
+	</listitem>
+      </varlistentry>
+    </variablelist>
+  </refsect1>
+
+  <refsect1>
+    <title>POSITIONAL ARGUMENTS</title>
+
+    <para>The following positional options are supported:</para>
+
+    <variablelist>
+        <varlistentry>
+        <term><option>host</option></term>
+        <listitem>
+          <para>The site to connect to a remote xnbd-server. You can specify 
+	  any resolvable hostname, IPv4 or IPv6 address.</para>
+        </listitem>
+      </varlistentry>
+
+
+        <varlistentry>
+        <term><option>port</option></term>
+        <listitem>
+          <para>The port number to connect to on remote side</para>
+        </listitem>
+      </varlistentry>
+
+        <varlistentry>
+        <term><option>nbd-device</option></term>
+        <listitem>
+          <para>The local nbd-device to be associated with the remote <command>xnbd-server</command>.</para>
+        </listitem>
+      </varlistentry>
+    </variablelist>
+
+  </refsect1>
+  <refsect1>
+    <title>BUGS</title>
+    <para>The NBD device is known to deadlock when not being used altogether with
+    the deadline scheduler. Make sure to do:
+    </para>
+    <para>
+    <command>echo deadline > /sys/block/nbd0/queue/scheduler</command>
+    </para>
+  </refsect1>
+
+  <refsect1>
+    <title>SEE ALSO</title>
+
+    <para>xnbd-server (8).</para>
+
+  </refsect1>
+  <refsect1>
+    <title>AUTHOR</title>
+    <para>The NBD kernel module and the NBD tools have been written by
+    Pavel Macheck (pavel@ucw.cz) and is now maintained by Paul Clements.
+    (Paul.Clements@steeleye.com).</para>
+
+    <para>The xNBD userland (client and server) have been written by 
+     Takahiro Hirofuchi (t.hirofuchi@aist.go.jp)</para>
+
+    <para>This manual page was written by &dhusername; (&dhemail;) for
+    the &debian; system (but may be used by others). Large parts are 
+    verbatim copies of the original nbd-server and nbd-client manual 
+    pages written by Wouter Verhelst (wouter@debian.org). Permission is
+    granted to copy, distribute and/or modify this document under the
+    terms of the <acronym>GNU</acronym> General Public License,
+    version 2, as published by the Free Software Foundation.</para>
+
+  </refsect1>
+</refentry>
+
