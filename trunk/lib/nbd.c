@@ -1,9 +1,30 @@
 /* 
- * Copyright (C) 2008-2010 National Institute of Advanced Industrial Science and Technology
+ * xNBD - an enhanced Network Block Device program
  *
- * Author: Takahiro Hirofuchi
+ * Copyright (C) 2008-2011 National Institute of Advanced Industrial Science
+ * and Technology
+ *
+ * Author: Takahiro Hirofuchi <t.hirofuchi _at_ aist.go.jp>
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the Free
+ * Software Foundation; either version 2 of the License, or (at your option)
+ * any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, write to the Free Software Foundation, Inc., 59 Temple
+ * Place - Suite 330, Boston, MA 02111-1307, USA.
  */
+
 #include "nbd.h"
+
+/* 8 chars */
+const char nbd_password[8] = {'N', 'B', 'D', 'M', 'A', 'G', 'I', 'C'};
 
 void nbd_request_dump(struct nbd_request *request)
 {
@@ -12,8 +33,7 @@ void nbd_request_dump(struct nbd_request *request)
 	info(" request.type  %u %u", request->type, ntohl(request->type));
 	info(" request.from  %ju %ju", request->from, ntohll(request->from));
 	info(" request.len  %u %u", request->len, ntohl(request->len));
-	info(" request.handle");
-	dump_buffer(request->handle, 8);
+	info(" request.handle %ju %ju", request->handle, ntohll(request->handle));
 }
 
 void nbd_reply_dump(struct nbd_reply *reply)
@@ -21,8 +41,7 @@ void nbd_reply_dump(struct nbd_reply *reply)
 	info("nbd_reply %p", reply);
 	info(" reply.magic  %x %x", reply->magic, ntohl(reply->magic));
 	info(" reply.error  %u %u", reply->error, ntohl(reply->magic));
-	info(" reply.handle");
-	dump_buffer(reply->handle, 8);
+	info(" reply.handle %ju %ju", reply->handle, ntohll(reply->handle));
 }
 
 
@@ -42,9 +61,7 @@ int nbd_client_send_request_header(int remotefd, uint32_t iotype, off_t iofrom, 
 	request.type = htonl(iotype);
 	request.from = htonll(iofrom);
 	request.len = htonl(len);
-
-	/* handle is 'char handle[8]' */
-	memcpy(request.handle, &handle, 8);
+	request.handle = htonll(handle);
 
 	ssize_t ret = net_send_all(remotefd, &request, sizeof(request));
 	if (ret < (ssize_t) sizeof(request)) {
@@ -86,9 +103,7 @@ int send_read_request(int remotefd, off_t iofrom, size_t len)
 	request.type = htonl(NBD_CMD_READ);
 	request.from = htonll(iofrom);
 	request.len = htonl(len);
-
-	/* handle is 'char handle[8]' */
-	memcpy(request.handle, myhandle, 8);
+	request.handle = htonll(myhandle);
 
 	ret = net_send_all(remotefd, &request, sizeof(request));
 	if (ret < (ssize_t) sizeof(request)) {
@@ -122,13 +137,9 @@ int nbd_client_recv_header(int remotefd)
 		return -EPIPE;
 	}
 
-	// check reply handle here
-	if (memcmp(reply.handle, &myhandle, 8)) {
-		printf("- handle recv\n");
-		dump_buffer(reply.handle, 8);
-		printf("- handle inside\n");
-		dump_buffer((char*) &myhandle, 8);
-		warn("proxy error: unknown reply handle");
+	/* check reply handle here */
+	if (reply.handle != ntohll(myhandle)) {
+		warn("proxy error: unknown reply handle, %ju %ju", reply.handle, ntohll(myhandle));
 		return -EPIPE;
 	}
 
@@ -246,7 +257,7 @@ int nbd_server_recv_request(int clientfd, off_t disksize, uint32_t *iotype_arg, 
 
 	dbg("%s from %ju (%ju) len %u, ", iotype ? "WRITE" : "READ", iofrom, iofrom / 512U, iolen);
 
-	memcpy(reply->handle, request.handle, sizeof(request.handle));
+	reply->handle = ntohll(request.handle);
 
 
 	/*
@@ -286,7 +297,7 @@ static int nbd_negotiate_with_client_common(int sockfd, off_t exportsize, int re
 
 	int ret;
 
-	ret = write(sockfd, INIT_PASSWD, 8);
+	ret = write(sockfd, nbd_password, sizeof(nbd_password));
 	if (ret < 0)
 		goto err_out;
 
@@ -348,7 +359,7 @@ void nbd_negotiate_with_server(int sockfd, uint64_t *exportsize)
 
 	net_recv_all_or_abort(sockfd, passwd, 8);
 
-	if (strncmp(passwd, INIT_PASSWD, sizeof(INIT_PASSWD)))
+	if (strncmp(passwd, nbd_password, sizeof(nbd_password)))
 			err("password mismatch");
 
 	net_recv_all_or_abort(sockfd, &magic, sizeof(magic));
@@ -396,13 +407,13 @@ int nbd_negotiate_with_server2(int sockfd, off_t *exportsize, uint32_t *exportfl
 	}
 
 
-	if (strncmp(pdu.passwd, INIT_PASSWD, sizeof(INIT_PASSWD)) != 0) {
+	if (strncmp(pdu.passwd, nbd_password, sizeof(nbd_password)) != 0) {
 		warn("password mismatch");
 		return -1;
 	}
 
 
-	if (pdu.magic != htonll(XNBDMAGIC)) {
+	if (ntohll(pdu.magic) != XNBDMAGIC) {
 		warn("negotiate magic mismatch");
 		return -1;
 	}
