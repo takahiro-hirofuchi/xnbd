@@ -23,8 +23,6 @@
 
 #include "nbd.h"
 
-/* 8 chars */
-const char nbd_password[8] = {'N', 'B', 'D', 'M', 'A', 'G', 'I', 'C'};
 
 void nbd_request_dump(struct nbd_request *request)
 {
@@ -285,47 +283,240 @@ int nbd_server_recv_request(int clientfd, off_t disksize, uint32_t *iotype_arg, 
 }
 
 
-const uint64_t XNBDMAGIC = 0x00420281861253LL;
+
+
+
+
+/* 8 chars */
+// const char nbd_password[8] = {'N', 'B', 'D', 'M', 'A', 'G', 'I', 'C'};
+const uint64_t NBD_PASSWD = 0x4e42444d41474943LL;
+
+const uint64_t NBD_NEGOTIATE_MAGIC_OLD = 0x0000420281861253LL;
+const uint64_t NBD_NEGOTIATE_MAGIC_NEW = 0x49484156454F5054LL;
+const uint32_t NBD_OPT_EXPORT_NAME = 1;
+#define XNBD_EXPORT_NAME_MAXLEN (256)
+
+
+
+struct nbd_negotiate_pdu_new_0 {
+	uint64_t passwd;
+	uint64_t magic;
+	uint16_t flag16;
+} __attribute__((__packed__));
+
+struct nbd_negotiate_pdu_new_1 {
+	uint32_t reserved;
+	uint64_t opt_magic;
+	uint32_t opt;
+	uint32_t namesize;
+};
+
+struct nbd_negotiate_pdu_new_2 {
+	uint64_t size;
+	uint32_t flags;
+	char padding[124];
+} __attribute__((__packed__));
+
+
+/*
+ * The option NBD_OPT_EXPORT_NAME is introduced in the recent version of the
+ * original NBD. It allows a client to speficy a target image name.
+ *
+ * I feel the negotiation phase of the NBD protocol is not so smart; it
+ * should be changed to be reasonable. But, for the compatibility with the
+ * orignal NBD and qemu, here the option is implemented.
+ *
+ * From the viewpoint of the client, the new protocol is summarized as follows:
+ *
+ *    recv pdu_new_0 
+ *    send pdu_new_1   
+ *    send target_name (any size ok!?)
+ *    recv pdu_new_2
+ *
+ */
+
+
+int nbd_negotiate_with_client_new(int sockfd, off_t exportsize, int readonly)
+{
+	g_assert(exportsize >= 0);
+
+	int ret;
+
+	{
+		struct nbd_negotiate_pdu_new_0 pdu0;
+		bzero(&pdu0, sizeof(pdu0));
+
+		pdu0.passwd = htonll(NBD_PASSWD);
+		pdu0.magic  = htonll(NBD_NEGOTIATE_MAGIC_NEW);
+		pdu0.flag16 = 0;
+
+		ret = net_send_all_or_error(sockfd, &pdu0, sizeof(pdu0));
+		if (ret < 0)
+			goto err_out;
+	}
+
+
+	{
+		struct nbd_negotiate_pdu_new_1 pdu1;
+
+		ret = net_recv_all_or_error(sockfd, &pdu1, sizeof(pdu1));
+		if (ntohll(pdu1.opt_magic) != NBD_NEGOTIATE_MAGIC_NEW ||
+				ntohl(pdu1.opt) != NBD_OPT_EXPORT_NAME) {
+			warn("header mismatch");
+			goto err_out;
+		}
+
+		uint32_t namesize = ntohl(pdu1.namesize);
+		if (namesize > XNBD_EXPORT_NAME_MAXLEN) {
+			warn("namesize error");
+			goto err_out;
+		}
+
+		char *target_name = g_malloc0(namesize + 1);
+
+		ret = net_recv_all_or_error(sockfd, target_name, namesize);
+		if (ret < 0)
+			goto err_out;
+
+		info("requested target_name %s (not yet implemented)", target_name);
+
+		g_free(target_name);
+	}
+
+
+	{
+		struct nbd_negotiate_pdu_new_2 pdu2;
+		bzero(&pdu2, sizeof(pdu2));
+
+		uint32_t flags = NBD_FLAG_HAS_FLAGS;
+		if (readonly) {
+			info("nbd_negotiate: readonly");
+			flags |= NBD_FLAG_READ_ONLY;
+		}
+
+		pdu2.size   = htonll(exportsize);
+		pdu2.flags  = htonl(flags);
+
+		ret = net_send_all_or_error(sockfd, &pdu2, sizeof(pdu2));
+		if (ret < 0)
+			goto err_out;
+	}
+	
+
+	dbg("negotiate done");
+
+	return 0;
+
+err_out:
+	warn("negotiation failed"); 
+	return -1;
+}
+
+
+int nbd_negotiate_with_server_new(int sockfd, off_t *exportsize, uint32_t *exportflags, size_t namesize, char *target_name)
+{
+	int ret;
+
+	{
+		struct nbd_negotiate_pdu_new_0 pdu0;
+
+		ret = net_recv_all_or_error(sockfd, &pdu0, sizeof(pdu0));
+		if (ret < 0)
+			goto err_out;
+
+		if (ntohll(pdu0.passwd) != NBD_PASSWD) {
+			warn("password mismatch");
+			goto err_out;
+		}
+
+		if (ntohll(pdu0.magic) != NBD_NEGOTIATE_MAGIC_NEW) {
+			warn("negotiate magic mismatch");
+			goto err_out;
+		}
+	}
+
+
+	{
+		struct nbd_negotiate_pdu_new_1 pdu1;
+		pdu1.reserved  = 0;
+		pdu1.opt_magic = htonll(NBD_NEGOTIATE_MAGIC_NEW);
+		pdu1.opt       = htonl(NBD_OPT_EXPORT_NAME);
+		pdu1.namesize  = htonl(namesize);
+
+		ret = net_send_all_or_error(sockfd, &pdu1, sizeof(pdu1));
+		if (ret < 0)
+			goto err_out;
+
+		ret = net_send_all_or_error(sockfd, target_name, namesize);
+		if (ret < 0)
+			goto err_out;
+	}
+
+
+	{
+		struct nbd_negotiate_pdu_new_2 pdu2;
+
+		ret = net_recv_all_or_error(sockfd, &pdu2, sizeof(pdu2));
+		if (ret < 0)
+			goto err_out;
+
+		uint64_t size  = ntohll(pdu2.size);
+		uint32_t flags = ntohl(pdu2.flags);
+
+		info("remote size: %ju bytes (%ju MBytes)", size, size /1024 /1024);
+
+
+		if (size > OFF_MAX) {
+			warn("remote size exceeds a local off_t(%zd bytes) value", sizeof(off_t));
+			return -1;
+		}
+
+		*exportsize  = (off_t) size;
+		*exportflags = flags;
+	}
+
+
+	return 0;
+
+err_out:
+	return -1;
+}
+
+
+
+struct nbd_negotiate_pdu_old {
+	uint64_t passwd;
+	uint64_t magic;
+	uint64_t size;
+	uint32_t flags;
+	char padding[124];
+} __attribute__((__packed__));
+
+
 
 static int nbd_negotiate_with_client_common(int sockfd, off_t exportsize, int readonly)
 {
 	g_assert(exportsize >= 0);
 
-	uint32_t flags = NBD_FLAG_HAS_FLAGS;
-	uint64_t magic = htonll(XNBDMAGIC);
-	uint64_t size = htonll(exportsize);
-
 	int ret;
 
-	ret = write(sockfd, nbd_password, sizeof(nbd_password));
-	if (ret < 0)
-		goto err_out;
+	struct nbd_negotiate_pdu_old pdu;
+	bzero(&pdu, sizeof(pdu));
 
-	ret = write(sockfd, &magic, sizeof(magic));
-	if (ret < 0)
-		goto err_out;
-
-	ret = write(sockfd, &size, 8);
-	if (ret < 0)
-		goto err_out;
-
-
+	uint32_t flags = NBD_FLAG_HAS_FLAGS;
 	if (readonly) {
 		info("nbd_negotiate: readonly");
 		flags |= NBD_FLAG_READ_ONLY;
 	}
 
-	flags = htonl(flags);
-	ret = write(sockfd, &flags, 4);
+	pdu.passwd = htonll(NBD_PASSWD);
+	pdu.magic  = htonll(NBD_NEGOTIATE_MAGIC_OLD);
+	pdu.size   = htonll(exportsize);
+	pdu.flags  = htonl(flags);
+	
+	ret = net_send_all_or_error(sockfd, &pdu, sizeof(pdu));
 	if (ret < 0)
 		goto err_out;
-
-	char zeros[128];
-	memset(zeros, '\0', sizeof(zeros));
-	ret = write(sockfd, zeros, 124);
-	if (ret < 0)
-		goto err_out;
-
 
 	dbg("negotiate done");
 
@@ -347,57 +538,10 @@ int nbd_negotiate_with_client(int sockfd, off_t exportsize)
 }
 
 
-#if 0
-void nbd_negotiate_with_server(int sockfd, uint64_t *exportsize)
-{
-	char passwd[8 + 1];
-	uint32_t flags = 0;
-	uint64_t magic = 0;
-	uint64_t size = 0;
-
-	bzero(passwd, sizeof(passwd));
-
-	net_recv_all_or_abort(sockfd, passwd, 8);
-
-	if (strncmp(passwd, nbd_password, sizeof(nbd_password)))
-			err("password mismatch");
-
-	net_recv_all_or_abort(sockfd, &magic, sizeof(magic));
-
-	if (magic != htonll(XNBDMAGIC))
-		err("negotiate magic mismatch");
-
-
-	net_recv_all_or_abort(sockfd, &size, sizeof(size));
-
-	*exportsize = ntohll(size);
-	info("remote size %" PRIu64 "  B (%" PRIu64 " MB)", *exportsize, *exportsize /1024 /1024);
-
-	if ((sizeof(off_t) == 4) && (*exportsize > 2UL * 1024 * 1024 * 1024))
-		err("enable large file support!");
-
-	net_recv_all_or_abort(sockfd, &flags, sizeof(flags));
-
-	flags = ntohl(flags);
-
-	char zeros[128];
-	net_recv_all_or_abort(sockfd, zeros, 124);
-}
-#endif
-
-
-struct nbd_negotiate_pdu {
-	char passwd[8];
-	uint64_t magic;
-	uint64_t size;
-	uint32_t flags;
-	char padding[124];
-} __attribute__((__packed__));
-
 
 int nbd_negotiate_with_server2(int sockfd, off_t *exportsize, uint32_t *exportflags)
 {
-	struct nbd_negotiate_pdu pdu;
+	struct nbd_negotiate_pdu_old pdu;
 
 
 	int ret = net_recv_all_or_error(sockfd, &pdu, sizeof(pdu));
@@ -406,14 +550,13 @@ int nbd_negotiate_with_server2(int sockfd, off_t *exportsize, uint32_t *exportfl
 		return -1;
 	}
 
-
-	if (strncmp(pdu.passwd, nbd_password, sizeof(nbd_password)) != 0) {
+	if (ntohll(pdu.passwd) != NBD_PASSWD) {
 		warn("password mismatch");
 		return -1;
 	}
 
 
-	if (ntohll(pdu.magic) != XNBDMAGIC) {
+	if (ntohll(pdu.magic) != NBD_NEGOTIATE_MAGIC_OLD) {
 		warn("negotiate magic mismatch");
 		return -1;
 	}
