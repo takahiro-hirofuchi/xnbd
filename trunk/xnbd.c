@@ -173,20 +173,6 @@ void setup_cachedisk(struct xnbd_info *xnbd, off_t disksize, char *cachepath)
 		if (ret < 0)
 			err("ftruncate");
 	}
-#if 0
-	if (size < disksize) {
-		warn("cache disk size is smaller than the target disk size %ju < %ju", size, disksize);
-		warn("now expand it");
-		off_t ret = lseek(cachefd, disksize - 1, SEEK_SET);
-		if (ret < 0)
-			err("lseek");
-		
-		ret = write(cachefd, "\0", 1);
-		if (ret < 0)
-			err("write");
-	}
-#endif
-	
 
 
 	xnbd->cachefd = cachefd;
@@ -198,18 +184,6 @@ void setup_cachedisk(struct xnbd_info *xnbd, off_t disksize, char *cachepath)
 
 
 
-#if 0
-void get_event_connecter(int *notifier, int *listener)
-{
-	int pipefds[2];
-	int ret = pipe(pipefds);
-	if (ret == -1)
-		err("pipe, %m");
-
-	*notifier = pipefds[1];
-	*listener = pipefds[0];
-}
-#endif
 
 
 void xnbd_session_initialize_connections(struct xnbd_info *xnbd, struct xnbd_session *ses)
@@ -234,14 +208,12 @@ void xnbd_session_initialize_connections(struct xnbd_info *xnbd, struct xnbd_ses
 void xnbd_initialize(struct xnbd_info *xnbd)
 {
 	if (xnbd->proxymode) {
-		int remotefd;
+		g_assert(xnbd->remotehost);
+		g_assert(xnbd->remoteport);
+		g_assert(xnbd->cachepath);
+		g_assert(xnbd->cbitmappath);
 
-		if (!(xnbd->remotehost && xnbd->remoteport
-					&& xnbd->cachepath && xnbd->cbitmappath))
-			err("insuffcient info");
-
-
-		remotefd = net_tcp_connect(xnbd->remotehost, xnbd->remoteport);
+		int remotefd = net_tcp_connect(xnbd->remotehost, xnbd->remoteport);
 		if (remotefd < 0)
 			err("connecting %s:%s failed", xnbd->remotehost, xnbd->remoteport);
 
@@ -264,8 +236,7 @@ void xnbd_initialize(struct xnbd_info *xnbd)
 
 
 	} else {
-		if (!xnbd->diskpath)
-			err("insuffcient info");
+		g_assert(xnbd->diskpath);
 
 		if (xnbd->cow) {
 			xnbd->ds = open_cow_disk(xnbd->diskpath, 1, 0);
@@ -1114,8 +1085,6 @@ int main(int argc, char **argv) {
 	xnbd_shutdown(&xnbd);
 	cachestat_shutdown();
 
-
-	close(2);
 
 	return 0;
 }
