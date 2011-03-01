@@ -336,10 +336,12 @@ struct nbd_negotiate_pdu_new_2 {
  */
 
 
-int nbd_negotiate_with_client_new(int sockfd, off_t exportsize, int readonly)
+/*
+ * get a target name from a client.
+ * Note: must free a returned buffer.
+ **/
+char *nbd_negotiate_with_client_new_phase_0(int sockfd)
 {
-	g_assert(exportsize >= 0);
-
 	int ret;
 
 	{
@@ -378,29 +380,39 @@ int nbd_negotiate_with_client_new(int sockfd, off_t exportsize, int readonly)
 		if (ret < 0)
 			goto err_out;
 
-		info("requested target_name %s (not yet implemented)", target_name);
+		info("requested target_name %s", target_name);
 
-		g_free(target_name);
+		return target_name;
 	}
 
 
-	{
-		struct nbd_negotiate_pdu_new_2 pdu2;
-		bzero(&pdu2, sizeof(pdu2));
+err_out:
+	return NULL;
+}
 
-		uint32_t flags = NBD_FLAG_HAS_FLAGS;
-		if (readonly) {
-			info("nbd_negotiate: readonly");
-			flags |= NBD_FLAG_READ_ONLY;
-		}
 
-		pdu2.size   = htonll(exportsize);
-		pdu2.flags  = htonl(flags);
+/* return the size and readonly of the target image */
+int nbd_negotiate_with_client_new_phase_1(int sockfd, off_t exportsize, int readonly)
+{
+	g_assert(exportsize >= 0);
+	int ret;
 
-		ret = net_send_all_or_error(sockfd, &pdu2, sizeof(pdu2));
-		if (ret < 0)
-			goto err_out;
+
+	struct nbd_negotiate_pdu_new_2 pdu2;
+	bzero(&pdu2, sizeof(pdu2));
+
+	uint32_t flags = NBD_FLAG_HAS_FLAGS;
+	if (readonly) {
+		info("nbd_negotiate: readonly");
+		flags |= NBD_FLAG_READ_ONLY;
 	}
+
+	pdu2.size   = htonll(exportsize);
+	pdu2.flags  = htonl(flags);
+
+	ret = net_send_all_or_error(sockfd, &pdu2, sizeof(pdu2));
+	if (ret < 0)
+		goto err_out;
 	
 
 	dbg("negotiate done");
