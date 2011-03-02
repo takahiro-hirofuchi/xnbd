@@ -404,8 +404,8 @@ static void set_sigactions()
 }
 
 
-static struct pollfd eventfds[MAXLISTENSOCK];
-static nfds_t nlistened = 0;
+static struct pollfd ppoll_eventfds[MAXLISTENSOCK];
+static nfds_t ppoll_neventfds = 0;
 
 void invoke_new_session(struct xnbd_info *xnbd, int csockfd)
 {
@@ -443,8 +443,8 @@ void invoke_new_session(struct xnbd_info *xnbd, int csockfd)
 		}
 
 
-		for (nfds_t j = 0; j < nlistened; j++) 
-			close(eventfds[j].fd);
+		for (nfds_t j = 0; j < ppoll_neventfds; j++) 
+			close(ppoll_eventfds[j].fd);
 
 
 
@@ -523,31 +523,54 @@ void shutdown_all_sessions(struct xnbd_info *xnbd)
 }
 
 
-int master_server(int port, void *data)
+static void ppoll_initialize_eventfds(void)
 {
+	for (nfds_t i = 0; i < MAXLISTENSOCK; i++)
+		ppoll_eventfds[i].fd = -1;
+
+	ppoll_neventfds = 0;
+}
+
+static void ppoll_add_eventfd(int fd, short events)
+{
+	nfds_t i = ppoll_neventfds;
+
+	g_assert(ppoll_neventfds < MAXLISTENSOCK-1);
+
+	ppoll_eventfds[i].fd = fd;
+	ppoll_eventfds[i].events = events;
+	ppoll_neventfds += 1;
+}
+
+int master_server(int port, void *data, int connect_fd)
+{
+	struct xnbd_info *xnbd = (struct xnbd_info *) data;
 	int lsock[MAXLISTENSOCK];
 	struct addrinfo *ai_head;
 
-	struct xnbd_info *xnbd = (struct xnbd_info *) data;
 
-	ai_head = net_getaddrinfo(NULL, port, PF_UNSPEC);
-	if (!ai_head)
-		return 0;
-
-	nlistened = net_listen_all_addrinfo(ai_head, lsock);
-	if (nlistened <= 0)
-		err("no socket to listen to");
-
-	freeaddrinfo(ai_head);
+	ppoll_initialize_eventfds();
 
 
-	for (nfds_t i = 0; i < nlistened; i++) {
-		eventfds[i].fd     = lsock[i];
-		eventfds[i].events = POLLIN;
+	if (connect_fd == -1) {
+		ai_head = net_getaddrinfo(NULL, port, PF_UNSPEC);
+		if (!ai_head)
+			return 0;
+
+		unsigned int nlistened = net_listen_all_addrinfo(ai_head, lsock);
+		if (nlistened <= 0)
+			err("no socket to listen to");
+
+		freeaddrinfo(ai_head);
+
+		for (nfds_t i = 0; i < nlistened; i++)
+			ppoll_add_eventfd(lsock[i], POLLIN);
+
+	} else {
+		info("use already negotiated sockfd %d", connect_fd);
+		invoke_new_session(xnbd, connect_fd);
 	}
 
-	for (nfds_t i = nlistened; i < MAXLISTENSOCK; i++)
-		eventfds[i].fd     = -1;
 
 
 	set_sigactions();
@@ -556,10 +579,10 @@ int master_server(int port, void *data)
 	sigset_t orig_sigmask;
 	/*
 	 * The master process does not want to get SIGCHLD anytime; when SIGCHLD received, some
-	 * system calls may fail with errno == EINTR. Only this ppoll() can be intrrupted.
+	 * system calls may fail with errno == EINTR. Only this ppoll() can be interrupted.
 	 */
 	sigemptyset(&sigs_blocked);
-	/* do now allow SIG_CHLD except ppoll() */
+	/* block SIG_* anytime; only the below ppoll() detects an arrival */
 	sigaddset(&sigs_blocked, SIGCHLD);
 	sigaddset(&sigs_blocked, SIGINT);
 	sigaddset(&sigs_blocked, SIGTERM);
@@ -645,6 +668,7 @@ int master_server(int port, void *data)
 			}
 		}
 
+		/* must be after the SIGCHLD handler */
 		if ((restarting_for_mode_change || restarting_for_snapshot) && g_list_length(xnbd->sessions) == 0) {
 			/* All sessions are stopped. Now start new sessions with existing sockets. */
 			info("All sessions are stopped. Now restart.");
@@ -714,7 +738,14 @@ int master_server(int port, void *data)
 			if (g_list_length(xnbd->sessions) == 0)
 				continue;
 
-			/* notify all sessions of termination */
+			/*
+			 * Gracefully shutdown chile processes. Notify all
+			 * child processes of termination. The child processes
+			 * that have exited will send SIGCHLD to the master
+			 * process. After the master process knows all the
+			 * child processes have exited, it restarts new
+			 * sessions.
+			 **/
 			for (GList *list = g_list_first(xnbd->sessions); list != NULL; list = g_list_next(list)) {
 				struct xnbd_session *s = (struct xnbd_session *) list->data;
 
@@ -723,6 +754,10 @@ int master_server(int port, void *data)
 				 * If a new connection is accepted during
 				 * restarting, send SIGHUP to the master server
 				 * again.
+				 *
+				 * NOTE: Another design option is to defer
+				 * invoking a new session until restarting is
+				 * completed.
 				 **/
 				if (s->notifying)
 					continue;
@@ -751,7 +786,7 @@ skip_restarting:
 		//raise(SIGCHLD);
 
 		info("start polling");
-		nready = ppoll(eventfds, nlistened, NULL, &orig_sigmask); 
+		nready = ppoll(ppoll_eventfds, ppoll_neventfds, NULL, &orig_sigmask); 
 		//printf("poll ready %d\n", nready);
 		if (nready == -1) {
 			/* signal catched */
@@ -762,16 +797,16 @@ skip_restarting:
 				err("poll, %s", strerror(errno));
 		}
 
-		for (nfds_t i = 0; i < nlistened; i++) {
-			int sockfd = eventfds[i].fd;
+		for (nfds_t i = 0; i < ppoll_neventfds; i++) {
+			int sockfd = ppoll_eventfds[i].fd;
 
 			if (sockfd < 0)
 				continue;
 
-			if (eventfds[i].revents & (POLLHUP | POLLNVAL)) 
-				err("unknown events, %x", eventfds[i].revents);
+			if (ppoll_eventfds[i].revents & (POLLHUP | POLLNVAL)) 
+				err("unknown events, %x", ppoll_eventfds[i].revents);
 
-			if (eventfds[i].revents & (POLLIN | POLLERR)) {
+			if (ppoll_eventfds[i].revents & (POLLIN | POLLERR)) {
 				/* if POLLERR, the next read() returns -1 */
 				/* POLLERR never occurs because we wait new connections */
 
@@ -815,6 +850,7 @@ skip_restarting:
 
 
 
+
 #include <getopt.h>
 
 static struct option longopts[] = {
@@ -830,6 +866,7 @@ static struct option longopts[] = {
 	{"cow", no_argument, NULL, 'c'},
 	{"logpath", required_argument, NULL, 'L'},
 	{"tos", no_argument, NULL, 'T'},
+	{"connected-fd", required_argument, NULL, 'F'},
 	{NULL, 0, NULL, 0},
 };
 
@@ -887,6 +924,7 @@ int main(int argc, char **argv) {
 	int readonly = 0;
 	int cow = 0;
 	int tos = 0;
+	int connected_fd = -1;
 	const char *logpath = NULL;
 	int logfd = -1;
 
@@ -895,7 +933,6 @@ int main(int argc, char **argv) {
 
 	bzero(&xnbd, sizeof(xnbd));
 
-	//g_log_set_default_handler("xnbd_master", G_LOG_LEVEL_WARNING | G_LOG_FLAG_FATAL | G_LOG_FLAG_RECURSION, log_handler, NULL);
 	g_log_set_default_handler(xutil_log_handler, (void *) &xnbd);
 
 	PAGESIZE = (unsigned int) getpagesize();
@@ -907,7 +944,7 @@ int main(int argc, char **argv) {
 		int c;
 		int index = 0;
 
-		c = getopt_long(argc, argv, "tphvl:B:G:drcL:T", longopts, &index);
+		c = getopt_long(argc, argv, "tphvl:B:G:drcL:TF:", longopts, &index);
 		if (c == -1)
 			break;
 
@@ -979,6 +1016,12 @@ int main(int argc, char **argv) {
 			case 'T':
 				tos = 1;
 				info("ToS enabled");
+				break;
+
+			case 'F':
+				/* use a file descriptor specified in a command line */
+				connected_fd = atoi(optarg);
+				info("connected fd %d", connected_fd);
 				break;
 
 			case '?':
@@ -1071,7 +1114,7 @@ int main(int argc, char **argv) {
 		if (logfd < 0)
 			err("open %s, %m", logpath);
 
-		int ret = dup2(logfd, 2);
+		int ret = dup2(logfd, fileno(stderr));
 		if (ret < 0)
 			err("dup2 %m");
 
@@ -1080,7 +1123,7 @@ int main(int argc, char **argv) {
 
 
 
-	master_server(lport, (void *) &xnbd);
+	master_server(lport, (void *) &xnbd, connected_fd);
 
 	xnbd_shutdown(&xnbd);
 	cachestat_shutdown();
