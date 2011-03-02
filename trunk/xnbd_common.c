@@ -180,6 +180,8 @@ int poll_request_arrival(struct xnbd_session *ses)
 			/* request arrived */
 			return 0;
 		}
+
+		err("unknown ppoll events");
 	}
 }
 
