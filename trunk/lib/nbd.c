@@ -254,6 +254,7 @@ int nbd_server_recv_request(int clientfd, off_t disksize, uint32_t *iotype_arg, 
 
 
 	dbg("%s from %ju (%ju) len %u, ", iotype ? "WRITE" : "READ", iofrom, iofrom / 512U, iolen);
+
 	/* do not touch the handle value at the server side */
 	reply->handle = request.handle;
 
