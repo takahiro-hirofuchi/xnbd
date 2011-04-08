@@ -254,8 +254,8 @@ int nbd_server_recv_request(int clientfd, off_t disksize, uint32_t *iotype_arg, 
 
 
 	dbg("%s from %ju (%ju) len %u, ", iotype ? "WRITE" : "READ", iofrom, iofrom / 512U, iolen);
-
-	reply->handle = ntohll(request.handle);
+	/* do not touch the handle value at the server side */
+	reply->handle = request.handle;
 
 
 	/*
@@ -313,7 +313,7 @@ struct nbd_negotiate_pdu_new_1 {
 
 struct nbd_negotiate_pdu_new_2 {
 	uint64_t size;
-	uint32_t flags;
+	uint16_t flags;
 	char padding[124];
 } __attribute__((__packed__));
 

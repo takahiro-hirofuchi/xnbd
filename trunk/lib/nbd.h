@@ -48,7 +48,7 @@ struct nbd_request {
 	uint64_t handle;
 	uint64_t from;
 	uint32_t len;
-};
+} __attribute__((__packed__));
 
 struct nbd_reply {
 	uint32_t magic;
