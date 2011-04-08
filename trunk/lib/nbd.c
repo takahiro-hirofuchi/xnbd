@@ -309,7 +309,7 @@ struct nbd_negotiate_pdu_new_1 {
 	uint64_t opt_magic;
 	uint32_t opt;
 	uint32_t namesize;
-};
+} __attribute__((__packed__));
 
 struct nbd_negotiate_pdu_new_2 {
 	uint64_t size;
