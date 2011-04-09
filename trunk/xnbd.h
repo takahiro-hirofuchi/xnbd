@@ -174,6 +174,10 @@ struct xnbd_info {
 	/* xnbd_cmd_target mode */
 	char *target_diskpath;
 	int target_diskfd;
+
+	/* xnbd_cmd_cow_target mode */
+	char *cow_diskpath;
+	struct disk_stack *cow_ds;
 };
 
 
@@ -254,8 +258,10 @@ void xnbd_target_open_disk(char *diskpath, struct xnbd_info *xnbd);
 void xnbd_target_make_snapshot(struct xnbd_info *xnbd);
 int xnbd_target_session_server(struct xnbd_session *);
 
+/* xnbd_cmd_cow_target mode */
+struct disk_stack *xnbd_cow_target_open_disk(char *diskpath, int newfile, int cowid);
+void xnbd_cow_target_close_disk(struct disk_stack *ds, int delete_cow);
+int xnbd_cow_target_session_server(struct xnbd_session *);
+
 int proxy_server(struct xnbd_session *);
-int target_server_cow(struct xnbd_session *);
-struct disk_stack *open_cow_disk(char *diskpath, int newfile, int cowid);
-void close_cow_disk(struct disk_stack *ds, int delete_cow);
 #endif

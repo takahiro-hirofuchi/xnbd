@@ -118,7 +118,7 @@ void xnbd_initialize(struct xnbd_info *xnbd)
 		g_assert(xnbd->target_diskpath);
 
 		if (xnbd->cow) {
-			xnbd->ds = open_cow_disk(xnbd->target_diskpath, 1, 0);
+			xnbd->cow_ds = xnbd_cow_target_open_disk(xnbd->cow_diskpath, 1, 0);
 			xnbd->disksize = xnbd->ds->disksize;
 		} else
 			xnbd_target_open_disk(xnbd->target_diskpath, xnbd);
@@ -144,7 +144,7 @@ void xnbd_shutdown(struct xnbd_info *xnbd)
 
 
 	if (xnbd->ds)
-		close_cow_disk(xnbd->ds, 1);
+		xnbd_cow_target_close_disk(xnbd->cow_ds, 1);
 	xnbd->ds = NULL;
 
 
@@ -177,7 +177,7 @@ void do_service(struct xnbd_session *ses)
 		dbg("target mode");
 		//xnbd->migrating_to_target = 0;
 		if (xnbd->cow)
-			ret = target_server_cow(ses);
+			ret = xnbd_cow_target_session_server(ses);
 		else
 			ret = xnbd_target_session_server(ses);
 	}
