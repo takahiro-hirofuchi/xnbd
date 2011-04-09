@@ -56,6 +56,9 @@ int put_line(int fd, const char *msg);
 void sigmask_all(void);
 
 #include <poll.h>
-int poll_data_and_event(int datafd, int event_listener_fd);
-void get_event_connecter(int *notifier, int *listener);
+int wait_until_readable(int fd, int unblock_fd);
+void make_pipe(int *write_fd, int *read_fd);
+void make_sockpair(int *fd0, int *fd1);
+int poll_data_and_event(int datafd, int event_listener_fd) __attribute__((deprecated));
+void get_event_connecter(int *notifier, int *listener) __attribute__((deprecated));
 #endif

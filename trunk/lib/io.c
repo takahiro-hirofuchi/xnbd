@@ -279,15 +279,16 @@ void sigmask_all(void)
 		err("sigmask");
 }
 
-int poll_data_and_event(int datafd, int event_listener_fd)
+int wait_until_readable(int fd, int unblock_fd)
 {
 	struct pollfd eventfds[2];
 
-	dbg("datafd %d event_listener_fd %d", datafd, event_listener_fd);
+	dbg("fd %d unblock_fd %d", fd, unblock_fd);
+
 	for (;;) {
-		eventfds[0].fd = datafd;
+		eventfds[0].fd = fd;
 		eventfds[0].events = POLLRDNORM | POLLRDHUP;
-		eventfds[1].fd = event_listener_fd;
+		eventfds[1].fd = unblock_fd;
 		eventfds[1].events = POLLRDNORM | POLLRDHUP;
 
 		int nready = poll(eventfds, 2, -1);
@@ -299,7 +300,6 @@ int poll_data_and_event(int datafd, int event_listener_fd)
 				err("polling, %s, (%d)", strerror(errno), errno);
 		}
 
-
 		if (eventfds[1].revents & (POLLRDNORM | POLLRDHUP)) {
 			info("notified");
 			return -1;
@@ -309,16 +309,39 @@ int poll_data_and_event(int datafd, int event_listener_fd)
 			/* request arrived */
 			return 0;
 		}
+
+		err("unknown ppoll events");
 	}
 }
 
-void get_event_connecter(int *notifier, int *listener)
+int poll_data_and_event(int datafd, int event_listener_fd)
+{
+	return wait_until_readable(datafd, event_listener_fd);
+}
+
+void make_pipe(int *write_fd, int *read_fd)
 {
 	int pipefds[2];
 	int ret = pipe(pipefds);
 	if (ret == -1)
 		err("pipe, %m");
 
-	*notifier = pipefds[1];
-	*listener = pipefds[0];
+	*write_fd = pipefds[1];
+	*read_fd = pipefds[0];
+}
+
+void make_sockpair(int *fd0, int *fd1)
+{
+	int sockfds[2];
+	int ret = socketpair(AF_UNIX, SOCK_STREAM, 0, sockfds);
+	if (ret == -1)
+		err("socketpair, %m");
+
+	*fd0 = sockfds[0];
+	*fd1 = sockfds[1];
+}
+
+void get_event_connecter(int *notifier, int *listener)
+{
+	make_pipe(notifier, listener);
 }
