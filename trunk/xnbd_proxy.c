@@ -63,9 +63,6 @@ struct xnbd_cread cread_eof = { .notify_error = 0, .nreq = 0 };
 struct xnbd_proxy {
 	pthread_t tid_cmp, tid_srq;
 
-	/* cached bitmap rwlock */
-	pthread_rwlock_t cbitmaplock;
-
 	/* queues for main and bg threads */
 	GAsyncQueue *high_queue;
 
@@ -108,38 +105,6 @@ void xnbd_cread_dump(struct xnbd_cread *cread)
 	//dump_buffer(cread->reply.handle, 8);
 }
 
-void cbitmap_read_lock(struct xnbd_proxy *proxy)
-{
-	int ret;
-
-	dbg("get read lock ... ");
-	ret = pthread_rwlock_rdlock(&proxy->cbitmaplock);
-	if (ret < 0)
-		err("deadlock?");
-	dbg("got read lock");
-}
-
-void cbitmap_unlock(struct xnbd_proxy *proxy)
-{
-	int ret;
-
-	dbg("unlock ... ");
-	ret = pthread_rwlock_unlock(&proxy->cbitmaplock);
-	if (ret < 0)
-		err("unlock");
-	dbg("unlocked");
-}
-
-void cbitmap_write_lock(struct xnbd_proxy *proxy)
-{
-	int ret;
-
-	dbg("get write lock ... ");
-	ret = pthread_rwlock_wrlock(&proxy->cbitmaplock);
-	if (ret < 0)
-		err("deadlock?");
-	dbg("got write lock");
-}
 
 
 
@@ -170,13 +135,12 @@ void add_read_block_to_tail(struct xnbd_cread *cread, unsigned long i)
 
 
 
-int proxy_mode_main_read(struct xnbd_proxy *proxy, struct xnbd_cread *cread)
+void proxy_mode_main_read(struct xnbd_proxy *proxy, struct xnbd_cread *cread)
 {
 	struct xnbd_info *xnbd = proxy->ses->xnbd;
 	unsigned long block_index_start = cread->block_index_start;
 	unsigned long block_index_end   = cread->block_index_end;
 
-	cbitmap_write_lock(proxy);
 	for (unsigned long i = block_index_start; i <= block_index_end; i++) {
 		/* counter */
 		cachestat_read_block();
@@ -200,17 +164,12 @@ int proxy_mode_main_read(struct xnbd_proxy *proxy, struct xnbd_cread *cread)
 		if (cread->nreq == MAXNBLOCK)
 			err("maximum cread->nreq %d", MAXNBLOCK);
 	}
-	cbitmap_unlock(proxy);
 
 
-
-	g_async_queue_push(proxy->high_queue, (gpointer) cread);
-
-	return 0;
 }
 
 
-int proxy_mode_main_write(struct xnbd_proxy *proxy, struct xnbd_cread *cread)
+void proxy_mode_main_write(struct xnbd_proxy *proxy, struct xnbd_cread *cread)
 {
 	struct xnbd_info *xnbd = proxy->ses->xnbd;
 	unsigned long block_index_start = cread->block_index_start;
@@ -226,7 +185,6 @@ int proxy_mode_main_write(struct xnbd_proxy *proxy, struct xnbd_cread *cread)
 	int get_start_block = 0;
 	int get_end_block   = 0;
 
-	cbitmap_write_lock(proxy);
 	{
 		if (iofrom % CBLOCKSIZE)
 			if (!bitmap_test(xnbd->cbitmap, block_index_start))
@@ -265,7 +223,6 @@ int proxy_mode_main_write(struct xnbd_proxy *proxy, struct xnbd_cread *cread)
 			}
 		}
 	}
-	cbitmap_unlock(proxy);
 
 	if (get_start_block) {
 		int cur_nreq = cread->nreq;
@@ -294,19 +251,6 @@ int proxy_mode_main_write(struct xnbd_proxy *proxy, struct xnbd_cread *cread)
 
 
 	/*
-	 * Next, recieve write data from a client node.
-	 * Recieve all blocks to a temporariy buffer because the completion
-	 * thread may touch the same range of the cache buffer.
-	 * Touching the cache buffer should be allowed only in the completon thread.
-	 **/
-	cread->pending_write_buff = g_malloc(iolen);
-
-
-	int ret = net_recv_all_or_error(proxy->ses->clientfd, cread->pending_write_buff, iolen);
-	if (ret < 0)
-		err("recv write data");
-
-	/*
 	 * For a WRITE request, we recieved all write data from the client.
 	 * But, a reply must be sent later in the completion thread.
 	 * send(clientfd) may be blocked while holding send_lock.
@@ -329,10 +273,6 @@ int proxy_mode_main_write(struct xnbd_proxy *proxy, struct xnbd_cread *cread)
 	 * anymmore; send(clientfd) is only performed at the completion thread.
 	 * So, we remove send_lock for clientfd.
 	 **/
-
-	g_async_queue_push(proxy->high_queue, (gpointer) cread);
-
-	return 0;
 }
 
 
@@ -393,12 +333,28 @@ int proxy_mode_main(struct xnbd_proxy *proxy)
 
 
 
+
 	if (iotype == NBD_CMD_READ)
-		ret = proxy_mode_main_read(proxy, cread);
-	else if (iotype == NBD_CMD_WRITE)
-		ret = proxy_mode_main_write(proxy, cread);
-	else 
+		proxy_mode_main_read(proxy, cread);
+	else if (iotype == NBD_CMD_WRITE) {
+		/*
+		 * Next, recieve write data from a client node.
+		 * Recieve all blocks to a temporariy buffer because the completion
+		 * thread may touch the same range of the cache buffer.
+		 * Touching the cache buffer should be allowed only in the completon thread.
+		 **/
+		cread->pending_write_buff = g_malloc(iolen);
+
+
+		int ret = net_recv_all_or_error(proxy->ses->clientfd, cread->pending_write_buff, iolen);
+		if (ret < 0)
+			err("recv write data");
+
+		proxy_mode_main_write(proxy, cread);
+	} else 
 		err("client bug: uknown iotype");
+
+	g_async_queue_push(proxy->high_queue, (gpointer) cread);
 
 
 	return ret;
@@ -643,9 +599,6 @@ void xnbd_proxy_initialize(struct xnbd_session *ses, struct xnbd_proxy *proxy)
 
 
 
-	ret = pthread_rwlock_init(&proxy->cbitmaplock, NULL);
-	if (ret < 0)
-		err("rwlock_init");
 
 	proxy->tid_cmp = pthread_create_or_abort(complete_thread, proxy);
 	proxy->tid_srq = pthread_create_or_abort(redirect_thread, proxy);
@@ -670,7 +623,6 @@ void xnbd_proxy_shutdown(struct xnbd_proxy *proxy)
 	g_async_queue_unref(proxy->high_queue);
 	g_async_queue_unref(proxy->req_queue);
 
-	pthread_rwlock_destroy(&proxy->cbitmaplock);
 
 }
 
