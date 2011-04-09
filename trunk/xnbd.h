@@ -156,22 +156,24 @@ struct xnbd_info {
 	struct disk_stack *cow_ds;
 
 	/* xnbd_cmd_proxy mode */
+
+
+
+	char *proxy_diskpath;   /* cache disk */
+	char *proxy_bmpath; /* cached bitmap file */
+	char *proxy_rhost;  /* remote nbd sever */
+	char *proxy_rport;
+
 	/* cache disk */
-	char *cachepath;
 	int cachefd;
 	int cacheopened;
 
-	/* cached bitmap file */
-	char *cbitmappath;
-	// int cbitmapopened;
 
 	/* cached bitmap array (mmaped) */
 	unsigned long *cbitmap;
 	size_t cbitmaplen;
 
 	/* remote nbd sever for caching */
-	char *remotehost;
-	char *remoteport;
 	const char *bgctlprefix;
 };
 

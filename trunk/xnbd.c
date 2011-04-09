@@ -70,9 +70,9 @@ void xnbd_session_initialize_connections(struct xnbd_info *xnbd, struct xnbd_ses
 	if (xnbd->cmd == xnbd_cmd_proxy) {
 		off_t disksize = 0;
 
-		ses->remotefd = net_tcp_connect(xnbd->remotehost, xnbd->remoteport);
+		ses->remotefd = net_tcp_connect(xnbd->proxy_rhost, xnbd->proxy_rport);
 		if (ses->remotefd < 0)
-			err("connecting %s:%s failed", xnbd->remotehost, xnbd->remoteport);
+			err("connecting %s:%s failed", xnbd->proxy_rhost, xnbd->proxy_rport);
 
 		/* negotiate and get disksize from remote server */
 		disksize = nbd_negotiate_with_server(ses->remotefd);
@@ -88,14 +88,14 @@ void xnbd_initialize(struct xnbd_info *xnbd)
 {
 	switch (xnbd->cmd) {
 		case xnbd_cmd_proxy:
-			g_assert(xnbd->remotehost);
-			g_assert(xnbd->remoteport);
-			g_assert(xnbd->cachepath);
-			g_assert(xnbd->cbitmappath);
+			g_assert(xnbd->proxy_rhost);
+			g_assert(xnbd->proxy_rport);
+			g_assert(xnbd->proxy_diskpath);
+			g_assert(xnbd->proxy_bmpath);
 
-			int remotefd = net_tcp_connect(xnbd->remotehost, xnbd->remoteport);
+			int remotefd = net_tcp_connect(xnbd->proxy_rhost, xnbd->proxy_rport);
 			if (remotefd < 0)
-				err("connecting %s:%s failed", xnbd->remotehost, xnbd->remoteport);
+				err("connecting %s:%s failed", xnbd->proxy_rhost, xnbd->proxy_rport);
 
 			/* check the remote server and get a disksize */
 			xnbd->disksize = nbd_negotiate_with_server(remotefd);
@@ -103,16 +103,16 @@ void xnbd_initialize(struct xnbd_info *xnbd)
 			close(remotefd);
 
 			xnbd->nblocks = get_disk_nblocks(xnbd->disksize);
-			xnbd->cbitmap = bitmap_open_file(xnbd->cbitmappath, xnbd->nblocks, &xnbd->cbitmaplen, 0, 1);
+			xnbd->cbitmap = bitmap_open_file(xnbd->proxy_bmpath, xnbd->nblocks, &xnbd->cbitmaplen, 0, 1);
 			// xnbd->cbitmapopened = 1;
 
 			/* setup cachefile */
-			setup_cachedisk(xnbd, xnbd->disksize, xnbd->cachepath);
+			setup_cachedisk(xnbd, xnbd->disksize, xnbd->proxy_diskpath);
 
 
 			info("proxymode mode %s %s cache %s cachebitmap %s",
-					xnbd->remotehost, xnbd->remoteport,
-					xnbd->cachepath, xnbd->cbitmappath);
+					xnbd->proxy_rhost, xnbd->proxy_rport,
+					xnbd->proxy_diskpath, xnbd->proxy_bmpath);
 
 
 			break;
@@ -576,7 +576,7 @@ int master_server(int port, void *data, int connect_fd)
 				/* become target mode */
 				xnbd_shutdown(xnbd);
 				xnbd->cmd = xnbd_cmd_target;
-				xnbd->target_diskpath = xnbd->cachepath;
+				xnbd->target_diskpath = xnbd->proxy_diskpath;
 				xnbd_initialize(xnbd);
 			} else {
 				/* take a snapshot */
@@ -965,10 +965,10 @@ int main(int argc, char **argv) {
 			if (argc - optind != 4)
 				show_help_and_exit("argument error");
 
-			xnbd.remotehost  = argv[optind];
-			xnbd.remoteport  = argv[optind + 1];
-			xnbd.cachepath   = argv[optind + 2];
-			xnbd.cbitmappath = argv[optind + 3];
+			xnbd.proxy_rhost  = argv[optind];
+			xnbd.proxy_rport  = argv[optind + 1];
+			xnbd.proxy_diskpath   = argv[optind + 2];
+			xnbd.proxy_bmpath = argv[optind + 3];
 
 
 			if (bgctlprefix)
