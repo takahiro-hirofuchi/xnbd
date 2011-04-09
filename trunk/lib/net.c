@@ -488,6 +488,21 @@ void net_writev_all_or_abort(int fd, struct iovec *iov, unsigned int count)
 	check_done(ret, errno);
 }
 
+int net_writev_all_or_error(int fd, struct iovec *iov, unsigned int count)
+{
+	size_t bufflen = 0;
+	for (unsigned int i = 0; i < count; i++)
+		bufflen += iov->iov_len;
+
+	int ret = net_writev_all(fd, iov, count);
+	if (ret != (int) bufflen)
+		return -1;
+
+	/* if failed to send all data, return -1 */
+
+	return ret;
+}
+
 void net_send_all_or_abort(int sockfd, void *buff, size_t bufflen)
 {
 	int ret = net_send_all(sockfd, buff, bufflen);
