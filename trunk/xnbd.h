@@ -126,9 +126,6 @@ void free_disk_stack_io(struct disk_stack_io *io);
 /* common with all sessions for a particular disk */
 struct xnbd_info {
 	/* local disk */
-	char *diskpath;
-	int diskfd;
-	int diskopened;
 	int readonly;
 
 	/* local disk and remote disk */
@@ -171,6 +168,12 @@ struct xnbd_info {
 
 	/* use IPTOS_ flag for IP packets */
 	int tos;
+
+
+
+	/* xnbd_cmd_target mode */
+	char *target_diskpath;
+	int target_diskfd;
 };
 
 
@@ -245,8 +248,13 @@ int poll_request_arrival(struct xnbd_session *ses);
 void check_disksize(char *diskpath, off_t disksize);
 unsigned long get_disk_nblocks(off_t disksize);
 
+
+/* xnbd_cmd_target mode */
+void xnbd_target_open_disk(char *diskpath, struct xnbd_info *xnbd);
+void xnbd_target_make_snapshot(struct xnbd_info *xnbd);
+int xnbd_target_session_server(struct xnbd_session *);
+
 int proxy_server(struct xnbd_session *);
-int target_server(struct xnbd_session *);
 int target_server_cow(struct xnbd_session *);
 struct disk_stack *open_cow_disk(char *diskpath, int newfile, int cowid);
 void close_cow_disk(struct disk_stack *ds, int delete_cow);

@@ -22,7 +22,6 @@
  */
 
 #include "xnbd.h"
-#include <sys/ioctl.h>
 
 /* IPTOS */
 #include <netinet/in.h>
@@ -32,126 +31,6 @@
 
 const int XNBD_PORT = 8520;
 
-
-/* clone_file() is a snippet from coreutils. modified. */
-/* Perform the O(1) btrfs clone operation, if possible.
- * Upon success, return 0.  Otherwise, return -1 and set errno.  */
-static int clone_file_by_reflink(int dstfd, int srcfd)
-{
-#ifdef __linux__ 
-#undef BTRFS_IOCTL_MAGIC
-#define BTRFS_IOCTL_MAGIC 0x94
-#undef BTRFS_IOC_CLONE
-#define BTRFS_IOC_CLONE _IOW (BTRFS_IOCTL_MAGIC, 9, int)
-	return ioctl(dstfd, BTRFS_IOC_CLONE, srcfd);
-#else
-	(void) dstfd;
-	(void) srcfd;
-	errno = ENOTSUP;
-	return -1;
-#endif
-}
-
-static void clone_file_by_copy(int dstfd, int srcfd)
-{
-	off_t total = 0;
-	char buf[1024];
-	ssize_t ret;
-
-	for (;;) {
-		ret = pread(srcfd, buf, sizeof(buf), total);
-		if (ret < 0)
-			err("read, %m");
-		else if (ret == 0) {
-			/* eof */
-			break;
-		}
-
-		write_all(dstfd, buf, (size_t) ret);
-		total += ret;
-	}
-
-	struct stat st;
-	ret = fstat(srcfd, &st);
-	if (ret < 0)
-		err("fstat, %m");
-
-	if (st.st_size != total)
-		err("size mismatch");
-
-}
-
-static void make_snapshot(struct xnbd_info *xnbd)
-{
-	time_t now = time(NULL);
-	/* clone_file_by_copy() is not atomic. so use hardlink */
-	char *dstpath = g_strdup_printf("%s.snapshot.%08lu", xnbd->diskpath, now);
-	char *tmpdstpath = g_strdup_printf("%s.snapshot.%08lu.tmp", xnbd->diskpath, now);
-
-	int dstfd = open(tmpdstpath, O_RDWR | O_CREAT | O_EXCL, 0600);
-	if (dstfd < 0) {
-		warn("snapshot: opening %s failed, %m", tmpdstpath);
-		goto err;
-	}
-
-	int ret = clone_file_by_reflink(dstfd, xnbd->diskfd);
-	if (ret) {
-		warn("snapshot: cloning %s to %s by reflink failed, %m", xnbd->diskpath, tmpdstpath);
-		warn("snapshot: fall back to normal copy ...");
-		clone_file_by_copy(dstfd, xnbd->diskfd);
-	}
-
-	close(dstfd);
-
-
-	ret = link(tmpdstpath, dstpath);
-	if (ret < 0)
-		err("hardlink, %m");
-
-	ret = unlink(tmpdstpath);
-	if (ret < 0)
-		err("unlink, %m");
-	
-	info("snapshot: %s", dstpath);
-err:
-	g_free(dstpath);
-	g_free(tmpdstpath);
-}
-
-
-void setup_disk(char *diskpath, struct xnbd_info *xnbd)
-{
-	int diskfd;
-
-
-	if (xnbd->readonly)
-		diskfd = open(diskpath, O_RDONLY | O_NOATIME);
-	else
-		diskfd = open(diskpath, O_RDWR | O_NOATIME);
-	if (diskfd < 0) {
-		if (errno == EOVERFLOW)
-			warn("enable large file support!");
-		err("open, %s", strerror(errno));
-	}
-
-
-	off_t disksize = get_disksize(diskfd);
-
-	check_disksize(diskpath, disksize);
-
-
-	/* multi-connections call this */
-	//if (posix_fallocate(diskfd, 0, disksize))
-	//	warn("maybe no enough space in a local file system");
-	
-
-
-
-	xnbd->diskfd = diskfd;
-	xnbd->disksize = disksize;
-	xnbd->diskopened = 1;
-
-}
 
 
 
@@ -236,13 +115,13 @@ void xnbd_initialize(struct xnbd_info *xnbd)
 
 
 	} else {
-		g_assert(xnbd->diskpath);
+		g_assert(xnbd->target_diskpath);
 
 		if (xnbd->cow) {
-			xnbd->ds = open_cow_disk(xnbd->diskpath, 1, 0);
+			xnbd->ds = open_cow_disk(xnbd->target_diskpath, 1, 0);
 			xnbd->disksize = xnbd->ds->disksize;
 		} else
-			setup_disk(xnbd->diskpath, xnbd);
+			xnbd_target_open_disk(xnbd->target_diskpath, xnbd);
 
 		xnbd->nblocks = get_disk_nblocks(xnbd->disksize);
 	}
@@ -260,7 +139,7 @@ void xnbd_shutdown(struct xnbd_info *xnbd)
 	info("xnbd_shutdowning ...");
 
 	if (xnbd->diskopened)
-		close(xnbd->diskfd);
+		close(xnbd->target_diskfd);
 	xnbd->diskopened = 0;
 
 
@@ -300,7 +179,7 @@ void do_service(struct xnbd_session *ses)
 		if (xnbd->cow)
 			ret = target_server_cow(ses);
 		else
-			ret = target_server(ses);
+			ret = xnbd_target_session_server(ses);
 	}
 
 
@@ -310,7 +189,7 @@ void do_service(struct xnbd_session *ses)
 //	if (xnbd->migrating_to_target) {
 //		xnbd->proxymode = 0;
 //		//xnbd->migrating_to_target = 0;
-//		xnbd->diskpath = xnbd->cachepath;
+//		xnbd->target_diskpath = xnbd->cachepath;
 //		goto serve_again;
 //	}
 //
@@ -677,11 +556,11 @@ int master_server(int port, void *data, int connect_fd)
 				/* become target mode */
 				xnbd_shutdown(xnbd);
 				xnbd->proxymode = 0;
-				xnbd->diskpath = xnbd->cachepath;
+				xnbd->target_diskpath = xnbd->cachepath;
 				xnbd_initialize(xnbd);
 			} else {
 				/* take a snapshot */
-				make_snapshot(xnbd);
+				xnbd_target_make_snapshot(xnbd);
 			}
 
 
@@ -1059,7 +938,7 @@ int main(int argc, char **argv) {
 				show_help_and_exit("argument error");
 
 
-			xnbd.diskpath   = argv[optind];
+			xnbd.target_diskpath   = argv[optind];
 			xnbd.proxymode  = 0;
 			xnbd.cow        = cow;
 			xnbd.readonly   = readonly;
