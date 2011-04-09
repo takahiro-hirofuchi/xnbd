@@ -35,8 +35,9 @@ struct remote_read_request {
 #define MAXNBLOCK 10
 
 struct proxy_priv {
-	/* notify a request error. skip io */
-	int notify_error;
+	int clientfd;
+
+
 
 	uint32_t iotype;
 
@@ -53,19 +54,56 @@ struct proxy_priv {
 	struct nbd_reply reply;
 
 	char *write_buff;
+	char *read_buff;
+
+
+	GAsyncQueue *tx_queue;
+
+
+	int need_exit;
 };
+
 
 
 
 struct xnbd_proxy {
-	pthread_t tid_cmp, tid_srq;
+	pthread_t tid_fwd_tx, tid_fwd_rx;
 
-	/* queues for main and bg threads */
-	GAsyncQueue *high_queue;
 
-	/* queue for the read request waiting a reply */
-	GAsyncQueue *req_queue;
+	/* queue between rx threads and forwarder_tx thread */ 
+	GAsyncQueue *fwd_tx_queue;
 
-	struct xnbd_session *ses;
+	/* queue between forwarder_tx and forwarder_rx */
+	GAsyncQueue *fwd_rx_queue;
+
+	struct xnbd_info *xnbd;
+
+	int remotefd;
+
+	int cachefd;
+
+	/* cached bitmap array (mmaped) */
+	unsigned long *cbitmap;
+	size_t cbitmaplen;
 };
 
+enum xnbd_proxy_cmd_type {
+	XNBD_PROXY_CMD_UNKNOWN = 0,
+	XNBD_PROXY_CMD_QUERY_STATUS,
+	XNBD_PROXY_CMD_REGISTER_FD
+};
+
+/* query about current status via a unix socket */
+struct xnbd_proxy_query {
+	off_t disksize;
+	char diskpath[PATH_MAX];
+	char bmpath[PATH_MAX];
+	pid_t master_pid;
+} query;
+
+
+void *forwarder_rx_thread_main(void *arg);
+void *forwarder_tx_thread_main(void *arg);
+
+extern struct proxy_priv priv_stop_forwarder;
+void block_all_signals(void);

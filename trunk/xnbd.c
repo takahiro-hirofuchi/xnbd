@@ -36,27 +36,6 @@ const int XNBD_PORT = 8520;
 
 
 
-void setup_cachedisk(struct xnbd_info *xnbd, off_t disksize, char *cachepath)
-{
-	int cachefd;
-
-	cachefd = open(cachepath, O_RDWR | O_CREAT | O_NOATIME, S_IRUSR | S_IWUSR);
-	if (cachefd < 0)
-		err("open");
-	
-	off_t size = get_disksize(cachefd);
-	if (size != disksize) {
-		warn("cache disk size (%ju) != target disk size (%ju)", size, disksize);
-		warn("now ftruncate() it");
-		int ret = ftruncate(cachefd, disksize);
-		if (ret < 0)
-			err("ftruncate");
-	}
-
-
-	xnbd->cachefd = cachefd;
-	xnbd->cacheopened = 1;
-}
 
 
 
@@ -65,21 +44,9 @@ void setup_cachedisk(struct xnbd_info *xnbd, off_t disksize, char *cachepath)
 
 
 
-void xnbd_session_initialize_connections(struct xnbd_info *xnbd, struct xnbd_session *ses)
-{
-	if (xnbd->cmd == xnbd_cmd_proxy) {
-		off_t disksize = 0;
 
-		ses->remotefd = net_tcp_connect(xnbd->proxy_rhost, xnbd->proxy_rport);
-		if (ses->remotefd < 0)
-			err("connecting %s:%s failed", xnbd->proxy_rhost, xnbd->proxy_rport);
 
-		/* negotiate and get disksize from remote server */
-		disksize = nbd_negotiate_with_server(ses->remotefd);
-		if (disksize != xnbd->disksize)
-			err("The remote host answered a different disksize.");
-	}
-}
+
 
 
 
@@ -93,27 +60,7 @@ void xnbd_initialize(struct xnbd_info *xnbd)
 			g_assert(xnbd->proxy_diskpath);
 			g_assert(xnbd->proxy_bmpath);
 
-			int remotefd = net_tcp_connect(xnbd->proxy_rhost, xnbd->proxy_rport);
-			if (remotefd < 0)
-				err("connecting %s:%s failed", xnbd->proxy_rhost, xnbd->proxy_rport);
-
-			/* check the remote server and get a disksize */
-			xnbd->disksize = nbd_negotiate_with_server(remotefd);
-			nbd_client_send_disc_request(remotefd);
-			close(remotefd);
-
-			xnbd->nblocks = get_disk_nblocks(xnbd->disksize);
-			xnbd->cbitmap = bitmap_open_file(xnbd->proxy_bmpath, xnbd->nblocks, &xnbd->cbitmaplen, 0, 1);
-			// xnbd->cbitmapopened = 1;
-
-			/* setup cachefile */
-			setup_cachedisk(xnbd, xnbd->disksize, xnbd->proxy_diskpath);
-
-
-			info("proxymode mode %s %s cache %s cachebitmap %s",
-					xnbd->proxy_rhost, xnbd->proxy_rport,
-					xnbd->proxy_diskpath, xnbd->proxy_bmpath);
-
+			xnbd_proxy_start(xnbd);
 
 			break;
 
@@ -164,8 +111,8 @@ void xnbd_shutdown(struct xnbd_info *xnbd)
 
 
 	if (xnbd->cmd == xnbd_cmd_proxy)
-		close(xnbd->cachefd);
-		bitmap_close_file(xnbd->cbitmap, xnbd->cbitmaplen);
+		xnbd_proxy_stop(xnbd);
+
 
 
 
@@ -189,7 +136,7 @@ void do_service(struct xnbd_session *ses)
 			break;
 
 		case xnbd_cmd_proxy:
-			ret = proxy_server(ses);
+			ret = xnbd_proxy_session_server(ses);
 			break;
 
 		case xnbd_cmd_version:
@@ -229,12 +176,8 @@ struct xnbd_session *find_session_with_pid(struct xnbd_info *xnbd, pid_t pid)
 }
 
 
-void free_session(struct xnbd_info *xnbd, struct xnbd_session *ses)
+void free_session(struct xnbd_session *ses)
 {
-	if (xnbd->cmd == xnbd_cmd_proxy) {
-		nbd_client_send_disc_request(ses->remotefd);
-		close(ses->remotefd);
-	}
 
 	close(ses->pipe_master_fd);
 
@@ -301,7 +244,6 @@ void invoke_new_session(struct xnbd_info *xnbd, int csockfd)
 
 	/* used for sending msg to the session process */
 	make_pipe(&ses->pipe_master_fd, &ses->pipe_worker_fd);
-	xnbd_session_initialize_connections(xnbd, ses);
 
 	info("negotiations done");
 
@@ -313,6 +255,9 @@ void invoke_new_session(struct xnbd_info *xnbd, int csockfd)
 		/* worker child does not need master_fd */
 		close(ses->pipe_master_fd);
 
+		if (xnbd->cmd == xnbd_cmd_proxy)
+			close(xnbd->proxy_sockpair_master_fd);
+
 		for (nfds_t j = 0; j < ppoll_neventfds; j++) 
 			close(ppoll_eventfds[j].fd);
 
@@ -322,8 +267,6 @@ void invoke_new_session(struct xnbd_info *xnbd, int csockfd)
 			dbg("cleanup pid %d", s->pid);
 			dbg(" s->pipe_master_fd %d", s->pipe_master_fd);
 			dbg(" s->clientfd %d", s->clientfd);
-			if (xnbd->cmd == xnbd_cmd_proxy)
-				close(s->remotefd);
 			close(s->clientfd);
 			close(s->pipe_master_fd);
 
@@ -391,7 +334,7 @@ void shutdown_all_sessions(struct xnbd_info *xnbd)
 		if (ret < 0)
 			err("waitpid %d, %m", s->pid);
 
-		free_session(xnbd, s);
+		free_session(s);
 		xnbd->sessions = g_list_remove(xnbd->sessions, s);
 		info("session (pid %d) cleared", s->pid);
 
@@ -420,6 +363,9 @@ void shutdown_all_sessions(struct xnbd_info *xnbd)
 #endif
 	}
 }
+
+
+
 
 
 static void ppoll_initialize_eventfds(void)
@@ -551,12 +497,18 @@ int master_server(int port, void *data, int connect_fd)
 				if (pid == 0)
 					break;
 
+				if (xnbd->cmd == xnbd_cmd_proxy)
+					if (pid == xnbd->proxy_pid)
+						err("detect abnormal termination of proxy_server");
+
+
+
 				struct xnbd_session *ses = find_session_with_pid(xnbd, pid);
 				if (!ses)
 					err("unknown session pid %d", pid);
 
 				xnbd->sessions = g_list_remove(xnbd->sessions, ses);
-				free_session(xnbd, ses);
+				free_session(ses);
 				info("session (pid %d) cleared", pid);
 
 				if (WIFEXITED(status))
@@ -776,7 +728,7 @@ static const char *help_string = "\
 Usage: \n\
   xnbd-server --target [options] disk_image\n\
   xnbd-server --cow-target [options] base_disk_image\n\
-  xnbd-server --proxy [options] target_host port cache_image cache_bitmap\n\
+  xnbd-server --proxy [options] remote_host remort_port cache_disk_path cache_bitmap_path control_socket_path\n\
   xnbd-server --help\n\
   xnbd-server --version\n\
 \n\
@@ -953,14 +905,14 @@ int main(int argc, char **argv) {
 			break;
 
 		case xnbd_cmd_proxy:
-			if (argc - optind != 4)
+			if (argc - optind != 5)
 				show_help_and_exit("argument error");
 
 			xnbd.proxy_rhost  = argv[optind];
 			xnbd.proxy_rport  = argv[optind + 1];
 			xnbd.proxy_diskpath = argv[optind + 2];
 			xnbd.proxy_bmpath   = argv[optind + 3];
-
+			xnbd.proxy_unixpath = argv[optind + 4];
 
 			break;
 
