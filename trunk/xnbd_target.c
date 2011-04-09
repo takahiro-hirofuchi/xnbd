@@ -24,6 +24,125 @@
 #include "xnbd.h"
 
 
+#include <sys/ioctl.h>
+/* clone_file() is a snippet from coreutils. modified. */
+/* Perform the O(1) btrfs clone operation, if possible.
+ * Upon success, return 0.  Otherwise, return -1 and set errno.  */
+static int clone_file_by_reflink(int dstfd, int srcfd)
+{
+#ifdef __linux__ 
+#undef BTRFS_IOCTL_MAGIC
+#define BTRFS_IOCTL_MAGIC 0x94
+#undef BTRFS_IOC_CLONE
+#define BTRFS_IOC_CLONE _IOW (BTRFS_IOCTL_MAGIC, 9, int)
+	return ioctl(dstfd, BTRFS_IOC_CLONE, srcfd);
+#else
+	(void) dstfd;
+	(void) srcfd;
+	errno = ENOTSUP;
+	return -1;
+#endif
+}
+
+static void clone_file_by_copy(int dstfd, int srcfd)
+{
+	off_t total = 0;
+	char buf[1024];
+	ssize_t ret;
+
+	for (;;) {
+		ret = pread(srcfd, buf, sizeof(buf), total);
+		if (ret < 0)
+			err("read, %m");
+		else if (ret == 0) {
+			/* eof */
+			break;
+		}
+
+		write_all(dstfd, buf, (size_t) ret);
+		total += ret;
+	}
+
+	struct stat st;
+	ret = fstat(srcfd, &st);
+	if (ret < 0)
+		err("fstat, %m");
+
+	if (st.st_size != total)
+		err("size mismatch");
+
+}
+
+void xnbd_target_make_snapshot(struct xnbd_info *xnbd)
+{
+	time_t now = time(NULL);
+	/* clone_file_by_copy() is not atomic. so use hardlink */
+	char *dstpath = g_strdup_printf("%s.snapshot.%08lu", xnbd->target_diskpath, now);
+	char *tmpdstpath = g_strdup_printf("%s.snapshot.%08lu.tmp", xnbd->target_diskpath, now);
+
+	int dstfd = open(tmpdstpath, O_RDWR | O_CREAT | O_EXCL, 0600);
+	if (dstfd < 0) {
+		warn("snapshot: opening %s failed, %m", tmpdstpath);
+		goto err;
+	}
+
+	int ret = clone_file_by_reflink(dstfd, xnbd->target_diskfd);
+	if (ret) {
+		warn("snapshot: cloning %s to %s by reflink failed, %m", xnbd->target_diskpath, tmpdstpath);
+		warn("snapshot: fall back to normal copy ...");
+		clone_file_by_copy(dstfd, xnbd->target_diskfd);
+	}
+
+	close(dstfd);
+
+
+	ret = link(tmpdstpath, dstpath);
+	if (ret < 0)
+		err("hardlink, %m");
+
+	ret = unlink(tmpdstpath);
+	if (ret < 0)
+		err("unlink, %m");
+	
+	info("snapshot: %s", dstpath);
+err:
+	g_free(dstpath);
+	g_free(tmpdstpath);
+}
+
+
+void xnbd_target_open_disk(char *diskpath, struct xnbd_info *xnbd)
+{
+	int diskfd;
+
+
+	if (xnbd->readonly)
+		diskfd = open(diskpath, O_RDONLY | O_NOATIME);
+	else
+		diskfd = open(diskpath, O_RDWR | O_NOATIME);
+	if (diskfd < 0) {
+		if (errno == EOVERFLOW)
+			warn("enable large file support!");
+		err("open, %s", strerror(errno));
+	}
+
+
+	off_t disksize = get_disksize(diskfd);
+
+	check_disksize(diskpath, disksize);
+
+
+	/* multi-connections call this */
+	//if (posix_fallocate(diskfd, 0, disksize))
+	//	warn("maybe no enough space in a local file system");
+	
+
+
+
+	xnbd->target_diskfd = diskfd;
+	xnbd->disksize = disksize;
+}
+
 
 int target_mode_main_mmap(struct xnbd_session *ses)
 {
@@ -67,7 +186,7 @@ int target_mode_main_mmap(struct xnbd_session *ses)
 	char *iobuf = NULL;
 
 
-	iobuf = mmap_iorange(xnbd, xnbd->diskfd, iofrom, iolen, &mmaped_buf, &mmaped_len, &mmaped_offset);
+	iobuf = mmap_iorange(xnbd, xnbd->target_diskfd, iofrom, iolen, &mmaped_buf, &mmaped_len, &mmaped_offset);
 	dbg("mmaped_buf %p iobuf %p mmaped_len %zu iolen %zu", mmaped_buf, iobuf, mmaped_len, iolen);
 
 
@@ -119,7 +238,7 @@ int target_mode_main_mmap(struct xnbd_session *ses)
 
 
 
-int target_server(struct xnbd_session *ses)
+int xnbd_target_session_server(struct xnbd_session *ses)
 {
 	for (;;) {
 		int ret = 0;
