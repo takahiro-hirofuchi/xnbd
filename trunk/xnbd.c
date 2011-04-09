@@ -761,7 +761,6 @@ static struct option longopts[] = {
 	{"version", no_argument, NULL, 'v'},
 	/* options */
 	{"lport", required_argument, NULL, 'l'},
-	{"bgctlprefix", required_argument, NULL, 'B'},
 	{"gstatpath", required_argument, NULL, 'G'},
 	{"daemonize", no_argument, NULL, 'd'},
 	{"readonly", no_argument, NULL, 'r'},
@@ -786,8 +785,6 @@ Options: \n\
   --daemonize	run as a daemon process\n\
   --readonly	export a disk as readonly\n\
   --logpath	logfile (default /tmp/xnbd.log)\n\
-  --bgctlprefix	FIFO file prefix used by a control program in proxy mode\n\
-  		(default /tmp/xnbd-bg.ctl)\n\
 ";
 
 
@@ -813,7 +810,6 @@ int main(int argc, char **argv) {
 	enum xnbd_cmd_type cmd = xnbd_cmd_unknown;
 	int lport = XNBD_PORT;
 	char *gstatpath = NULL;
-	char *bgctlprefix = NULL;
 	int daemonize = 0;
 	int readonly = 0;
 	int tos = 0;
@@ -837,7 +833,7 @@ int main(int argc, char **argv) {
 		int c;
 		int index = 0;
 
-		c = getopt_long(argc, argv, "tpchvl:B:G:drL:TF:", longopts, &index);
+		c = getopt_long(argc, argv, "tpchvl:G:drL:TF:", longopts, &index);
 		if (c == -1)
 			break;
 
@@ -882,11 +878,6 @@ int main(int argc, char **argv) {
 			case 'l':
 				lport = atoi(optarg);
 				info("listen port %d", lport);
-				break;
-
-			case 'B':
-				bgctlprefix = optarg;
-				info("background copy control %s", optarg);
 				break;
 
 			case 'G':
@@ -967,16 +958,9 @@ int main(int argc, char **argv) {
 
 			xnbd.proxy_rhost  = argv[optind];
 			xnbd.proxy_rport  = argv[optind + 1];
-			xnbd.proxy_diskpath   = argv[optind + 2];
-			xnbd.proxy_bmpath = argv[optind + 3];
+			xnbd.proxy_diskpath = argv[optind + 2];
+			xnbd.proxy_bmpath   = argv[optind + 3];
 
-
-			if (bgctlprefix)
-				xnbd.bgctlprefix = bgctlprefix;
-			else {
-				xnbd.bgctlprefix = "/tmp/xnbd-bg.ctl";
-				info("use default bgctlprefix %s", xnbd.bgctlprefix);
-			}
 
 			break;
 

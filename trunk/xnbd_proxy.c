@@ -23,8 +23,6 @@
 
 #include "xnbd.h"
 
-const unsigned long XNBD_BGCTL_MAGIC_CACHE_ALL = ~(0UL);
-const unsigned long XNBD_BGCTL_MAGIC_SHUTDOWN  = ~(0UL) - 1;
 
 
 struct remote_read_request {
@@ -63,24 +61,18 @@ struct xnbd_cread cread_eof = { .notify_error = 0, .nreq = 0 };
 
 
 struct xnbd_proxy {
-	pthread_t tid_cmp, tid_srq, tid_bgr;
+	pthread_t tid_cmp, tid_srq;
 
 	/* cached bitmap rwlock */
 	pthread_rwlock_t cbitmaplock;
 
 	/* queues for main and bg threads */
 	GAsyncQueue *high_queue;
-	GAsyncQueue *low_queue;
-
-	pthread_cond_t sreq_pending;
-	pthread_mutex_t sreq_lock;
 
 	/* queue for the read request waiting a reply */
 	GAsyncQueue *req_queue;
 
 	struct xnbd_session *ses;
-
-	char bgctlpath[PATH_MAX];
 };
 
 
@@ -151,164 +143,6 @@ void cbitmap_write_lock(struct xnbd_proxy *proxy)
 
 
 
-void get_bgctlpath(char *bgctlpath, size_t len, const char *prefix)
-{
-	pid_t ppid = getppid();
-	pid_t pid  = getpid();
-
-	snprintf(bgctlpath, len, "%s.%ld-%ld", prefix, (long) ppid, (long) pid);
-}
-
-
-void bgctl_enqueue_bindex_main(struct xnbd_proxy *proxy, unsigned long bindex)
-{
-	struct xnbd_cread *cread = g_malloc0(sizeof(struct xnbd_cread));
-	cread->reply.magic = htonl(NBD_REPLY_MAGIC);
-	cread->reply.error = 0;
-	cread->iotype = NBD_CMD_BGCOPY;
-	cread->nreq = 0;
-
-	{
-		dbg("bgthread enqueue %lu", bindex);
-		/* 1st casting is essential */
-		cread->iofrom = (off_t) bindex * CBLOCKSIZE;
-		cread->iolen  = (size_t) CBLOCKSIZE;
-
-		cread->block_index_start = bindex;
-		cread->block_index_end = bindex;
-	}
-
-	pthread_mutex_lock(&proxy->sreq_lock);
-	dbg("bg thread enqueues a new queue element, cread %p", cread);
-	g_async_queue_push(proxy->low_queue, (gpointer) cread);
-	pthread_cond_signal(&proxy->sreq_pending);
-	pthread_mutex_unlock(&proxy->sreq_lock);
-}
-
-static uint32_t iocounter = 0;
-
-void bgctl_enqueue_bindex(struct xnbd_proxy *proxy, unsigned long bindex)
-{
-	struct xnbd_session *ses = proxy->ses;
-	struct xnbd_info *xnbd = ses->xnbd;
-	int need_copy;
-
-	dbg("try to bgcopy %lu", bindex);
-	cbitmap_read_lock(proxy);
-	{
-		if (bitmap_test(xnbd->cbitmap, bindex)) {
-			dbg("already cached, skip");
-			need_copy = 0;
-		} else {
-			dbg("no yet cached, need copy");
-			need_copy = 1;
-		}
-	}
-	cbitmap_unlock(proxy);
-
-	if (!need_copy)
-		return;
-
-	/* wait */
-	{
-		for (;;) {
-			int length = g_async_queue_length(proxy->high_queue);
-			if (length > 0) {
-				poll(NULL, 0, 1);
-				continue;
-			}
-
-			length = g_async_queue_length(proxy->low_queue);
-			if (length >= 10000) {
-				poll(NULL, 0, 1);
-				continue;
-			} else 
-				break;
-		}
-
-#if 0
-		/* BGCOPY SEQ (2MB/s) */
-		if ((iocounter % 2) == 0) {
-			struct timespec ts;
-			ts.tv_sec = 0;
-			ts.tv_nsec = 1000 * 1;
-			/* may sleep for a larger moment */
-			//ppoll(NULL, 0, &ts, NULL);
-			poll(NULL, 0, 1);
-		}
-#endif
-
-		iocounter += 1;
-	}
-
-	bgctl_enqueue_bindex_main(proxy, bindex);
-}
-
-
-
-
-
-void *background_thread(void *data)
-{
-	struct xnbd_proxy *proxy = (struct xnbd_proxy *) data;
-	struct xnbd_session *ses = proxy->ses;
-	struct xnbd_info *xnbd = ses->xnbd;
-
-	ssize_t ret;
-	int bgctlfd;
-
-	block_all_signals();
-
-
-restart:
-	bgctlfd = open(proxy->bgctlpath, O_RDONLY);
-	if (bgctlfd < 0)
-		err("open %s, %m", proxy->bgctlpath);
-
-	for (;;) {
-		unsigned long bindex = 0;
-
-		ret = read(bgctlfd, &bindex, sizeof(bindex));
-		if (ret < 0) 
-			err("read");
-		else if (ret == 0) {
-			info("bgcopy got eof");
-			close(bgctlfd);
-			goto restart;
-		} else if (ret < (ssize_t) sizeof(bindex))
-			err("unknown protocol, %zd %zu", ret, sizeof(bindex));
-
-
-		/* magic number to cache all blocks */
-		if (bindex == XNBD_BGCTL_MAGIC_CACHE_ALL) {
-			info("cache all blocks and exit bgthread");
-
-			for (unsigned long i = 0; i < xnbd->nblocks; i++) 
-				bgctl_enqueue_bindex(proxy, i);
-
-			info("cache all blocks done");
-
-			break;
-		}
-
-		/* magic number to terminate */
-		if (bindex == XNBD_BGCTL_MAGIC_SHUTDOWN)
-			break;
-
-		if (bindex >= xnbd->nblocks) {
-			warn("too large block index %lu, skip", bindex);
-			continue;
-		}
-
-		bgctl_enqueue_bindex(proxy, bindex);
-	}
-
-
-	close(bgctlfd);
-	info("bgthread bye");
-
-	return NULL;
-}
 		
 void add_read_block_to_tail(struct xnbd_cread *cread, unsigned long i)
 {
@@ -335,14 +169,6 @@ void add_read_block_to_tail(struct xnbd_cread *cread, unsigned long i)
 
 
 
-void push_to_high_queue(struct xnbd_proxy *proxy, struct xnbd_cread *cread)
-{
-	pthread_mutex_lock(&proxy->sreq_lock);
-	dbg("enqueued to the high queue, nreq %d", cread->nreq);
-	g_async_queue_push(proxy->high_queue, (gpointer) cread);
-	pthread_cond_signal(&proxy->sreq_pending);
-	pthread_mutex_unlock(&proxy->sreq_lock);
-}
 
 int proxy_mode_main_read(struct xnbd_proxy *proxy, struct xnbd_cread *cread)
 {
@@ -378,7 +204,7 @@ int proxy_mode_main_read(struct xnbd_proxy *proxy, struct xnbd_cread *cread)
 
 
 
-	push_to_high_queue(proxy, cread);
+	g_async_queue_push(proxy->high_queue, (gpointer) cread);
 
 	return 0;
 }
@@ -504,7 +330,7 @@ int proxy_mode_main_write(struct xnbd_proxy *proxy, struct xnbd_cread *cread)
 	 * So, we remove send_lock for clientfd.
 	 **/
 
-	push_to_high_queue(proxy, cread);
+	g_async_queue_push(proxy->high_queue, (gpointer) cread);
 
 	return 0;
 }
@@ -536,7 +362,7 @@ int proxy_mode_main(struct xnbd_proxy *proxy)
 	ret = nbd_server_recv_request(ses->clientfd, ses->xnbd->disksize, &iotype, &iofrom, &iolen, &cread->reply);
 	if (ret == -1) {
 		cread->notify_error = 1;
-		push_to_high_queue(proxy, cread);
+		g_async_queue_push(proxy->high_queue, (gpointer) cread);
 		return 0;
 	} else if (ret == -2) {
 		g_free(cread);
@@ -720,48 +546,12 @@ void *redirect_thread(void *arg)
 	 * queued requests are redirected (if needed) as soon as possible,
 	 * without being intrrupted by the threads. Is this true?
 	 */
-	pthread_mutex_lock(&proxy->sreq_lock);
 
 	for (;;) {
-		/* when sleep here, sreq_lock is unlocked */
-		while (!(g_async_queue_length(proxy->high_queue) > 0 || g_async_queue_length(proxy->low_queue) > 0))
-			pthread_cond_wait(&proxy->sreq_pending, &proxy->sreq_lock);
-
 		for (;;) {
 			struct xnbd_cread *cread;
 
-			cread = (struct xnbd_cread *) g_async_queue_try_pop(proxy->high_queue);
-			if (!cread) {
-				cread = (struct xnbd_cread *) g_async_queue_try_pop(proxy->low_queue);
-				if (cread) {
-					if (cread->iotype != NBD_CMD_BGCOPY)
-						err("bug");
-
-					cbitmap_write_lock(proxy);
-					for (unsigned long i = cread->block_index_start; i <= cread->block_index_end; i++) {
-						//info("get a req queued by bg, %u", i);
-						if (bitmap_test(xnbd->cbitmap, i)) {
-							dbg("already queued %lu", i);
-						} else {
-							bitmap_on(xnbd->cbitmap, i);
-							/* counter */
-							//monitor_cached_by_bgthread(i);
-							cachestat_cache_bgcopy();
-
-							add_read_block_to_tail(cread, i);
-						}
-					}
-					cbitmap_unlock(proxy);
-
-					/* no need to enqueue the request to the next queue. */
-					if (cread->nreq == 0)
-						continue;
-
-				} else {
-					/* sleep until somthing queued */
-					break;
-				}
-			}
+			cread = (struct xnbd_cread *) g_async_queue_pop(proxy->high_queue);
 
 
 			dbg("%lu --- process new queue element", pthread_self());
@@ -790,7 +580,6 @@ void *redirect_thread(void *arg)
 	}
 
 out_of_loop:
-	pthread_mutex_unlock(&proxy->sreq_lock);
 
 
 	info("bye redirect_th");
@@ -849,29 +638,9 @@ void xnbd_proxy_initialize(struct xnbd_session *ses, struct xnbd_proxy *proxy)
 
 	/* keep reference count! */
 	proxy->high_queue = g_async_queue_new();
-	proxy->low_queue = g_async_queue_new();
 	proxy->req_queue = g_async_queue_new();
 
-	pthread_cond_init(&proxy->sreq_pending, NULL);
-	pthread_mutex_init(&proxy->sreq_lock, NULL);
 
-	get_bgctlpath(proxy->bgctlpath, PATH_MAX, ses->xnbd->bgctlprefix);
-	ret = mkfifo(proxy->bgctlpath, S_IRUSR | S_IWUSR);
-	if (ret < 0)
-		err("mkfifo %s, %m", proxy->bgctlpath);
-
-	info("bgctlpath %s created", proxy->bgctlpath);
-
-#ifdef XNBD_STATIC_BGCTLPATH
-	/* only for a test program assuming a static bgctl path */
-	unlink(ses->xnbd->bgctlprefix);
-
-	ret = symlink(proxy->bgctlpath, ses->xnbd->bgctlprefix);
-	if (ret < 0)
-		err("symlink %s %s, %m", proxy->bgctlpath, ses->xnbd->bgctlprefix);
-
-	info("symlink %s -> %s created", proxy->bgctlpath, ses->xnbd->bgctlprefix);
-#endif
 
 
 	ret = pthread_rwlock_init(&proxy->cbitmaplock, NULL);
@@ -880,37 +649,15 @@ void xnbd_proxy_initialize(struct xnbd_session *ses, struct xnbd_proxy *proxy)
 
 	proxy->tid_cmp = pthread_create_or_abort(complete_thread, proxy);
 	proxy->tid_srq = pthread_create_or_abort(redirect_thread, proxy);
-	proxy->tid_bgr = pthread_create_or_abort(background_thread, proxy);
 
 }
 
 void xnbd_proxy_shutdown(struct xnbd_proxy *proxy)
 {
 
-	/*
-	 * Instead of calling pthread_cancel(), sending the magic number is a
-	 * graceful termination of bgthread. */
-	//pthread_cancel(proxy->tid_bgr);
-
-	{
-		char *bgctlpath = proxy->bgctlpath;
-		unsigned long bindex = XNBD_BGCTL_MAGIC_SHUTDOWN;  // UINT32_MAX - 1;
-
-		int fd = open(bgctlpath, O_WRONLY);
-		if (fd < 0)
-			err("open %s, %m", bgctlpath);
-
-		ssize_t ret = write(fd, &bindex, sizeof(bindex));
-		if (ret < 0)
-			err("write good bye");
-
-		close(fd);
-	}
-	pthread_join(proxy->tid_bgr, NULL);
-	info("background_th cancelled");
 
 
-	push_to_high_queue(proxy, &cread_eof);
+	g_async_queue_push(proxy->high_queue, &cread_eof);
 
 	pthread_join(proxy->tid_srq, NULL);
 	info("redirect_th cancelled");
@@ -918,30 +665,13 @@ void xnbd_proxy_shutdown(struct xnbd_proxy *proxy)
 	info("complete_th cancelled");
 
 
-	/* cleanup low_queue. high_queue and req_queue are cleaned by cread_eof */
-	for (;;) {
-		struct xnbd_cread *cread = g_async_queue_try_pop(proxy->low_queue);
-		if (cread)
-			g_free(cread);
-		else 
-			break;
-	}
 
 
 	g_async_queue_unref(proxy->high_queue);
-	g_async_queue_unref(proxy->low_queue);
 	g_async_queue_unref(proxy->req_queue);
 
 	pthread_rwlock_destroy(&proxy->cbitmaplock);
-	pthread_cond_destroy(&proxy->sreq_pending);
-	pthread_mutex_destroy(&proxy->sreq_lock);
 
-	int ret = unlink(proxy->bgctlpath);
-	if (ret < 0)
-		warn("unlink %s, %d", proxy->bgctlpath, errno);
-
-	/* no idea if the last process or not */
-	//unlink(proxy->ses->xnbd->bgctlpath);
 }
 
 

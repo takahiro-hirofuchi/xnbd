@@ -172,9 +172,6 @@ struct xnbd_info {
 	/* cached bitmap array (mmaped) */
 	unsigned long *cbitmap;
 	size_t cbitmaplen;
-
-	/* remote nbd sever for caching */
-	const char *bgctlprefix;
 };
 
 
