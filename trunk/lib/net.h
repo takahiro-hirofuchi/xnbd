@@ -66,6 +66,7 @@ ssize_t net_send_all(int sockfd, void *buff, size_t bufflen);
 void net_send_all_or_abort(int sockfd, void *buff, size_t bufflen);
 int net_send_all_or_error(int sockfd, void *buff, size_t bufflen);
 void net_writev_all_or_abort(int fd, struct iovec *iov, unsigned int count);
+int net_writev_all_or_error(int fd, struct iovec *iov, unsigned int count);
 void net_readv_all_or_abort(int fd, struct iovec *iov, unsigned int count);
 int net_readv_all_or_error(int fd, struct iovec *iov, unsigned int count);
 void check_done(int ret, int errcode);
