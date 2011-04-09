@@ -153,38 +153,8 @@ void *mmap_iorange(struct xnbd_info *xnbd, int fd, off_t iofrom, size_t iolen, c
 
 int poll_request_arrival(struct xnbd_session *ses)
 {
-	struct pollfd eventfds[2];
-
-	for (;;) {
-		eventfds[0].fd = ses->clientfd;
-		eventfds[0].events = POLLRDNORM | POLLRDHUP;
-		eventfds[1].fd = ses->event_listener_fd;
-		eventfds[1].events = POLLRDNORM | POLLRDHUP;
-
-		int nready = poll(eventfds, 2, -1);
-		if (nready == -1) {
-			if (errno == EINTR) {
-				info("polling signal cached");
-				return -1;
-			} else
-				err("polling, %s, (%d)", strerror(errno), errno);
-		}
-
-
-		if (eventfds[1].revents & (POLLRDNORM | POLLRDHUP)) {
-			info("notified");
-			return -1;
-		}
-
-		if (eventfds[0].revents & (POLLRDNORM | POLLRDHUP)) {
-			/* request arrived */
-			return 0;
-		}
-
-		err("unknown ppoll events");
-	}
+	return wait_until_readable(ses->clientfd, ses->pipe_worker_fd);
 }
-
 
 void check_disksize(char *diskpath, off_t disksize)
 {
