@@ -200,7 +200,6 @@ void do_service(struct xnbd_session *ses)
 	}
 
 
-
 	info("shutdown xnbd master done (cmd %d), ret %d", xnbd->cmd, ret);
 }
 
@@ -301,7 +300,7 @@ void invoke_new_session(struct xnbd_info *xnbd, int csockfd)
 	ses->xnbd = xnbd;
 
 	/* used for sending msg to the session process */
-	get_event_connecter(&ses->pipe_master_fd, &ses->pipe_worker_fd);
+	make_pipe(&ses->pipe_master_fd, &ses->pipe_worker_fd);
 	xnbd_session_initialize_connections(xnbd, ses);
 
 	info("negotiations done");
@@ -311,27 +310,26 @@ void invoke_new_session(struct xnbd_info *xnbd, int csockfd)
 		err("fork failed");
 
 	if (pid == 0) {
-		/* child */
+		/* worker child does not need master_fd */
 		close(ses->pipe_master_fd);
-
-		for (GList *list = g_list_first(xnbd->sessions); list != NULL; list = g_list_next(list)) {
-			struct xnbd_session *s = (struct xnbd_session *) list->data;
-			info("cleanup pid %d", s->pid);
-			if (xnbd->cmd == xnbd_cmd_proxy)
-				close(s->remotefd);
-			info(" clientfd %d", s->clientfd);
-			close(s->clientfd);
-
-			/* this must be commented out, closed alreay in the parent */
-			//close(s->pipe_worker_fd);
-			//info(" s->pipe_worker_fd %d", s->pipe_worker_fd);
-			close(s->pipe_master_fd);
-			info(" s->pipe_master_fd %d", s->pipe_master_fd);
-		}
-
 
 		for (nfds_t j = 0; j < ppoll_neventfds; j++) 
 			close(ppoll_eventfds[j].fd);
+
+		/* worker child does not need descriptors of the other sessions */
+		for (GList *list = g_list_first(xnbd->sessions); list != NULL; list = g_list_next(list)) {
+			struct xnbd_session *s = (struct xnbd_session *) list->data;
+			dbg("cleanup pid %d", s->pid);
+			dbg(" s->pipe_master_fd %d", s->pipe_master_fd);
+			dbg(" s->clientfd %d", s->clientfd);
+			if (xnbd->cmd == xnbd_cmd_proxy)
+				close(s->remotefd);
+			close(s->clientfd);
+			close(s->pipe_master_fd);
+
+			/* pipe_worker_fd was already closed in the master */
+		}
+
 
 
 
@@ -357,7 +355,7 @@ void invoke_new_session(struct xnbd_info *xnbd, int csockfd)
 
 		close(csockfd);
 
-		info("process %d exit", getpid());
+		info("worker process %d exit", getpid());
 		exit(EXIT_SUCCESS);
 	}
 
@@ -376,15 +374,28 @@ void shutdown_all_sessions(struct xnbd_info *xnbd)
 {
 	info("cleanup %d child process(es)", g_list_length(xnbd->sessions));
 
-	for (GList *list = g_list_first(xnbd->sessions); list != NULL; list = g_list_next(list)) {
-		struct xnbd_session *s = (struct xnbd_session *) list->data;
-		/* TODO: notify gracefully, then send SIGKILL */
+	for (;;) {
+		GList *list = g_list_first(xnbd->sessions);
+		if (!list)
+			break;
 
-		info("notify %d of termination", s->pid);
-		ssize_t ret = write(s->pipe_master_fd, "0", 1);
+		struct xnbd_session *s = (struct xnbd_session *) list->data;
+		/* request the child to exit */
+		info("notify worker (%d) of session termination", s->pid);
+		ssize_t ret = write(s->pipe_master_fd, "", 1);
 		if (ret < 0)
 			warn("notifiy failed");
 
+		/* if everything goes well, we do not need to send SIGKILL */
+		ret = waitpid(s->pid, NULL, 0);
+		if (ret < 0)
+			err("waitpid %d, %m", s->pid);
+
+		free_session(xnbd, s);
+		xnbd->sessions = g_list_remove(xnbd->sessions, s);
+		info("session (pid %d) cleared", s->pid);
+
+#if 0
 		int exited = 0;
 		for (int i = 0; i < 3; i++) {
 			int status;
@@ -406,6 +417,7 @@ void shutdown_all_sessions(struct xnbd_info *xnbd)
 			if (ret < 0)
 				warn("kill pid %d, %s", s->pid, strerror(errno));
 		}
+#endif
 	}
 }
 
@@ -545,7 +557,7 @@ int master_server(int port, void *data, int connect_fd)
 
 				xnbd->sessions = g_list_remove(xnbd->sessions, ses);
 				free_session(xnbd, ses);
-				info("session (pid %d) exited", pid);
+				info("session (pid %d) cleared", pid);
 
 				if (WIFEXITED(status))
 					info("   with exit status=%d", WEXITSTATUS(status));
@@ -563,6 +575,7 @@ int master_server(int port, void *data, int connect_fd)
 			if (restarting_for_mode_change) {
 				/* become target mode */
 				xnbd_shutdown(xnbd);
+				xnbd->cmd = xnbd_cmd_target;
 				xnbd->target_diskpath = xnbd->cachepath;
 				xnbd_initialize(xnbd);
 			} else {
@@ -625,7 +638,7 @@ int master_server(int port, void *data, int connect_fd)
 				continue;
 
 			/*
-			 * Gracefully shutdown chile processes. Notify all
+			 * Gracefully shutdown child processes. Notify all
 			 * child processes of termination. The child processes
 			 * that have exited will send SIGCHLD to the master
 			 * process. After the master process knows all the
@@ -658,8 +671,8 @@ int master_server(int port, void *data, int connect_fd)
 				/* it's ok because sizeof(void *) >= sizeof(int); 32bit =, 64bit > */
 				socklist = g_list_append(socklist, (void *) ((long) csockfd));
 
-				info("notify %d of termination", s->pid);
-				ssize_t ret = write(s->pipe_master_fd, "0", 1);
+				info("notify worker (%d) of session termination", s->pid);
+				ssize_t ret = write(s->pipe_master_fd, "", 1);
 				if (ret < 0)
 					warn("notifiy failed");
 			}
@@ -762,19 +775,19 @@ static struct option longopts[] = {
 
 static const char *help_string = "\
 Usage: \n\
-  xnbd-server --target [options] disk_image \n\
+  xnbd-server --target [options] disk_image\n\
   xnbd-server --cow-target [options] base_disk_image\n\
-  xnbd-server --proxy [options] target_host port cache_image cache_bitmap \n\
-  xnbd-server --help \n\
-  xnbd-server --version \n\
+  xnbd-server --proxy [options] target_host port cache_image cache_bitmap\n\
+  xnbd-server --help\n\
+  xnbd-server --version\n\
 \n\
 Options: \n\
-  --lport	listen port (default 8520) \n\
-  --bgctlprefix	FIFO file prefix used by a control program in proxy mode \n\
-  		(default /tmp/xnbd-bg.ctl) \n\
-  --daemonize	run as a daemon process \n\
-  --readonly	export a disk as readonly in target mode \n\
-  --logpath	logfile (default /tmp/xnbd.log) \n\
+  --lport	listen port (default 8520)\n\
+  --daemonize	run as a daemon process\n\
+  --readonly	export a disk as readonly\n\
+  --logpath	logfile (default /tmp/xnbd.log)\n\
+  --bgctlprefix	FIFO file prefix used by a control program in proxy mode\n\
+  		(default /tmp/xnbd-bg.ctl)\n\
 ";
 
 
@@ -850,7 +863,6 @@ int main(int argc, char **argv) {
 
 				cmd = xnbd_cmd_cow_target;
 				break;
-
 
 			case 'h':
 				if (cmd != xnbd_cmd_unknown)
@@ -973,6 +985,7 @@ int main(int argc, char **argv) {
 				show_help_and_exit("argument error");
 
 			xnbd.cow_diskpath = argv[optind];
+
 			break;
 
 		case xnbd_cmd_version:
@@ -1018,6 +1031,7 @@ int main(int argc, char **argv) {
 	xnbd_shutdown(&xnbd);
 	cachestat_shutdown();
 
+	info("the master server now exits");
 
 	return 0;
 }
