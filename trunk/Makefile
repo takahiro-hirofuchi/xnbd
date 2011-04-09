@@ -40,7 +40,7 @@ CFLAGS_DEBUG=$(CFLAGS_COMMON) -I$(XUTILSPATH) -L$(XUTILSPATH) -lxutils_dbg -DXNB
 
 #CFLAGS=-g3 -fstack-protector -fmudflapth -lmudflapth -Wall -Wextra -std=gnu99
 
-SRC=xnbd.c xnbd_common.c xnbd_cachestat.c xnbd_proxy.c xnbd_target.c xnbd_target_cow_lzo.c
+SRC=xnbd.c xnbd_common.c xnbd_cachestat.c xnbd_proxy.c xnbd_proxy_forwarder.c xnbd_target.c xnbd_target_cow_lzo.c
 OBJ=$(SRC:%.c=%.o)
 
 xnbdobj_dbg=$(patsubst %.c, %___dbg.o, $(SRC))
