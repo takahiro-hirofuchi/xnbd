@@ -350,7 +350,7 @@ void free_session(struct xnbd_info *xnbd, struct xnbd_session *ses)
 		close(ses->remotefd);
 	}
 
-	close(ses->event_notifier_fd);
+	close(ses->pipe_master_fd);
 
 	/*
 	 * In normal cases, just close clientfd. For proxy-to-target mode
@@ -414,7 +414,7 @@ void invoke_new_session(struct xnbd_info *xnbd, int csockfd)
 	ses->xnbd = xnbd;
 
 	/* used for sending msg to the session process */
-	get_event_connecter(&ses->event_notifier_fd, &ses->event_listener_fd);
+	get_event_connecter(&ses->pipe_master_fd, &ses->pipe_worker_fd);
 	xnbd_session_initialize_connections(xnbd, ses);
 
 	info("negotiations done");
@@ -425,7 +425,7 @@ void invoke_new_session(struct xnbd_info *xnbd, int csockfd)
 
 	if (pid == 0) {
 		/* child */
-		close(ses->event_notifier_fd);
+		close(ses->pipe_master_fd);
 
 		for (GList *list = g_list_first(xnbd->sessions); list != NULL; list = g_list_next(list)) {
 			struct xnbd_session *s = (struct xnbd_session *) list->data;
@@ -436,10 +436,10 @@ void invoke_new_session(struct xnbd_info *xnbd, int csockfd)
 			close(s->clientfd);
 
 			/* this must be commented out, closed alreay in the parent */
-			//close(s->event_listener_fd);
-			//info(" s->event_listener_fd %d", s->event_listener_fd);
-			close(s->event_notifier_fd);
-			info(" s->event_notifier_fd %d", s->event_notifier_fd);
+			//close(s->pipe_worker_fd);
+			//info(" s->pipe_worker_fd %d", s->pipe_worker_fd);
+			close(s->pipe_master_fd);
+			info(" s->pipe_master_fd %d", s->pipe_master_fd);
 		}
 
 
@@ -475,7 +475,7 @@ void invoke_new_session(struct xnbd_info *xnbd, int csockfd)
 	}
 
 
-	close(ses->event_listener_fd);
+	close(ses->pipe_worker_fd);
 
 	ses->pid = pid;
 	xnbd->sessions = g_list_append(xnbd->sessions, ses);
@@ -494,7 +494,7 @@ void shutdown_all_sessions(struct xnbd_info *xnbd)
 		/* TODO: notify gracefully, then send SIGKILL */
 
 		info("notify %d of termination", s->pid);
-		ssize_t ret = write(s->event_notifier_fd, "0", 1);
+		ssize_t ret = write(s->pipe_master_fd, "0", 1);
 		if (ret < 0)
 			warn("notifiy failed");
 
@@ -773,7 +773,7 @@ int master_server(int port, void *data, int connect_fd)
 				socklist = g_list_append(socklist, (void *) ((long) csockfd));
 
 				info("notify %d of termination", s->pid);
-				ssize_t ret = write(s->event_notifier_fd, "0", 1);
+				ssize_t ret = write(s->pipe_master_fd, "0", 1);
 				if (ret < 0)
 					warn("notifiy failed");
 			}
