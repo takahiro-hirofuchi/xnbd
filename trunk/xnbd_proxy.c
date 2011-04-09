@@ -21,56 +21,10 @@
  * Place - Suite 330, Boston, MA 02111-1307, USA.
  */
 
-#include "xnbd.h"
-
-
-
-struct remote_read_request {
-	/* block index */
-	off_t bindex_iofrom;
-	size_t bindex_iolen;
-};
-
-#define MAXNBLOCK 10
-
-struct xnbd_cread {
-	/* notify a request error. skip io */
-	int notify_error;
-
-	uint32_t iotype;
-
-	/* number of remote read requests */
-	int nreq;
-	struct remote_read_request req[MAXNBLOCK];
-
-	off_t iofrom;
-	size_t iolen;
-
-	unsigned long block_index_start;
-	unsigned long block_index_end;
-
-	struct nbd_reply reply;
-
-	char *pending_write_buff;
-};
-
+#include "xnbd_proxy.h"
 
 /* special entry to let threads exit */
-struct xnbd_cread cread_eof = { .notify_error = 0, .nreq = 0 };
-
-
-
-struct xnbd_proxy {
-	pthread_t tid_cmp, tid_srq;
-
-	/* queues for main and bg threads */
-	GAsyncQueue *high_queue;
-
-	/* queue for the read request waiting a reply */
-	GAsyncQueue *req_queue;
-
-	struct xnbd_session *ses;
-};
+struct proxy_priv priv_eof = { .notify_error = 0, .nreq = 0 };
 
 
 void block_all_signals(void)
@@ -85,36 +39,36 @@ void block_all_signals(void)
 		err("sigmask");
 }
 
-void xnbd_cread_dump(struct xnbd_cread *cread)
+void proxy_priv_dump(struct proxy_priv *priv)
 {
-	dbg("cread %p", cread);
-	dbg(" nreq   %d", cread->nreq);
-	for (int i = 0; i < cread->nreq; i++) {
-		dbg("  bindex_iofrom %ju", cread->req[i].bindex_iofrom);
-		dbg("  bindex_iolen  %lu", cread->req[i].bindex_iolen);
+	dbg("priv %p", priv);
+	dbg(" nreq   %d", priv->nreq);
+	for (int i = 0; i < priv->nreq; i++) {
+		dbg("  bindex_iofrom %ju", priv->req[i].bindex_iofrom);
+		dbg("  bindex_iolen  %lu", priv->req[i].bindex_iolen);
 	}
 
-	dbg(" iofrom %ju", cread->iofrom);
-	dbg(" iolen  %zu", cread->iolen);
-	dbg(" block_index_start  %lu", cread->block_index_start);
-	dbg(" block_index_end    %lu", cread->block_index_end);
+	dbg(" iofrom %ju", priv->iofrom);
+	dbg(" iolen  %zu", priv->iolen);
+	dbg(" block_index_start  %lu", priv->block_index_start);
+	dbg(" block_index_end    %lu", priv->block_index_end);
 
-	dbg(" reply.magic  %x", cread->reply.magic);
-	dbg(" reply.error  %u", cread->reply.error);
+	dbg(" reply.magic  %x", priv->reply.magic);
+	dbg(" reply.error  %u", priv->reply.error);
 	dbg(" reply.handle");
-	//dump_buffer(cread->reply.handle, 8);
+	//dump_buffer(priv->reply.handle, 8);
 }
 
 
 
 
 		
-void add_read_block_to_tail(struct xnbd_cread *cread, unsigned long i)
+void add_read_block_to_tail(struct proxy_priv *priv, unsigned long i)
 {
-	int cur_nreq = cread->nreq;
+	int cur_nreq = priv->nreq;
 
 	if (cur_nreq > 0) {
-		struct remote_read_request *last_req = &cread->req[cur_nreq - 1];
+		struct remote_read_request *last_req = &priv->req[cur_nreq - 1];
 
 		if (i == (last_req->bindex_iofrom + last_req->bindex_iolen)) {
 			/* extend the iolen of the last request */
@@ -124,22 +78,22 @@ void add_read_block_to_tail(struct xnbd_cread *cread, unsigned long i)
 	}
 
 	/* add a new request */
-	cread->req[cur_nreq].bindex_iofrom = i;
-	cread->req[cur_nreq].bindex_iolen  = 1;
-	cread->nreq += 1;
+	priv->req[cur_nreq].bindex_iofrom = i;
+	priv->req[cur_nreq].bindex_iolen  = 1;
+	priv->nreq += 1;
 
-	if (cread->nreq == MAXNBLOCK)
+	if (priv->nreq == MAXNBLOCK)
 		err("bug, MAXNBLOCK is too small");
 }
 
 
 
 
-void proxy_mode_main_read(struct xnbd_proxy *proxy, struct xnbd_cread *cread)
+void proxy_mode_main_read(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 {
 	struct xnbd_info *xnbd = proxy->ses->xnbd;
-	unsigned long block_index_start = cread->block_index_start;
-	unsigned long block_index_end   = cread->block_index_end;
+	unsigned long block_index_start = priv->block_index_start;
+	unsigned long block_index_end   = priv->block_index_end;
 
 	for (unsigned long i = block_index_start; i <= block_index_end; i++) {
 		/* counter */
@@ -154,28 +108,28 @@ void proxy_mode_main_read(struct xnbd_proxy *proxy, struct xnbd_cread *cread)
 			cachestat_miss();
 			cachestat_cache_odread();
 
-			add_read_block_to_tail(cread, i);
+			add_read_block_to_tail(priv, i);
 		} else {
 
 			/* counter */
 			cachestat_hit();
 		}
 
-		if (cread->nreq == MAXNBLOCK)
-			err("maximum cread->nreq %d", MAXNBLOCK);
+		if (priv->nreq == MAXNBLOCK)
+			err("maximum priv->nreq %d", MAXNBLOCK);
 	}
 
 
 }
 
 
-void proxy_mode_main_write(struct xnbd_proxy *proxy, struct xnbd_cread *cread)
+void proxy_mode_main_write(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 {
 	struct xnbd_info *xnbd = proxy->ses->xnbd;
-	unsigned long block_index_start = cread->block_index_start;
-	unsigned long block_index_end   = cread->block_index_end;
-	off_t iofrom = cread->iofrom;
-	size_t iolen  = cread->iolen;
+	unsigned long block_index_start = priv->block_index_start;
+	unsigned long block_index_end   = priv->block_index_end;
+	off_t iofrom = priv->iofrom;
+	size_t iolen  = priv->iolen;
 
 
 	/*
@@ -225,10 +179,10 @@ void proxy_mode_main_write(struct xnbd_proxy *proxy, struct xnbd_cread *cread)
 	}
 
 	if (get_start_block) {
-		int cur_nreq = cread->nreq;
-		cread->req[cur_nreq].bindex_iofrom = block_index_start;
-		cread->req[cur_nreq].bindex_iolen  = 1;
-		cread->nreq += 1;
+		int cur_nreq = priv->nreq;
+		priv->req[cur_nreq].bindex_iofrom = block_index_start;
+		priv->req[cur_nreq].bindex_iolen  = 1;
+		priv->nreq += 1;
 
 		cachestat_miss();
 	} else {
@@ -236,17 +190,17 @@ void proxy_mode_main_write(struct xnbd_proxy *proxy, struct xnbd_cread *cread)
 	}
 
 	if (get_end_block) {
-		int cur_nreq = cread->nreq;
-		cread->req[cur_nreq].bindex_iofrom = block_index_end;
-		cread->req[cur_nreq].bindex_iolen  = 1;
-		cread->nreq += 1;
+		int cur_nreq = priv->nreq;
+		priv->req[cur_nreq].bindex_iofrom = block_index_end;
+		priv->req[cur_nreq].bindex_iolen  = 1;
+		priv->nreq += 1;
 
 		cachestat_miss();
 	} else {
 		cachestat_hit();
 	}
 
-	if (cread->nreq >= MAXNBLOCK)
+	if (priv->nreq >= MAXNBLOCK)
 		err("more MAXNBLOCK is required");
 
 
@@ -294,21 +248,21 @@ int proxy_mode_main(struct xnbd_proxy *proxy)
 
 
 
-	struct xnbd_cread *cread = g_malloc0(sizeof(struct xnbd_cread));
+	struct proxy_priv *priv = g_malloc0(sizeof(struct proxy_priv));
 
-	cread->reply.magic = htonl(NBD_REPLY_MAGIC);
-	cread->reply.error = 0;
+	priv->reply.magic = htonl(NBD_REPLY_MAGIC);
+	priv->reply.error = 0;
 
-	ret = nbd_server_recv_request(ses->clientfd, ses->xnbd->disksize, &iotype, &iofrom, &iolen, &cread->reply);
+	ret = nbd_server_recv_request(ses->clientfd, ses->xnbd->disksize, &iotype, &iofrom, &iolen, &priv->reply);
 	if (ret == -1) {
-		cread->notify_error = 1;
-		g_async_queue_push(proxy->high_queue, (gpointer) cread);
+		priv->notify_error = 1;
+		g_async_queue_push(proxy->high_queue, (gpointer) priv);
 		return 0;
 	} else if (ret == -2) {
-		g_free(cread);
+		g_free(priv);
 		err("client bug: invalid header");
 	} else if (ret == -3) {
-		g_free(cread);
+		g_free(priv);
 		return ret;
 	}
 
@@ -323,19 +277,19 @@ int proxy_mode_main(struct xnbd_proxy *proxy)
 	dbg("disk io iofrom %ju iolen %zu", iofrom, iolen);
 	dbg("block_index_start %lu stop %lu", block_index_start, block_index_end);
 
-	cread->iotype = iotype;
-	cread->iofrom = iofrom;
-	cread->iolen  = iolen;
-	cread->nreq = 0;
-	cread->block_index_start = block_index_start;
-	cread->block_index_end   = block_index_end;
+	priv->iotype = iotype;
+	priv->iofrom = iofrom;
+	priv->iolen  = iolen;
+	priv->nreq = 0;
+	priv->block_index_start = block_index_start;
+	priv->block_index_end   = block_index_end;
 
 
 
 
 
 	if (iotype == NBD_CMD_READ)
-		proxy_mode_main_read(proxy, cread);
+		proxy_mode_main_read(proxy, priv);
 	else if (iotype == NBD_CMD_WRITE) {
 		/*
 		 * Next, recieve write data from a client node.
@@ -343,18 +297,18 @@ int proxy_mode_main(struct xnbd_proxy *proxy)
 		 * thread may touch the same range of the cache buffer.
 		 * Touching the cache buffer should be allowed only in the completon thread.
 		 **/
-		cread->pending_write_buff = g_malloc(iolen);
+		priv->write_buff = g_malloc(iolen);
 
 
-		int ret = net_recv_all_or_error(proxy->ses->clientfd, cread->pending_write_buff, iolen);
+		int ret = net_recv_all_or_error(proxy->ses->clientfd, priv->write_buff, iolen);
 		if (ret < 0)
 			err("recv write data");
 
-		proxy_mode_main_write(proxy, cread);
+		proxy_mode_main_write(proxy, priv);
 	} else 
 		err("client bug: uknown iotype");
 
-	g_async_queue_push(proxy->high_queue, (gpointer) cread);
+	g_async_queue_push(proxy->high_queue, (gpointer) priv);
 
 
 	return ret;
@@ -369,25 +323,25 @@ int complete_thread_main(struct xnbd_proxy *proxy)
 	struct xnbd_session *ses = proxy->ses;
 	struct xnbd_info *xnbd = ses->xnbd;
 
-	struct xnbd_cread *cread;
+	struct proxy_priv *priv;
 	int ret;
 
 	dbg("wait new queue element");
 
 
-	cread = (struct xnbd_cread *) g_async_queue_pop(proxy->req_queue);
-	dbg("--- process new queue element %p", cread);
+	priv = (struct proxy_priv *) g_async_queue_pop(proxy->req_queue);
+	dbg("--- process new queue element %p", priv);
 
-	xnbd_cread_dump(cread);
+	proxy_priv_dump(priv);
 
 
-	if (cread->notify_error) {
-		net_send_all_or_abort(proxy->ses->clientfd, &cread->reply, sizeof(struct nbd_reply));
+	if (priv->notify_error) {
+		net_send_all_or_abort(proxy->ses->clientfd, &priv->reply, sizeof(struct nbd_reply));
 
 		goto skip_cacheio;
 	}
 
-	if (cread == &cread_eof)
+	if (priv == &priv_eof)
 		return -1;
 
 
@@ -397,15 +351,15 @@ int complete_thread_main(struct xnbd_proxy *proxy)
 	off_t mmaped_offset = 0;
 	char *iobuf = NULL;
 
-	iobuf = mmap_iorange(xnbd, xnbd->cachefd, cread->iofrom, cread->iolen, &mmaped_buf, &mmaped_len, &mmaped_offset);
-	dbg("#mmaped_buf %p iobuf %p mmaped_len %zu iolen %zu", mmaped_buf, iobuf, mmaped_len, cread->iolen);
+	iobuf = mmap_iorange(xnbd, xnbd->cachefd, priv->iofrom, priv->iolen, &mmaped_buf, &mmaped_len, &mmaped_offset);
+	dbg("#mmaped_buf %p iobuf %p mmaped_len %zu iolen %zu", mmaped_buf, iobuf, mmaped_len, priv->iolen);
 	dbg("#mapped %p -> %p", mmaped_buf, mmaped_buf + mmaped_len);
 
 
-	for (int i = 0; i < cread->nreq; i++) {
-		dbg("cread req %d", i);
-		off_t block_iofrom = cread->req[i].bindex_iofrom * CBLOCKSIZE;
-		size_t block_iolen  = cread->req[i].bindex_iolen  * CBLOCKSIZE;
+	for (int i = 0; i < priv->nreq; i++) {
+		dbg("priv req %d", i);
+		off_t block_iofrom = priv->req[i].bindex_iofrom * CBLOCKSIZE;
+		size_t block_iolen  = priv->req[i].bindex_iolen  * CBLOCKSIZE;
 		char *iobuf_partial = NULL;
 
 		iobuf_partial = mmaped_buf + (block_iofrom - mmaped_offset);
@@ -416,8 +370,8 @@ int complete_thread_main(struct xnbd_proxy *proxy)
 		ret = nbd_client_recv_read_reply(ses->remotefd, iobuf_partial, block_iolen);
 		if (ret < 0) {
 			warn("recv_read_reply error");
-			cread->reply.error = htonl(EPIPE);
-			net_send_all_or_abort(ses->clientfd, &cread->reply, sizeof(struct nbd_reply));
+			priv->reply.error = htonl(EPIPE);
+			net_send_all_or_abort(ses->clientfd, &priv->reply, sizeof(struct nbd_reply));
 
 			/*
 			 * TODO
@@ -437,31 +391,31 @@ int complete_thread_main(struct xnbd_proxy *proxy)
 		 **/
 	}
 
-	if (cread->iotype == NBD_CMD_READ) {
+	if (priv->iotype == NBD_CMD_READ) {
 		struct iovec iov[2];
 		bzero(&iov, sizeof(iov));
 
-		iov[0].iov_base = &cread->reply;
+		iov[0].iov_base = &priv->reply;
 		iov[0].iov_len  = sizeof(struct nbd_reply);
 		iov[1].iov_base = iobuf;
-		iov[1].iov_len  = cread->iolen;
+		iov[1].iov_len  = priv->iolen;
 
 		net_writev_all_or_abort(ses->clientfd, iov, 2);
 
-	} else if (cread->iotype == NBD_CMD_WRITE) {
+	} else if (priv->iotype == NBD_CMD_WRITE) {
 		/*
 		 * This memcpy() must come before sending reply, so that xnbd-tester
 		 * avoids memcmp() mismatch.
 		 **/
-		memcpy(iobuf, cread->pending_write_buff, cread->iolen);
-		g_free(cread->pending_write_buff);
+		memcpy(iobuf, priv->write_buff, priv->iolen);
+		g_free(priv->write_buff);
 
-		net_send_all_or_abort(ses->clientfd, &cread->reply, sizeof(struct nbd_reply));
+		net_send_all_or_abort(ses->clientfd, &priv->reply, sizeof(struct nbd_reply));
 
 
 		/* Do not mark cbitmap here. */
 
-	} else if (cread->iotype == NBD_CMD_BGCOPY) {
+	} else if (priv->iotype == NBD_CMD_BGCOPY) {
 		/* NBD_CMD_BGCOPY does not do nothing here */
 		;
 	}
@@ -476,7 +430,7 @@ int complete_thread_main(struct xnbd_proxy *proxy)
 	dbg("send reply to client done");
 
 skip_cacheio:
-	g_free(cread);
+	g_free(priv);
 
 	return 0;
 }
@@ -505,19 +459,19 @@ void *redirect_thread(void *arg)
 
 	for (;;) {
 		for (;;) {
-			struct xnbd_cread *cread;
+			struct proxy_priv *priv;
 
-			cread = (struct xnbd_cread *) g_async_queue_pop(proxy->high_queue);
+			priv = (struct proxy_priv *) g_async_queue_pop(proxy->high_queue);
 
 
 			dbg("%lu --- process new queue element", pthread_self());
 
 
 			/* send read request as soon as possible */
-			for (int i = 0; i < cread->nreq; i++) {
-				size_t length = cread->req[i].bindex_iolen * CBLOCKSIZE;
+			for (int i = 0; i < priv->nreq; i++) {
+				size_t length = priv->req[i].bindex_iolen * CBLOCKSIZE;
 
-				int ret = nbd_client_send_read_request(ses->remotefd, cread->req[i].bindex_iofrom * CBLOCKSIZE, length);
+				int ret = nbd_client_send_read_request(ses->remotefd, priv->req[i].bindex_iofrom * CBLOCKSIZE, length);
 				if (ret < 0) {
 					/*
 					 * TODO
@@ -527,10 +481,10 @@ void *redirect_thread(void *arg)
 				}
 			}
 
-			g_async_queue_push(proxy->req_queue, (gpointer) cread);
+			g_async_queue_push(proxy->req_queue, (gpointer) priv);
 
 
-			if (cread == &cread_eof)
+			if (priv == &priv_eof)
 				goto out_of_loop;
 		}
 	}
@@ -610,7 +564,7 @@ void xnbd_proxy_shutdown(struct xnbd_proxy *proxy)
 
 
 
-	g_async_queue_push(proxy->high_queue, &cread_eof);
+	g_async_queue_push(proxy->high_queue, &priv_eof);
 
 	pthread_join(proxy->tid_srq, NULL);
 	info("redirect_th cancelled");
