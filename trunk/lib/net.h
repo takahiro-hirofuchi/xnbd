@@ -76,5 +76,7 @@ int check_fin(int ret, int errcode, size_t len);
 #define htonll(x) htobe64(x)
 
 int unix_connect(const char *path);
+int unix_send_fd(int socket, int fd);
+int unix_recv_fd(int socket);
 
 #endif

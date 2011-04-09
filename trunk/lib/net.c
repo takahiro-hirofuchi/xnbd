@@ -567,3 +567,87 @@ int unix_connect(const char *path)
 
 	return fd;
 }
+
+int unix_send_fd(int socket, int fd)
+{
+	struct msghdr msg;
+	bzero(&msg, sizeof(msg));
+
+	struct iovec iov[1];
+	iov[0].iov_base = "";
+	iov[0].iov_len = 1;
+	msg.msg_iov = iov;
+	msg.msg_iovlen = 1;
+
+
+	char data_buf[CMSG_SPACE(sizeof(fd))];
+
+	msg.msg_control = data_buf;
+	msg.msg_controllen = sizeof(data_buf);
+
+	struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
+	cmsg->cmsg_level = SOL_SOCKET;
+	cmsg->cmsg_type  = SCM_RIGHTS;
+	cmsg->cmsg_len   = CMSG_LEN(sizeof(fd));
+
+	int *fdptr = (int *) CMSG_DATA(cmsg);
+	*fdptr = fd;
+
+	msg.msg_controllen = cmsg->cmsg_len;
+
+
+	int ret = sendmsg(socket, &msg, 0);
+	if (ret == -1)
+		warn("send_fd, %m");
+	else if (ret == 0)
+		warn("send_fd, peer closed");
+
+
+	return ret;
+};
+
+
+int unix_recv_fd(int socket)
+{
+	struct msghdr msg;
+	bzero(&msg, sizeof(msg));
+
+	int fd;
+	char buf[1];
+
+	struct iovec iov[1];
+	iov[0].iov_base = buf;
+	iov[0].iov_len = sizeof(buf);
+	msg.msg_iov = iov;
+	msg.msg_iovlen = 1;
+	
+	char data_buf[CMSG_SPACE(sizeof(fd))];
+
+	msg.msg_control = data_buf;
+	msg.msg_controllen = sizeof(data_buf);
+
+	int ret = recvmsg(socket, &msg, 0);
+	if (ret == -1)
+		err("recv_fd, %m");
+	else if (ret == 0)
+		err("recv_fd, peer closed");
+	
+
+	struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
+	if (!cmsg)
+		err("no cmsghdr");
+
+	if (cmsg->cmsg_len == CMSG_LEN(sizeof(fd)) 
+		&& cmsg->cmsg_level == SOL_SOCKET
+		&& cmsg->cmsg_type == SCM_RIGHTS) {
+		int *fdptr = (int *) CMSG_DATA(cmsg);
+		fd = *fdptr;
+	} else
+		err("no descriptor");
+		
+
+	info("fd %d received", fd);
+
+
+	return fd;
+}
