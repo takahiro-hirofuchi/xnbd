@@ -156,22 +156,19 @@ struct xnbd_info {
 	struct disk_stack *cow_ds;
 
 	/* xnbd_cmd_proxy mode */
-
-
-
+	int proxy_pid;
+	int proxy_sockpair_proxy_fd;  /* hold in the proxy server */
+	int proxy_sockpair_master_fd; /* hold in the master server (NOTE) */
 	char *proxy_diskpath;   /* cache disk */
 	char *proxy_bmpath; /* cached bitmap file */
 	char *proxy_rhost;  /* remote nbd sever */
 	char *proxy_rport;
+	char *proxy_unixpath;
 
-	/* cache disk */
-	int cachefd;
-	int cacheopened;
-
-
-	/* cached bitmap array (mmaped) */
-	unsigned long *cbitmap;
-	size_t cbitmaplen;
+	/* 
+	 * NOTE: when invoking a new thread, must close the master_fds of the
+	 * other sessions. 
+	 **/
 };
 
 
@@ -184,8 +181,6 @@ struct xnbd_session {
 	int pipe_master_fd; /* master */
 	pid_t pid;          /* master */
 	int notifying;      /* master */
-
-	int remotefd;
 };
 
 
@@ -257,5 +252,9 @@ struct disk_stack *xnbd_cow_target_open_disk(char *diskpath, int newfile, int co
 void xnbd_cow_target_close_disk(struct disk_stack *ds, int delete_cow);
 int xnbd_cow_target_session_server(struct xnbd_session *);
 
-int proxy_server(struct xnbd_session *);
+/* xnbd_cmd_proxy mode */
+void xnbd_proxy_start(struct xnbd_info *xnbd);
+void xnbd_proxy_stop(struct xnbd_info *xnbd);
+int xnbd_proxy_session_server(struct xnbd_session *ses);
+
 #endif

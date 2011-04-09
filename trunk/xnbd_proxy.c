@@ -21,10 +21,25 @@
  * Place - Suite 330, Boston, MA 02111-1307, USA.
  */
 
+
 #include "xnbd_proxy.h"
 
+
 /* special entry to let threads exit */
-struct proxy_priv priv_eof = { .notify_error = 0, .nreq = 0 };
+struct proxy_priv priv_stop_forwarder = { .nreq = 0 };
+
+struct proxy_session {
+	int nbd_fd;
+	int wrk_fd;
+	GAsyncQueue *tx_queue;
+	struct xnbd_proxy *proxy;
+
+	pthread_t tid_tx;
+	pthread_t tid_rx;
+
+	int pipe_write_fd; /* tx thread & rx thread */
+	int pipe_read_fd;  /* main thread */
+};
 
 
 void block_all_signals(void)
@@ -40,9 +55,27 @@ void block_all_signals(void)
 }
 
 
-int proxy_mode_main(struct xnbd_proxy *proxy)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+int recv_request(struct proxy_session *ps)
 {
-	struct xnbd_session *ses = proxy->ses;
+	struct xnbd_proxy *proxy = ps->proxy;
+	int nbd_client_fd = ps->nbd_fd;
+	struct proxy_priv *priv = g_malloc0(sizeof(struct proxy_priv));
+
 
 	uint32_t iotype = 0;
 	off_t iofrom = 0;
@@ -50,31 +83,37 @@ int proxy_mode_main(struct xnbd_proxy *proxy)
 	int ret = 0;
 
 
-
-	ret = poll_request_arrival(ses);
-	if (ret < 0) 
-		return -1;
-
-
-
-	struct proxy_priv *priv = g_malloc0(sizeof(struct proxy_priv));
-
+	priv->nreq = 0;
+	priv->clientfd = nbd_client_fd;
+	priv->tx_queue = ps->tx_queue;
 	priv->reply.magic = htonl(NBD_REPLY_MAGIC);
 	priv->reply.error = 0;
 
-	ret = nbd_server_recv_request(ses->clientfd, ses->xnbd->disksize, &iotype, &iofrom, &iolen, &priv->reply);
+	ret = wait_until_readable(nbd_client_fd, ps->wrk_fd);
+	if (ret < 0) 
+		goto err_handle;
+
+	ret = nbd_server_recv_request(nbd_client_fd, proxy->xnbd->disksize, &iotype, &iofrom, &iolen, &priv->reply);
 	if (ret == -1) {
-		priv->notify_error = 1;
-		g_async_queue_push(proxy->high_queue, (gpointer) priv);
-		return 0;
+		/*
+		 * A request with an invalid offset was received. The proxy
+		 * server terminates this connection. This behavior is
+		 * different from the original NBD server.
+		 */
+		goto err_handle;
 	} else if (ret == -2) {
-		g_free(priv);
-		err("client bug: invalid header");
+		warn("client bug: invalid header");
+		goto err_handle;
 	} else if (ret == -3) {
-		g_free(priv);
-		return ret;
+		goto err_handle;
 	}
 
+	if (proxy->xnbd->readonly) {
+		if (iotype != NBD_CMD_READ) {
+			warn("write request to readonly cache");
+			goto err_handle;
+		}
+	}
 
 	dbg("++++recv new request");
 
@@ -89,242 +128,57 @@ int proxy_mode_main(struct xnbd_proxy *proxy)
 	priv->iotype = iotype;
 	priv->iofrom = iofrom;
 	priv->iolen  = iolen;
-	priv->nreq = 0;
 	priv->block_index_start = block_index_start;
 	priv->block_index_end   = block_index_end;
 
 
 
-
-
-	if (iotype == NBD_CMD_READ)
-		proxy_mode_main_read(proxy, priv);
-	else if (iotype == NBD_CMD_WRITE) {
-		/*
-		 * Next, recieve write data from a client node.
-		 * Recieve all blocks to a temporariy buffer because the completion
-		 * thread may touch the same range of the cache buffer.
-		 * Touching the cache buffer should be allowed only in the completon thread.
-		 **/
+	if (iotype == NBD_CMD_WRITE) {
 		priv->write_buff = g_malloc(iolen);
 
-
-		int ret = net_recv_all_or_error(proxy->ses->clientfd, priv->write_buff, iolen);
-		if (ret < 0)
-			err("recv write data");
-
-		proxy_mode_main_write(proxy, priv);
-	} else 
-		err("client bug: uknown iotype");
-
-	g_async_queue_push(proxy->high_queue, (gpointer) priv);
-
-
-	return ret;
-}
-
-
-
-
-
-int complete_thread_main(struct xnbd_proxy *proxy)
-{
-	struct xnbd_session *ses = proxy->ses;
-	struct xnbd_info *xnbd = ses->xnbd;
-
-	struct proxy_priv *priv;
-	int ret;
-
-	dbg("wait new queue element");
-
-
-	priv = (struct proxy_priv *) g_async_queue_pop(proxy->req_queue);
-	dbg("--- process new queue element %p", priv);
-
-	proxy_priv_dump(priv);
-
-
-	if (priv->notify_error) {
-		net_send_all_or_abort(proxy->ses->clientfd, &priv->reply, sizeof(struct nbd_reply));
-
-		goto skip_cacheio;
-	}
-
-	if (priv == &priv_eof)
-		return -1;
-
-
-	/* large file support on 32bit architecutre */
-	char *mmaped_buf = NULL;
-	size_t mmaped_len = 0;
-	off_t mmaped_offset = 0;
-	char *iobuf = NULL;
-
-	iobuf = mmap_iorange(xnbd, xnbd->cachefd, priv->iofrom, priv->iolen, &mmaped_buf, &mmaped_len, &mmaped_offset);
-	dbg("#mmaped_buf %p iobuf %p mmaped_len %zu iolen %zu", mmaped_buf, iobuf, mmaped_len, priv->iolen);
-	dbg("#mapped %p -> %p", mmaped_buf, mmaped_buf + mmaped_len);
-
-
-	for (int i = 0; i < priv->nreq; i++) {
-		dbg("priv req %d", i);
-		off_t block_iofrom = priv->req[i].bindex_iofrom * CBLOCKSIZE;
-		size_t block_iolen  = priv->req[i].bindex_iolen  * CBLOCKSIZE;
-		char *iobuf_partial = NULL;
-
-		iobuf_partial = mmaped_buf + (block_iofrom - mmaped_offset);
-
-		dbg("i %u block_iofrom %ju iobuf_partial %p", i, block_iofrom, iobuf_partial);
-
-		/* recv from server */
-		ret = nbd_client_recv_read_reply(ses->remotefd, iobuf_partial, block_iolen);
+		/*
+		 * Recieve write data to a temporariy buffer. 
+		 *
+		 * Cache disk I/O is allowed only in the completion thread. 
+		 * This ensures all disk I/O is serialized.
+		 *
+		 * If the proxy server wrote data to the cache disk here,
+		 * the preceding requests might read/write the same range of
+		 * the cache disk in the tx_thread after this writing.
+		 **/
+		ret = net_recv_all_or_error(priv->clientfd, priv->write_buff, priv->iolen);
 		if (ret < 0) {
-			warn("recv_read_reply error");
-			priv->reply.error = htonl(EPIPE);
-			net_send_all_or_abort(ses->clientfd, &priv->reply, sizeof(struct nbd_reply));
-
-			/*
-			 * TODO
-			 * If the remote server is disconnected, the proxy
-			 * server falls back to a pseudo target mode.
-			 *
-			 * N.B. make sure that a client still need this nbd disk. 
-			 **/
-			exit(EXIT_FAILURE);
+			warn("recv write data");
+			goto err_handle;
 		}
 
-		/*
-		 * Do not mark cbitmap here. Do it before. Otherwise, when the
-		 * following request covers an over-wrapped I/O region, the
-		 * main thread may retrieve remote blocks and overwrite them to
-		 * an updated region.
-		 **/
+
+	} else if (iotype == NBD_CMD_READ) {
+		priv->read_buff = g_malloc(iolen);
+
+	} else {
+		warn("client bug: uknown iotype");
+		goto err_handle;
 	}
 
-	if (priv->iotype == NBD_CMD_READ) {
-		struct iovec iov[2];
-		bzero(&iov, sizeof(iov));
+	g_async_queue_push(proxy->fwd_tx_queue, priv);
 
-		iov[0].iov_base = &priv->reply;
-		iov[0].iov_len  = sizeof(struct nbd_reply);
-		iov[1].iov_base = iobuf;
-		iov[1].iov_len  = priv->iolen;
-
-		net_writev_all_or_abort(ses->clientfd, iov, 2);
-
-	} else if (priv->iotype == NBD_CMD_WRITE) {
-		/*
-		 * This memcpy() must come before sending reply, so that xnbd-tester
-		 * avoids memcmp() mismatch.
-		 **/
-		memcpy(iobuf, priv->write_buff, priv->iolen);
-		g_free(priv->write_buff);
-
-		net_send_all_or_abort(ses->clientfd, &priv->reply, sizeof(struct nbd_reply));
-
-
-		/* Do not mark cbitmap here. */
-
-	} else if (priv->iotype == NBD_CMD_BGCOPY) {
-		/* NBD_CMD_BGCOPY does not do nothing here */
-		;
-	}
-
-
-	ret = munmap(mmaped_buf, mmaped_len);
-	if (ret < 0) 
-		warn("munmap failed");
-
-
-
-	dbg("send reply to client done");
-
-skip_cacheio:
-	g_free(priv);
 
 	return 0;
+
+
+err_handle:
+	info("start terminating session (nbd_fd %d wrk_fd %d)", ps->nbd_fd, ps->wrk_fd);
+	priv->need_exit = 1;
+	g_async_queue_push(proxy->fwd_tx_queue, priv);
+
+	return -1;
 }
 
-void *redirect_thread(void *arg)
-{
-	struct xnbd_proxy *proxy = (struct xnbd_proxy *) arg;
-	struct xnbd_session *ses = proxy->ses;
-	struct xnbd_info *xnbd = ses->xnbd;
 
 
-	block_all_signals();
-
-	info("redirect_th %lu", pthread_self());
 
 
-	/* 
-	 * The current code redirects I/O requests while holding sreq_lock.
-	 * Until all the queued requests are processed here, the recvreq thread
-	 * and the bgctrl thread cannot enqueue the next request. 
-	 *
-	 * This behavior is probably appropriate for reducing I/O latencies;
-	 * queued requests are redirected (if needed) as soon as possible,
-	 * without being intrrupted by the threads. Is this true?
-	 */
-
-	for (;;) {
-		for (;;) {
-			struct proxy_priv *priv;
-
-			priv = (struct proxy_priv *) g_async_queue_pop(proxy->high_queue);
-
-
-			dbg("%lu --- process new queue element", pthread_self());
-
-
-			/* send read request as soon as possible */
-			for (int i = 0; i < priv->nreq; i++) {
-				size_t length = priv->req[i].bindex_iolen * CBLOCKSIZE;
-
-				int ret = nbd_client_send_read_request(ses->remotefd, priv->req[i].bindex_iofrom * CBLOCKSIZE, length);
-				if (ret < 0) {
-					/*
-					 * TODO
-					 * Should the proxy server fall back to a target mode?
-					 */
-					err("proxy: sending read request failed");
-				}
-			}
-
-			g_async_queue_push(proxy->req_queue, (gpointer) priv);
-
-
-			if (priv == &priv_eof)
-				goto out_of_loop;
-		}
-	}
-
-out_of_loop:
-
-
-	info("bye redirect_th");
-	return NULL;
-}
-
-void *complete_thread(void *arg)
-{
-	struct xnbd_proxy *proxy = (struct xnbd_proxy *) arg;
-
-
-	block_all_signals();
-
-	info("new complete thread %lu", pthread_self());
-
-	for (;;) {
-		int ret = complete_thread_main(proxy);
-		if (ret < 0)
-			break;
-	}
-
-
-	info("bye complete thread");
-
-	return NULL;
-}
 
 static void signal_handler_xnbd(int i)
 {
@@ -345,82 +199,503 @@ static void set_signal_xnbd_service(void)
 
 
 /* called in a proxy process */
-void xnbd_proxy_initialize(struct xnbd_session *ses, struct xnbd_proxy *proxy)
+void proxy_initialize(struct xnbd_info *xnbd, struct xnbd_proxy *proxy)
 {
-	int ret;
 
 
 	g_thread_init(NULL);
 
 
-	proxy->ses  = ses;
+	proxy->xnbd  = xnbd;
 
 	/* keep reference count! */
-	proxy->high_queue = g_async_queue_new();
-	proxy->req_queue = g_async_queue_new();
+	proxy->fwd_tx_queue = g_async_queue_new();
+	proxy->fwd_rx_queue = g_async_queue_new();
 
 
 
 
-
-	proxy->tid_cmp = pthread_create_or_abort(complete_thread, proxy);
-	proxy->tid_srq = pthread_create_or_abort(redirect_thread, proxy);
-
+	proxy->tid_fwd_rx = pthread_create_or_abort(forwarder_rx_thread_main, proxy);
+	proxy->tid_fwd_tx = pthread_create_or_abort(forwarder_tx_thread_main, proxy);
 }
 
 void xnbd_proxy_shutdown(struct xnbd_proxy *proxy)
 {
 
 
+	g_async_queue_push(proxy->fwd_tx_queue, &priv_stop_forwarder);
 
-	g_async_queue_push(proxy->high_queue, &priv_eof);
-
-	pthread_join(proxy->tid_srq, NULL);
-	info("redirect_th cancelled");
-	pthread_join(proxy->tid_cmp, NULL);
-	info("complete_th cancelled");
-
+	pthread_join(proxy->tid_fwd_tx, NULL);
+	info("forwarder_tx exited");
+	pthread_join(proxy->tid_fwd_rx, NULL);
+	info("forwarder_rx exited");
 
 
 
-	g_async_queue_unref(proxy->high_queue);
-	g_async_queue_unref(proxy->req_queue);
+
+	g_async_queue_unref(proxy->fwd_tx_queue);
+	g_async_queue_unref(proxy->fwd_rx_queue);
 
 
+	
+
+	nbd_client_send_disc_request(proxy->remotefd);
+	close(proxy->remotefd);
+
+	close(proxy->cachefd);
+	bitmap_close_file(proxy->cbitmap, proxy->cbitmaplen);
 }
 
 
 
-int proxy_server(struct xnbd_session *ses)
+
+GList *conn_list = NULL;
+
+struct proxy_session *get_session_from_read_fd(GList *list_head, int fd)
 {
-	int ret = 0;
+	for (GList *list = g_list_first(list_head); list != NULL; list = g_list_next(list)) {
+		struct proxy_session *ps = (struct proxy_session *) list->data;
+		if (ps->pipe_read_fd == fd)
+			return ps;
+	}
 
-	dbg("proxy server start");
+	return NULL;
+}
 
 
-	/* only the main thread accepts signal */
-	set_signal_xnbd_service();
 
-	struct xnbd_proxy *proxy = g_malloc0(sizeof(struct xnbd_proxy));
+void *rx_thread_main(void *arg)
+{
+	struct proxy_session *ps = (struct proxy_session *) arg;
 
-	xnbd_proxy_initialize(ses, proxy);
+
+	block_all_signals();
+
+	info("rx_thread %lu starts", pthread_self());
+	dbg("rx_thread %lu starts", pthread_self());
+
 
 	for (;;) {
-		ret = proxy_mode_main(proxy);
-		if (ret < 0) { 
-			/*
-			 * NBD_CMD_DISC (disconnect) was recieved
-			 * or proxy's shutdown was requested by other components.
-			 **/
+		int ret = recv_request(ps);
+		if (ret < 0)
 			break;
-		}
 	}
 
 
-	xnbd_proxy_shutdown(proxy);
-	g_free(proxy);
+	info("rx_thread %lu exits", pthread_self());
 
-	//send_disc_request(xnbd->remotefd);
+	return NULL;
+}
 
-	return ret;
+
+void *tx_thread_main(void *arg)
+{
+	struct proxy_session *ps = (struct proxy_session *) arg;
+	int need_exit = 0;
+
+
+	block_all_signals();
+
+	info("tx_thread %lu starts", pthread_self());
+	dbg("tx_thread %lu starts", pthread_self());
+
+	for (;;) {
+		struct proxy_priv *priv = g_async_queue_pop(ps->tx_queue);
+
+		if (priv->need_exit)
+			need_exit = 1;
+		else {
+			/* setup iovec */
+			struct iovec iov[2];
+			unsigned int iov_size = 0;
+
+			iov[iov_size].iov_base = &priv->reply;
+			iov[iov_size].iov_len  = sizeof(struct nbd_reply);
+			iov_size += 1;
+
+			if (priv->iotype == NBD_CMD_READ) {
+				iov[iov_size].iov_base = priv->read_buff;
+				iov[iov_size].iov_len  = priv->iolen;
+				iov_size += 1;
+			}
+
+			net_writev_all_or_error(priv->clientfd, iov, iov_size);
+		}
+
+		if (priv->read_buff)
+			g_free(priv->read_buff);
+
+		if (priv->write_buff)
+			g_free(priv->write_buff);
+
+		g_free(priv);
+
+		if (need_exit)
+			break;
+	}
+
+	/* notify the main thread */
+	net_send_all_or_abort(ps->pipe_write_fd, "", 1);
+
+	info("tx_thread %lu exits", pthread_self());
+
+	return NULL;
+}
+
+
+int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
+{
+	int ret;
+	struct pollfd eventfds[2 + g_list_length(conn_list)];
+	nfds_t neventfds = 0;
+	
+	eventfds[neventfds].fd = unix_listen_fd;
+	eventfds[neventfds].events = POLLRDNORM | POLLRDHUP;
+	neventfds += 1;
+
+	eventfds[neventfds].fd = master_fd;
+	eventfds[neventfds].events = POLLRDNORM | POLLRDHUP;
+	neventfds += 1;
+
+	for (GList *list = g_list_first(conn_list); list != NULL; list = g_list_next(list)) {
+		struct proxy_session *ps = (struct proxy_session *) list->data;
+		eventfds[neventfds].fd = ps->pipe_read_fd;
+		eventfds[neventfds].events = POLLRDNORM | POLLRDHUP;
+		neventfds += 1;
+	}
+
+
+	int nready = poll(eventfds, neventfds, -1);
+	if (nready == -1) {
+		if (errno == EINTR) {
+			info("polling signal cached");
+			return -1;
+		} else
+			err("polling, %s, (%d)", strerror(errno), errno);
+	}
+
+
+	if (eventfds[0].revents & (POLLRDNORM | POLLRDHUP)) {
+		/* register_fd arrived */
+		struct sockaddr_un cliaddr;
+		socklen_t cliaddr_len = sizeof(cliaddr);
+
+		int wrk_fd = accept(eventfds[0].fd, &cliaddr, &cliaddr_len);
+		if (wrk_fd < 0)
+			err("accept %m");
+
+		int close_wrk_fd = 1;
+		enum xnbd_proxy_cmd_type cmd;
+		ret = net_recv_all_or_error(wrk_fd, &cmd, sizeof(cmd));
+		if (ret < 0) 
+			cmd = XNBD_PROXY_CMD_UNKNOWN;
+
+		switch (cmd) {
+			case XNBD_PROXY_CMD_QUERY_STATUS:
+				{
+					struct xnbd_proxy_query query;
+					query.disksize = proxy->xnbd->disksize;
+					g_strlcpy(query.diskpath, proxy->xnbd->proxy_diskpath, sizeof(query.diskpath));
+					g_strlcpy(query.bmpath, proxy->xnbd->proxy_bmpath, sizeof(query.bmpath));
+					query.master_pid = getppid();
+					info("send current status (wrk_fd %d)", wrk_fd);
+					net_send_all_or_error(wrk_fd, &query, sizeof(query));
+				}
+				break;
+
+			case XNBD_PROXY_CMD_REGISTER_FD:
+				{
+					int nbd_fd = unix_recv_fd(wrk_fd);
+					info("create proxy_session (nbd_fd %d wrk_fd %d)", nbd_fd, wrk_fd);
+
+					struct proxy_session *ps = g_malloc0(sizeof(struct proxy_session));
+					ps->nbd_fd = nbd_fd;
+					ps->wrk_fd = wrk_fd;
+					ps->tx_queue = g_async_queue_new();
+					ps->proxy = proxy;
+
+					ps->tid_tx = pthread_create_or_abort(tx_thread_main, ps);
+					ps->tid_rx = pthread_create_or_abort(rx_thread_main, ps);
+					make_pipe(&ps->pipe_write_fd, &ps->pipe_read_fd);
+
+					conn_list = g_list_append(conn_list, ps);
+					close_wrk_fd = 0;
+				}
+				break;
+
+			case XNBD_PROXY_CMD_UNKNOWN:
+			default:
+				warn("uknown proxy cmd (wrk_fd %d)", wrk_fd);
+		}
+
+		if (close_wrk_fd)
+			close(wrk_fd);
+	}
+
+	if (eventfds[1].revents & (POLLRDNORM | POLLRDHUP)) {
+		info("mainloop exit is requested");
+
+		/* if there are no sessions, run clean up and bye */
+		g_assert(g_list_length(conn_list) == 0);
+
+		return -1;
+	}
+
+	for (nfds_t i = 2; i < neventfds; i++) {
+		if (eventfds[i].revents & (POLLRDNORM | POLLRDHUP)) {
+			int pipe_read_fd  = eventfds[i].fd;
+			struct proxy_session *ps = get_session_from_read_fd(conn_list, pipe_read_fd);
+			g_assert(ps);
+
+			info("cleanup proxy_session (nbd_fd %d wrk_fd %d)", ps->nbd_fd, ps->wrk_fd);
+
+			/* rx_thread and tx_thread already exited */
+			pthread_join(ps->tid_rx, NULL);
+			pthread_join(ps->tid_tx, NULL);
+
+			/* no in-flight request */
+			g_assert(g_async_queue_length(ps->tx_queue) == 0);
+			g_async_queue_unref(ps->tx_queue);
+			close(ps->pipe_read_fd);
+			close(ps->pipe_write_fd);
+			close(ps->nbd_fd);
+
+			ret = write(ps->wrk_fd, "", 1);
+			if (ret < 0)
+				err("notify the worker process, %m");
+
+			close(ps->wrk_fd);
+			conn_list = g_list_remove(conn_list, ps);
+			g_free(ps);
+
+			info("cleanup proxy_session done");
+		}
+	}
+
+	return 0;
+}
+
+
+void proxy_initialize_cachedisk(struct xnbd_info *xnbd, struct xnbd_proxy *proxy)
+{
+	proxy->cbitmap = bitmap_open_file(xnbd->proxy_bmpath, xnbd->nblocks, &proxy->cbitmaplen, 0, 1);
+
+
+	int cachefd = open(xnbd->proxy_diskpath, O_RDWR | O_CREAT | O_NOATIME, S_IRUSR | S_IWUSR);
+	if (cachefd < 0)
+		err("open");
+	
+	off_t size = get_disksize(cachefd);
+	if (size != xnbd->disksize) {
+		warn("cache disk size (%ju) != target disk size (%ju)", size, xnbd->disksize);
+		warn("now ftruncate() it");
+		int ret = ftruncate(cachefd, xnbd->disksize);
+		if (ret < 0)
+			err("ftruncate");
+	}
+
+
+	proxy->cachefd = cachefd;
+}
+
+
+/* before calling this funciton, all sessions must be terminated */
+void xnbd_proxy_stop(struct xnbd_info *xnbd)
+{
+	g_assert(g_list_length(xnbd->sessions) == 0);
+
+	/* request xnbd_proxy to exit */
+	write_all(xnbd->proxy_sockpair_master_fd, "", 1);
+	close(xnbd->proxy_sockpair_master_fd);
+
+	int ret;
+	ret = waitpid(xnbd->proxy_pid, NULL, 0);
+	if (ret < 0)
+		err("waitpid %d, %m", xnbd->proxy_pid);
+
+	info("xnbd_proxy (pid %d) exited", xnbd->proxy_pid);
+}
+
+
+#include <sys/prctl.h>
+void set_process_name(const char *name)
+{
+	char comm[16];
+	strncpy(comm, name, sizeof(comm));
+	int ret = prctl(PR_SET_NAME, (unsigned long) comm, 0l, 0l, 0l);
+	if (ret < 0)
+		warn("set_name %m");
+}
+
+
+void xnbd_proxy_start(struct xnbd_info *xnbd)
+{
+	int ret;
+
+	dbg("proxy server back start");
+
+	info("proxymode mode %s %s cache %s cachebitmap %s",
+			xnbd->proxy_rhost, xnbd->proxy_rport,
+			xnbd->proxy_diskpath, xnbd->proxy_bmpath);
+
+	int remotefd = net_tcp_connect(xnbd->proxy_rhost, xnbd->proxy_rport);
+	if (remotefd < 0)
+		err("connecting %s:%s failed", xnbd->proxy_rhost, xnbd->proxy_rport);
+
+	/* check the remote server and get a disksize */
+	xnbd->disksize = nbd_negotiate_with_server(remotefd);
+	xnbd->nblocks = get_disk_nblocks(xnbd->disksize);
+
+	make_sockpair(&xnbd->proxy_sockpair_master_fd, &xnbd->proxy_sockpair_proxy_fd);
+
+	pid_t pid = fork();
+	if (pid == -1)
+		err("fork, %m");
+
+	if (pid == 0) {
+		/* -- child -- */
+		set_process_name("xnbd_proxy");
+
+		close(xnbd->proxy_sockpair_master_fd);
+
+		/* use xnbd->proxy_sockpair_master_fd to request exit */
+		block_all_signals();
+
+		struct xnbd_proxy *proxy = g_malloc0(sizeof(struct xnbd_proxy));
+		proxy->remotefd = remotefd;
+		proxy_initialize(xnbd, proxy);
+		proxy_initialize_cachedisk(xnbd, proxy);
+
+
+
+		int unix_listen_fd = socket(AF_LOCAL, SOCK_STREAM, 0);
+		if (unix_listen_fd < 0)
+			err("socket %m");
+
+		struct sockaddr_un srvaddr;
+		srvaddr.sun_family = AF_LOCAL;
+		g_strlcpy(srvaddr.sun_path, xnbd->proxy_unixpath, sizeof(srvaddr.sun_path));
+
+		ret = bind(unix_listen_fd, &srvaddr, sizeof(srvaddr));
+		if (ret < 0)
+			err("bind %m");
+
+		ret = listen(unix_listen_fd, 10);
+		if (ret < 0)
+			err("listen %m");
+
+		info("xnbd_proxy (pid %d) remote %s:%s, cache %s (%s), ctl %s",
+				getpid(), xnbd->proxy_rhost, xnbd->proxy_rport,
+				xnbd->proxy_diskpath, xnbd->proxy_bmpath,
+				xnbd->proxy_unixpath);
+
+		/*
+		 * Tell the master that xnbd_proxy gets ready. We need to send
+		 * something to differenciate close() by abort.
+		 **/
+		net_send_all_or_abort(xnbd->proxy_sockpair_proxy_fd, "", 1);
+		shutdown(xnbd->proxy_sockpair_proxy_fd, SHUT_WR);
+
+
+		for (;;) {
+			ret = main_loop(proxy, unix_listen_fd, xnbd->proxy_sockpair_proxy_fd);
+			if (ret < 0) { 
+				break;
+			}
+		}
+
+
+		/* send an exit message to forwarder threads and join them */
+		xnbd_proxy_shutdown(proxy);
+		g_free(proxy);
+		close(unix_listen_fd);
+		unlink(xnbd->proxy_unixpath);
+
+		info("xnbd_proxy successfully exits");
+		exit(EXIT_SUCCESS);
+	}
+
+
+	/* -- parent -- */
+
+	xnbd->proxy_pid = pid;
+	close(xnbd->proxy_sockpair_proxy_fd);
+	close(remotefd);
+
+	/* make sure the child is ready */
+	char buf[1];
+	net_recv_all_or_abort(xnbd->proxy_sockpair_master_fd, buf, 1);
+	shutdown(xnbd->proxy_sockpair_master_fd, SHUT_RD);
+	info("xnbd_proxy gets ready");
+}
+
+
+int xnbd_proxy_session_server(struct xnbd_session *ses)
+{
+	struct xnbd_info *xnbd = ses->xnbd;
+
+	/* unix_fd is connected to ps->wrk_fd */
+	int unix_fd = unix_connect(xnbd->proxy_unixpath);
+
+	enum xnbd_proxy_cmd_type cmd = XNBD_PROXY_CMD_REGISTER_FD;
+	net_send_all_or_abort(unix_fd, &cmd, sizeof(cmd));
+
+	unix_send_fd(unix_fd, ses->clientfd);
+
+	info("proxy worker: send fd %d via unix_fd %d",
+			ses->clientfd, unix_fd);
+
+	int ret;
+	struct pollfd eventfds[2];
+	nfds_t neventfds = 0;
+	
+	eventfds[neventfds].fd = unix_fd;
+	eventfds[neventfds].events = POLLRDNORM | POLLRDHUP;
+	neventfds += 1;
+
+	eventfds[neventfds].fd = ses->pipe_worker_fd;
+	eventfds[neventfds].events = POLLRDNORM | POLLRDHUP;
+	neventfds += 1;
+
+	block_all_signals();
+
+	for (;;) {
+		int nready = poll(eventfds, neventfds, -1);
+		if (nready == -1) {
+			if (errno == EINTR)
+				err("proxy worker: catch an unexpected signal");
+			else
+				err("polling, %s, (%d)", strerror(errno), errno);
+		}
+
+		if (eventfds[0].revents & (POLLRDNORM | POLLRDHUP)) {
+			char buf[1];
+			ret = net_recv_all_or_error(eventfds[0].fd, buf, 1);
+			if (ret < 0)
+				warn("proxy worker: detect the incorrect termination of xnbd_proxy");
+			else
+				info("proxy worker: detect the session exited");
+
+			break;
+
+		} else if (eventfds[1].revents & (POLLRDNORM | POLLRDHUP)) {
+			char buf[1];
+			ret = net_recv_all_or_error(eventfds[1].fd, buf, 1);
+			if (ret < 0) {
+				err("proxy worker: the master server was incorrectly terminated?");
+			} else
+				info("proxy worker: be requested session termination");
+
+			ret = net_send_all_or_error(unix_fd, "", 1);
+			if (ret < 0)
+				warn("proxy worker: sending session termination request failed");
+
+			/* wait for the session exit in the next loop */
+		} else
+			err("not reached");
+	}
+
+
+
+	return 0;
 }
