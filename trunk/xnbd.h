@@ -176,21 +176,15 @@ struct xnbd_info {
 
 
 struct xnbd_session {
-	/* client socket for which xnbd peforms a nbd server */
-	int clientfd;
-
-	int remotefd;
-
-	int event_listener_fd;
-
+	int clientfd;       /* master and worker */
 	struct xnbd_info *xnbd;
 
+	int pipe_worker_fd; /* worker */
+	int pipe_master_fd; /* master */
+	pid_t pid;          /* master */
+	int notifying;      /* master */
 
-	/* valid in master */
-	pid_t pid;
-	int event_notifier_fd;
-
-	int notifying;
+	int remotefd;
 };
 
 
