@@ -268,12 +268,13 @@ void recv_reply_header(int remotefd, uint64_t expected_index)
 	if (error)
 		err("reply state error %d", error);
 
+
 	uint64_t reply_index = ntohll(reply.handle);
 
-	dbg("index %ju", reply_index);
+	dbg("index %ju %ju", reply_index, reply.handle);
 
 	if (reply_index != expected_index)
-		err("wrong reply ordering");
+		err("wrong reply ordering, reply_index %llu (%llx) expected_index %llu", reply_index, reply_index, expected_index);
 }
 
 void *receiver_thread_main(void *data)
@@ -324,7 +325,7 @@ int check_consistency_by_partial_mmap_for_cowdisk(char *srcdisk, int tgtdiskfd, 
 {
 	int result = 0;
 
-	struct disk_stack *ds = open_cow_disk(srcdisk, 0, CoWID);
+	struct disk_stack *ds = xnbd_cow_target_open_disk(srcdisk, 0, CoWID);
 
 	struct disk_stack_io *io = disk_stack_mmap(ds, req->iofrom, req->iolen, 1);
 
@@ -346,7 +347,7 @@ int check_consistency_by_partial_mmap_for_cowdisk(char *srcdisk, int tgtdiskfd, 
 		err("io size mismatch");
 
 	free_disk_stack_io(io);
-	close_cow_disk(ds, 0);
+	xnbd_cow_target_close_disk(ds, 0);
 
 	mmap_partial_unmap(tgtmp);
 
