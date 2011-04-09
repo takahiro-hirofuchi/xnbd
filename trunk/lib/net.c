@@ -428,6 +428,7 @@ void check_done(int ret, int errcode)
 	/* return code of net_iov_all() for write is >=0 (success) or -1 (failure) */
 	if (ret == -1)  {
 		if (errcode == ECONNRESET || errcode == EPIPE) {
+			/* TODO: use err() ? */
 			g_message("got RST. abort");
 			exit(EXIT_SUCCESS);
 		}
@@ -454,6 +455,7 @@ int check_fin(int ret, int errcode, size_t len)
 {
 	if (ret == -1)  {
 		if (errcode == ECONNRESET || errcode == EPIPE) {
+			/* TODO: use err() ? or return 1 */
 			g_message("got RST. abort");
 			exit(EXIT_SUCCESS);
 		}
@@ -530,7 +532,7 @@ void net_readv_all_or_abort(int fd, struct iovec *iov, unsigned int count)
 
 	int ret = net_readv_all(fd, iov, count);
 	if (check_fin(ret, errno, bufflen))
-		exit(EXIT_SUCCESS);
+		err("sockfd (%d) closed", fd);
 }
 
 int net_readv_all_or_error(int fd, struct iovec *iov, unsigned int count)
@@ -550,7 +552,7 @@ void net_recv_all_or_abort(int sockfd, void *buff, size_t bufflen)
 {
 	int ret = net_recv_all(sockfd, buff, bufflen);
 	if (check_fin(ret, errno, bufflen))
-		exit(EXIT_SUCCESS);
+		err("sockfd (%d) closed", sockfd);
 
 	/* when an error or FIN is detected, exit */
 }
