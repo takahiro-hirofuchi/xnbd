@@ -121,26 +121,41 @@ struct disk_stack_io *disk_stack_mmap(struct disk_stack *ds, off_t iofrom, size_
 void free_disk_stack_io(struct disk_stack_io *io);
 
 
+enum xnbd_cmd_type {
+	xnbd_cmd_unknown = -1,
+	xnbd_cmd_target = 0,
+	xnbd_cmd_cow_target,
+	xnbd_cmd_proxy,
+	xnbd_cmd_help,
+	xnbd_cmd_version,
+};
 
 
 /* common with all sessions for a particular disk */
 struct xnbd_info {
-	/* local disk */
+	enum xnbd_cmd_type cmd;
+
+	int port; /* listen port of the master server */
+	off_t disksize; /* size of the local/remote disk */
+	unsigned long nblocks;
 	int readonly;
 
-	/* local disk and remote disk */
-	off_t disksize;
-	// uint32_t nblocks;
-	unsigned long nblocks;
+	GList *sessions;
 
-	/* CoW */
-	struct disk_stack *ds;
-	int cow;
+	/* use IPTOS_ flag for IP packets */
+	int tos;
 
 
-	/* listen port as a nbd server */
-	int port;
 
+	/* xnbd_cmd_target mode */
+	char *target_diskpath;
+	int target_diskfd;
+
+	/* xnbd_cmd_cow_target mode */
+	char *cow_diskpath;
+	struct disk_stack *cow_ds;
+
+	/* xnbd_cmd_proxy mode */
 	/* cache disk */
 	char *cachepath;
 	int cachefd;
@@ -157,27 +172,7 @@ struct xnbd_info {
 	/* remote nbd sever for caching */
 	char *remotehost;
 	char *remoteport;
-
-	/* proxy mode */
-	int proxymode;
-
 	const char *bgctlprefix;
-
-	GList *sessions;
-
-
-	/* use IPTOS_ flag for IP packets */
-	int tos;
-
-
-
-	/* xnbd_cmd_target mode */
-	char *target_diskpath;
-	int target_diskfd;
-
-	/* xnbd_cmd_cow_target mode */
-	char *cow_diskpath;
-	struct disk_stack *cow_ds;
 };
 
 

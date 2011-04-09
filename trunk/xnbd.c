@@ -67,7 +67,7 @@ void setup_cachedisk(struct xnbd_info *xnbd, off_t disksize, char *cachepath)
 
 void xnbd_session_initialize_connections(struct xnbd_info *xnbd, struct xnbd_session *ses)
 {
-	if (xnbd->proxymode) {
+	if (xnbd->cmd == xnbd_cmd_proxy) {
 		off_t disksize = 0;
 
 		ses->remotefd = net_tcp_connect(xnbd->remotehost, xnbd->remoteport);
@@ -86,45 +86,62 @@ void xnbd_session_initialize_connections(struct xnbd_info *xnbd, struct xnbd_ses
 /* called once in the master process */
 void xnbd_initialize(struct xnbd_info *xnbd)
 {
-	if (xnbd->proxymode) {
-		g_assert(xnbd->remotehost);
-		g_assert(xnbd->remoteport);
-		g_assert(xnbd->cachepath);
-		g_assert(xnbd->cbitmappath);
+	switch (xnbd->cmd) {
+		case xnbd_cmd_proxy:
+			g_assert(xnbd->remotehost);
+			g_assert(xnbd->remoteport);
+			g_assert(xnbd->cachepath);
+			g_assert(xnbd->cbitmappath);
 
-		int remotefd = net_tcp_connect(xnbd->remotehost, xnbd->remoteport);
-		if (remotefd < 0)
-			err("connecting %s:%s failed", xnbd->remotehost, xnbd->remoteport);
+			int remotefd = net_tcp_connect(xnbd->remotehost, xnbd->remoteport);
+			if (remotefd < 0)
+				err("connecting %s:%s failed", xnbd->remotehost, xnbd->remoteport);
 
-		/* check the remote server and get a disksize */
-		xnbd->disksize = nbd_negotiate_with_server(remotefd);
-		nbd_client_send_disc_request(remotefd);
-		close(remotefd);
+			/* check the remote server and get a disksize */
+			xnbd->disksize = nbd_negotiate_with_server(remotefd);
+			nbd_client_send_disc_request(remotefd);
+			close(remotefd);
 
-		xnbd->nblocks = get_disk_nblocks(xnbd->disksize);
-		xnbd->cbitmap = bitmap_open_file(xnbd->cbitmappath, xnbd->nblocks, &xnbd->cbitmaplen, 0, 1);
-		// xnbd->cbitmapopened = 1;
+			xnbd->nblocks = get_disk_nblocks(xnbd->disksize);
+			xnbd->cbitmap = bitmap_open_file(xnbd->cbitmappath, xnbd->nblocks, &xnbd->cbitmaplen, 0, 1);
+			// xnbd->cbitmapopened = 1;
 
-		/* setup cachefile */
-		setup_cachedisk(xnbd, xnbd->disksize, xnbd->cachepath);
-
-
-		info("proxymode mode %s %s cache %s cachebitmap %s",
-				xnbd->remotehost, xnbd->remoteport,
-				xnbd->cachepath, xnbd->cbitmappath);
+			/* setup cachefile */
+			setup_cachedisk(xnbd, xnbd->disksize, xnbd->cachepath);
 
 
-	} else {
-		g_assert(xnbd->target_diskpath);
+			info("proxymode mode %s %s cache %s cachebitmap %s",
+					xnbd->remotehost, xnbd->remoteport,
+					xnbd->cachepath, xnbd->cbitmappath);
 
-		if (xnbd->cow) {
+
+			break;
+
+		case xnbd_cmd_cow_target:
+			g_assert(xnbd->cow_diskpath);
+
 			xnbd->cow_ds = xnbd_cow_target_open_disk(xnbd->cow_diskpath, 1, 0);
-			xnbd->disksize = xnbd->ds->disksize;
-		} else
-			xnbd_target_open_disk(xnbd->target_diskpath, xnbd);
+			xnbd->disksize = xnbd->cow_ds->disksize;
+			xnbd->nblocks = get_disk_nblocks(xnbd->disksize);
 
-		xnbd->nblocks = get_disk_nblocks(xnbd->disksize);
+			break;
+
+		case xnbd_cmd_target:
+			g_assert(xnbd->target_diskpath);
+
+			xnbd_target_open_disk(xnbd->target_diskpath, xnbd);
+			xnbd->nblocks = get_disk_nblocks(xnbd->disksize);
+
+			break;
+
+		case xnbd_cmd_version:
+		case xnbd_cmd_help:
+		case xnbd_cmd_unknown:
+		default:
+			err("not reached");
 	}
+
+
 
 	// monitor_init(xnbd->nblocks);
 
@@ -138,25 +155,17 @@ void xnbd_shutdown(struct xnbd_info *xnbd)
 {
 	info("xnbd_shutdowning ...");
 
-	if (xnbd->diskopened)
+	if (xnbd->cmd == xnbd_cmd_target)
 		close(xnbd->target_diskfd);
-	xnbd->diskopened = 0;
 
 
-	if (xnbd->ds)
+	if (xnbd->cmd == xnbd_cmd_cow_target)
 		xnbd_cow_target_close_disk(xnbd->cow_ds, 1);
-	xnbd->ds = NULL;
 
 
-
-	if (xnbd->cacheopened)
+	if (xnbd->cmd == xnbd_cmd_proxy)
 		close(xnbd->cachefd);
-	xnbd->cacheopened = 0;
-
-
-	if (xnbd->cbitmap)
 		bitmap_close_file(xnbd->cbitmap, xnbd->cbitmaplen);
-	xnbd->cbitmap = NULL;
 
 
 
@@ -170,30 +179,29 @@ void do_service(struct xnbd_session *ses)
 	struct xnbd_info *xnbd = ses->xnbd;
 	
 
-	if (xnbd->proxymode) {
-		dbg("proxy mode");
-		ret = proxy_server(ses);
-	} else {
-		dbg("target mode");
-		//xnbd->migrating_to_target = 0;
-		if (xnbd->cow)
-			ret = xnbd_cow_target_session_server(ses);
-		else
+	switch (xnbd->cmd) {
+		case xnbd_cmd_target:
 			ret = xnbd_target_session_server(ses);
+			break;
+
+		case xnbd_cmd_cow_target:
+			ret = xnbd_cow_target_session_server(ses);
+			break;
+
+		case xnbd_cmd_proxy:
+			ret = proxy_server(ses);
+			break;
+
+		case xnbd_cmd_version:
+		case xnbd_cmd_help:
+		case xnbd_cmd_unknown:
+		default:
+			err("not reached");
 	}
 
 
-	info("process got out from main loop, ret %d", ret);
 
-
-//	if (xnbd->migrating_to_target) {
-//		xnbd->proxymode = 0;
-//		//xnbd->migrating_to_target = 0;
-//		xnbd->target_diskpath = xnbd->cachepath;
-//		goto serve_again;
-//	}
-//
-	info("shutdown xnbd (%s mode) done", xnbd->proxymode ? "proxy" : "target");
+	info("shutdown xnbd master done (cmd %d), ret %d", xnbd->cmd, ret);
 }
 
 
@@ -224,7 +232,7 @@ struct xnbd_session *find_session_with_pid(struct xnbd_info *xnbd, pid_t pid)
 
 void free_session(struct xnbd_info *xnbd, struct xnbd_session *ses)
 {
-	if (xnbd->proxymode) {
+	if (xnbd->cmd == xnbd_cmd_proxy) {
 		nbd_client_send_disc_request(ses->remotefd);
 		close(ses->remotefd);
 	}
@@ -309,7 +317,7 @@ void invoke_new_session(struct xnbd_info *xnbd, int csockfd)
 		for (GList *list = g_list_first(xnbd->sessions); list != NULL; list = g_list_next(list)) {
 			struct xnbd_session *s = (struct xnbd_session *) list->data;
 			info("cleanup pid %d", s->pid);
-			if (xnbd->proxymode)
+			if (xnbd->cmd == xnbd_cmd_proxy)
 				close(s->remotefd);
 			info(" clientfd %d", s->clientfd);
 			close(s->clientfd);
@@ -328,7 +336,7 @@ void invoke_new_session(struct xnbd_info *xnbd, int csockfd)
 
 
 		dbg("new connection");
-		info("do service %d (%s mode)", getpid(), xnbd->proxymode ? "proxy" : "target");
+		info("do service %d (cmd %d)", getpid(), xnbd->cmd);
 		//{
 		//	pid_t mypid = getpid();
 		//	char buf[100];
@@ -555,7 +563,6 @@ int master_server(int port, void *data, int connect_fd)
 			if (restarting_for_mode_change) {
 				/* become target mode */
 				xnbd_shutdown(xnbd);
-				xnbd->proxymode = 0;
 				xnbd->target_diskpath = xnbd->cachepath;
 				xnbd_initialize(xnbd);
 			} else {
@@ -592,8 +599,8 @@ int master_server(int port, void *data, int connect_fd)
 			if (got_sighup) {
 				got_sighup = 0;
 
-				if (!xnbd->proxymode) {
-					warn("ignoring SIGHUP in target mode");
+				if (xnbd->cmd != xnbd_cmd_proxy) {
+					warn("ignoring SIGHUP (mode change) not in proxy mode");
 					goto skip_restarting;
 				}
 
@@ -604,8 +611,8 @@ int master_server(int port, void *data, int connect_fd)
 			if (got_sigusr1) {
 				got_sigusr1 = 0;
 
-				if (xnbd->proxymode || xnbd->cow) {
-					warn("ignoring SIGUSR1 in proxy mode or CoW target mode");
+				if (xnbd->cmd != xnbd_cmd_target) {
+					warn("ignoring SIGUSR1 (snapshot) not in target mode");
 					goto skip_restarting;
 				}
 
@@ -733,35 +740,30 @@ skip_restarting:
 #include <getopt.h>
 
 static struct option longopts[] = {
+	/* commands */
 	{"target", no_argument, NULL, 't'},
+	{"cow-target", no_argument, NULL, 'c'},
 	{"proxy", no_argument, NULL, 'p'},
 	{"help", no_argument, NULL, 'h'},
 	{"version", no_argument, NULL, 'v'},
+	/* options */
 	{"lport", required_argument, NULL, 'l'},
 	{"bgctlprefix", required_argument, NULL, 'B'},
 	{"gstatpath", required_argument, NULL, 'G'},
 	{"daemonize", no_argument, NULL, 'd'},
 	{"readonly", no_argument, NULL, 'r'},
-	{"cow", no_argument, NULL, 'c'},
 	{"logpath", required_argument, NULL, 'L'},
 	{"tos", no_argument, NULL, 'T'},
 	{"connected-fd", required_argument, NULL, 'F'},
 	{NULL, 0, NULL, 0},
 };
 
-enum {
-	cmd_unknown = -1,
-	cmd_target = 0,
-	cmd_proxy,
-	cmd_help,
-	cmd_version
-} cmd = cmd_unknown;
-
 
 
 static const char *help_string = "\
 Usage: \n\
   xnbd-server --target [options] disk_image \n\
+  xnbd-server --cow-target [options] base_disk_image\n\
   xnbd-server --proxy [options] target_host port cache_image cache_bitmap \n\
   xnbd-server --help \n\
   xnbd-server --version \n\
@@ -772,7 +774,6 @@ Options: \n\
   		(default /tmp/xnbd-bg.ctl) \n\
   --daemonize	run as a daemon process \n\
   --readonly	export a disk as readonly in target mode \n\
-  --cow		export a disk as copy-on-write in target mode \n\
   --logpath	logfile (default /tmp/xnbd.log) \n\
 ";
 
@@ -796,12 +797,12 @@ static void show_help_and_exit(const char *msg)
 
 int main(int argc, char **argv) {
 	struct xnbd_info xnbd;
+	enum xnbd_cmd_type cmd = xnbd_cmd_unknown;
 	int lport = XNBD_PORT;
 	char *gstatpath = NULL;
 	char *bgctlprefix = NULL;
 	int daemonize = 0;
 	int readonly = 0;
-	int cow = 0;
 	int tos = 0;
 	int connected_fd = -1;
 	const char *logpath = NULL;
@@ -823,39 +824,49 @@ int main(int argc, char **argv) {
 		int c;
 		int index = 0;
 
-		c = getopt_long(argc, argv, "tphvl:B:G:drcL:TF:", longopts, &index);
+		c = getopt_long(argc, argv, "tpchvl:B:G:drL:TF:", longopts, &index);
 		if (c == -1)
 			break;
 
 		switch (c) {
+			/* commands */
 			case 't':
-				if (cmd != cmd_unknown)
+				if (cmd != xnbd_cmd_unknown)
 					show_help_and_exit("specify one mode");
 			
-				cmd = cmd_target;
+				cmd = xnbd_cmd_target;
 				break;
 
 			case 'p':
-				if (cmd != cmd_unknown)
+				if (cmd != xnbd_cmd_unknown)
 					show_help_and_exit("specify one mode");
 
-				cmd = cmd_proxy;
+				cmd = xnbd_cmd_proxy;
 				break;
 
-			case 'h':
-				if (cmd != cmd_unknown)
+			case 'c':
+				if (cmd != xnbd_cmd_unknown)
 					show_help_and_exit("specify one mode");
 
-				cmd = cmd_help;
+				cmd = xnbd_cmd_cow_target;
+				break;
+
+
+			case 'h':
+				if (cmd != xnbd_cmd_unknown)
+					show_help_and_exit("specify one mode");
+
+				cmd = xnbd_cmd_help;
 				break;
 
 			case 'v':
-				if (cmd != cmd_unknown)
+				if (cmd != xnbd_cmd_unknown)
 					show_help_and_exit("specify one mode");
 
-				cmd = cmd_version;
+				cmd = xnbd_cmd_version;
 				break;
 
+			/* options */
 			case 'l':
 				lport = atoi(optarg);
 				info("listen port %d", lport);
@@ -882,11 +893,6 @@ int main(int argc, char **argv) {
 				info("readonly enabled");
 				break;
 
-			case 'c':
-				cow = 1;
-				info("copy-on-write enabled");
-				break;
-
 			case 'L':
 				logpath = optarg;
 				info("log file %s", logpath);
@@ -904,7 +910,7 @@ int main(int argc, char **argv) {
 				break;
 
 			case '?':
-				cmd = cmd_help;
+				cmd = xnbd_cmd_help;
 				break;
 			default:
 				err("getopt");
@@ -912,41 +918,38 @@ int main(int argc, char **argv) {
 	}
 
 
-	if (cmd != cmd_unknown)
+	if (cmd != xnbd_cmd_unknown)
 		info("cmd %s mode", longopts[cmd].name);
 
 	switch (cmd) {
-		case cmd_help:
+		case xnbd_cmd_help:
 			show_help_and_exit(NULL);
 
-		case cmd_version:
+		case xnbd_cmd_version:
 			printf("%s\n", version);
 			exit(EXIT_SUCCESS);
 
-		case cmd_target:
-		case cmd_proxy:
+		case xnbd_cmd_target:
+		case xnbd_cmd_cow_target:
+		case xnbd_cmd_proxy:
 			break;
-		case cmd_unknown:
+
+		case xnbd_cmd_unknown:
 		default:
 			show_help_and_exit("give one command");
 	}
 
 
 	switch (cmd) {
-		case cmd_target:
+		case xnbd_cmd_target:
 			if (argc - optind != 1)
 				show_help_and_exit("argument error");
 
-
 			xnbd.target_diskpath   = argv[optind];
-			xnbd.proxymode  = 0;
-			xnbd.cow        = cow;
-			xnbd.readonly   = readonly;
-
 
 			break;
 
-		case cmd_proxy:
+		case xnbd_cmd_proxy:
 			if (argc - optind != 4)
 				show_help_and_exit("argument error");
 
@@ -954,7 +957,6 @@ int main(int argc, char **argv) {
 			xnbd.remoteport  = argv[optind + 1];
 			xnbd.cachepath   = argv[optind + 2];
 			xnbd.cbitmappath = argv[optind + 3];
-			xnbd.proxymode   = 1;
 
 
 			if (bgctlprefix)
@@ -966,17 +968,26 @@ int main(int argc, char **argv) {
 
 			break;
 
-		case cmd_version:
-		case cmd_help:
-		case cmd_unknown:
+		case xnbd_cmd_cow_target:
+			if (argc - optind != 1)
+				show_help_and_exit("argument error");
+
+			xnbd.cow_diskpath = argv[optind];
+			break;
+
+		case xnbd_cmd_version:
+		case xnbd_cmd_help:
+		case xnbd_cmd_unknown:
 		default:
 			err("not reached");
 	}
 
+	xnbd.cmd = cmd;
+	xnbd.readonly = readonly;
 	xnbd.tos = tos;
 	xnbd_initialize(&xnbd);
 
-	if (xnbd.proxymode)
+	if (xnbd.cmd == xnbd_cmd_proxy)
 		cachestat_initialize(DEFAULT_CACHESTAT_PATH, xnbd.nblocks);
 
 	if (daemonize) {
