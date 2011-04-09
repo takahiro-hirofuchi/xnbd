@@ -348,7 +348,7 @@ static void update_block_with_found(struct disk_stack *ds, struct disk_stack_io 
 }
 
 
-struct disk_stack *open_cow_disk(char *diskpath, int newfile, int cowid)
+struct disk_stack *xnbd_cow_target_open_disk(char *diskpath, int newfile, int cowid)
 {
 	struct disk_stack *ds = create_disk_stack(diskpath);
 	
@@ -380,9 +380,10 @@ struct disk_stack *open_cow_disk(char *diskpath, int newfile, int cowid)
 	return ds;
 }
 
-void close_cow_disk(struct disk_stack *ds, int delete_cow)
+void xnbd_cow_target_close_disk(struct disk_stack *ds, int delete_cow)
 {
 	info("close cow disk");
+	g_assert(ds);
 
 	if (delete_cow) {
 		struct disk_image *di_cow = ds->image[ds->nlayers - 1];
@@ -504,7 +505,7 @@ struct disk_stack_io *disk_stack_mmap(struct disk_stack *ds, off_t iofrom, size_
 				struct disk_image *di = ds->image[i];
 
 				if (bitmap_test(di->bm, index)) {
-					dbg("index %u found at layer %d", index, i);
+					dbg("index %lu found at layer %d", index, i);
 
 					iov[index - index_start].iov_base = io->bufs[i] + iofrom_inbuf;
 					iov[index - index_start].iov_len  = iolen_inbuf;
@@ -798,7 +799,7 @@ int target_mode_main_cow(struct xnbd_session *ses)
 	dbg("direct mode");
 
 
-	struct disk_stack_io *io = disk_stack_mmap(xnbd->ds, iofrom, iolen, (iotype == NBD_CMD_READ));
+	struct disk_stack_io *io = disk_stack_mmap(xnbd->cow_ds, iofrom, iolen, (iotype == NBD_CMD_READ));
 
 
 	switch (iotype) {
@@ -854,7 +855,7 @@ int target_mode_main_cow(struct xnbd_session *ses)
 
 
 
-int target_server_cow(struct xnbd_session *ses)
+int xnbd_cow_target_session_server(struct xnbd_session *ses)
 {
 	//setup_debug_buf(ses->xnbd->ds);
 
