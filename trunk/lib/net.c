@@ -396,11 +396,11 @@ int net_readv_all(int fd, struct iovec *iov, int count)
 	return net_iov_all(fd, iov, count, 1);
 }
 
-ssize_t net_send_all(int sockfd, void *buff, size_t bufflen)
+ssize_t net_send_all(int sockfd, const void *buff, size_t bufflen)
 {
 	struct iovec iov[1];
 
-	iov[0].iov_base = buff;
+	iov[0].iov_base = (void *) buff;
 	iov[0].iov_len  = bufflen;
 
 	return net_iov_all(sockfd, iov, 1, 0);
@@ -503,7 +503,7 @@ int net_writev_all_or_error(int fd, struct iovec *iov, unsigned int count)
 	return ret;
 }
 
-void net_send_all_or_abort(int sockfd, void *buff, size_t bufflen)
+void net_send_all_or_abort(int sockfd, const void *buff, size_t bufflen)
 {
 	int ret = net_send_all(sockfd, buff, bufflen);
 	check_done(ret, errno);
@@ -511,7 +511,7 @@ void net_send_all_or_abort(int sockfd, void *buff, size_t bufflen)
 	/* if failed to send all data, exit */
 }
 
-int net_send_all_or_error(int sockfd, void *buff, size_t bufflen)
+int net_send_all_or_error(int sockfd, const void *buff, size_t bufflen)
 {
 	int ret = net_send_all(sockfd, buff, bufflen);
 	if (ret != (int) bufflen)

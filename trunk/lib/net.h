@@ -53,22 +53,23 @@ struct addrinfo *net_getaddrinfo(char *host, int port, int ai_family);
 int net_set_reuseaddr(int sockfd);
 int net_set_nodelay(int sockfd);
 int net_tcp_connect(const char *hostname, const char *service);
-int net_writev(int fd, struct iovec *iov, int count);
-int net_readv(int fd, struct iovec *iov, int count);
-ssize_t net_recv(int sockfd, void *buff, size_t bufflen);
-ssize_t net_send(int sockfd, void *buff, size_t bufflen);
+
 int net_writev_all(int fd, struct iovec *iov, int count);
 int net_readv_all(int fd, struct iovec *iov, int count);
+
 ssize_t net_recv_all(int sockfd, void *buff, size_t bufflen);
 void net_recv_all_or_abort(int sockfd, void *buff, size_t bufflen);
 int net_recv_all_or_error(int sockfd, void *buff, size_t bufflen);
-ssize_t net_send_all(int sockfd, void *buff, size_t bufflen);
-void net_send_all_or_abort(int sockfd, void *buff, size_t bufflen);
-int net_send_all_or_error(int sockfd, void *buff, size_t bufflen);
+
+ssize_t net_send_all(int sockfd, const void *buff, size_t bufflen);
+void net_send_all_or_abort(int sockfd, const void *buff, size_t bufflen);
+int net_send_all_or_error(int sockfd, const void *buff, size_t bufflen);
+
 void net_writev_all_or_abort(int fd, struct iovec *iov, unsigned int count);
 int net_writev_all_or_error(int fd, struct iovec *iov, unsigned int count);
 void net_readv_all_or_abort(int fd, struct iovec *iov, unsigned int count);
 int net_readv_all_or_error(int fd, struct iovec *iov, unsigned int count);
+
 void check_done(int ret, int errcode);
 int check_fin(int ret, int errcode, size_t len);
 
