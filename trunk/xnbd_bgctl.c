@@ -21,29 +21,193 @@
  * Place - Suite 330, Boston, MA 02111-1307, USA.
  */
 
-#include "xnbd.h"
+#include "xnbd_proxy.h"
 
+
+struct xnbd_proxy_query *create_proxy_query(char *unix_path)
+{
+
+	int fd = unix_connect(unix_path);
+
+	enum xnbd_proxy_cmd_type cmd = XNBD_PROXY_CMD_QUERY_STATUS;
+	net_send_all_or_abort(fd, &cmd, sizeof(cmd));
+
+	struct xnbd_proxy_query *query = g_malloc(sizeof(struct xnbd_proxy_query));
+	net_recv_all_or_abort(fd, query, sizeof(*query));
+
+	close(fd);
+
+	return query;
+}
+
+
+void cache_all_blocks(char *unix_path, unsigned long *bm, unsigned long nblocks)
+{
+	int fd = unix_connect(unix_path);
+
+	int ctl_fd, proxy_fd;
+	make_sockpair(&ctl_fd, &proxy_fd);
+
+	enum xnbd_proxy_cmd_type cmd = XNBD_PROXY_CMD_REGISTER_FD;
+	net_send_all_or_abort(fd, &cmd, sizeof(cmd));
+	unix_send_fd(fd, proxy_fd);
+	close(proxy_fd);
+
+	for (unsigned long index = 0; index < nblocks; index++) {
+		if (!bitmap_test(bm, index)) {
+			off_t iofrom = index * CBLOCKSIZE;
+			size_t iolen = CBLOCKSIZE;
+			int ret;
+
+			ret = nbd_client_send_read_request(ctl_fd, iofrom, iolen);
+			if (ret < 0)
+				err("send_read_request, %m");
+
+			char *buf = g_malloc(iolen);
+			ret = nbd_client_recv_read_reply(ctl_fd, buf, iolen);
+			if (ret < 0)
+				err("recv_read_reply");
+
+			g_free(buf);
+		}
+	}
+
+	close(ctl_fd);
+	/* make sure this session is cleaned up in xnbd_proxy */
+	char buf[1];
+	net_recv_all_or_abort(fd, buf, 1);
+
+	close(fd);
+}
+
+unsigned long get_cached(unsigned long *bm, unsigned long nblocks)
+{
+	unsigned long cached = 0;
+	for (unsigned long index = 0; index < nblocks; index++) {
+		if (bitmap_test(bm, index))
+			cached += 1;
+	}
+
+	return cached;
+}
+
+static struct option longopts[] = {
+	{"query", no_argument, NULL, 'q'},
+	{"cache-all-blocks", no_argument, NULL, 'c'},
+	{"restart-as-target", no_argument, NULL, 'r'},
+	{NULL, 0, NULL, 0},
+};
+
+static const char *help_string = "\
+Usage: \n\
+  xnbd-bgctl {Options} control_unix_socket \n\
+\n\
+Options: \n\
+  --query              query current status of xnbd_proxy \n\
+  --cache-all-blocks   cache all blocks \n\
+  --restart-as-target  restart all sessions as target mode \n\
+";
+
+
+void show_help_and_exit(const char *msg)
+{
+	if (msg)
+		info("%s\n", msg);
+
+	fprintf(stderr, "%s\n", help_string);
+	exit(EXIT_FAILURE);
+}
 
 int main(int argc, char **argv)
 {
-	if (argc != 3) {
-		printf("%s --cache-all-blocks bgctlpath\n", argv[0]);
-		return 1;
+	enum xnbd_bgctl_cmd_type {
+		xnbd_bgctl_cmd_unknown,
+		xnbd_bgctl_cmd_query,
+		xnbd_bgctl_cmd_cache_all_blocks,
+		xnbd_bgctl_cmd_restart_as_target
+	} cmd = xnbd_bgctl_cmd_unknown;
+
+	for (;;) {
+		int c;
+		int index = 0;
+
+		c = getopt_long(argc, argv, "qcr", longopts, &index);
+		if (c == -1) /* all options were parsed */
+			break;
+
+		switch (c) {
+			case 'q':
+				if (cmd != xnbd_bgctl_cmd_unknown)
+					show_help_and_exit("specify one mode");
+			
+				cmd = xnbd_bgctl_cmd_query;
+				break;
+
+			case 'c':
+				if (cmd != xnbd_bgctl_cmd_unknown)
+					show_help_and_exit("specify one mode");
+
+				cmd = xnbd_bgctl_cmd_cache_all_blocks;
+				break;
+
+			case 'r':
+				if (cmd != xnbd_bgctl_cmd_unknown)
+					show_help_and_exit("specify one mode");
+
+				cmd = xnbd_bgctl_cmd_restart_as_target;
+				break;
+
+			case '?':
+				show_help_and_exit("unknown option");
+				break;
+
+			default:
+				err("getopt");
+		}
 	}
 
-	if (strcmp(argv[1], "--cache-all-blocks") == 0) {
-		char *bgctlpath = argv[2];
+	if (argc - optind != 1)
+		show_help_and_exit("specify a control socket file");
 
-		int fd = open(bgctlpath, O_WRONLY);
-		if (fd < 0)
-			err("open %s, %m", bgctlpath);
+	if (cmd == xnbd_bgctl_cmd_unknown)
+		cmd = xnbd_bgctl_cmd_query;
 
-		unsigned long bindex = XNBD_BGCTL_MAGIC_CACHE_ALL;
-		write_all(fd, &bindex, sizeof(bindex));
+	char *unix_path = argv[optind];
+	size_t bmlen;
 
-		close(fd);
-	} else
-		err("unknown options");
+	struct xnbd_proxy_query *query = create_proxy_query(unix_path);
+	unsigned long nblocks = get_disk_nblocks(query->disksize);
+	unsigned long *bm = bitmap_open_file(query->bmpath, nblocks, &bmlen, 1, 0);
+	unsigned long cached = get_cached(bm, nblocks);
+
+	info("%s (%s): disksize %ju", query->diskpath, query->bmpath, query->disksize);
+	info("cached blocks %lu / %lu", cached, nblocks);
+
+	switch (cmd) {
+		case xnbd_bgctl_cmd_query:
+			break;
+
+		case xnbd_bgctl_cmd_cache_all_blocks:
+			cache_all_blocks(unix_path, bm, nblocks);
+			break;
+
+		case xnbd_bgctl_cmd_restart_as_target:
+			{
+				int ret = kill(query->master_pid, SIGHUP);
+				if (ret < 0)
+					err("send SIGHUP to %d", query->master_pid);
+			}
+			info("set xnbd (pid %d) to target mode", query->master_pid);
+			break;
+
+		case xnbd_bgctl_cmd_unknown:
+		default:
+			err("bug: not reached");
+	}
+
+
+	g_free(query);
+	bitmap_close_file(bm, bmlen);
 
 	return 0;
 }
