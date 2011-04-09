@@ -27,7 +27,11 @@ RM=rm
 
 # -O3 $(MAKE)s a broken binary.
 # CFLAGS_COMMON=-g -O2 -Wall -Wextra -Wstrict-aliasing=2 -Wformat=2 -Wcast-qual -Wcast-align -Wwrite-strings -Wfloat-equal -Wpointer-arith -Wswitch-enum -Wconversion -fstack-protector -fstack-check -Wextra -std=gnu99 `pkg-config --cflags --libs glib-2.0 gthread-2.0` -llzo2
+
 CFLAGS_COMMON=-g -O2 -Wall -Wextra -Wstrict-aliasing=2 -Wformat=2 -Wcast-qual -Wcast-align -Wwrite-strings -Wfloat-equal -Wpointer-arith -Wswitch-enum -Wconversion -fstack-protector -fstack-check -std=gnu99 `pkg-config --cflags --libs glib-2.0 gthread-2.0`
+CFLAGS_COMMON=-g -O2 -Wall -Wextra -Wstrict-aliasing=2 -Wformat=2 -Wcast-align -Wwrite-strings -Wfloat-equal -Wpointer-arith -Wswitch-enum -fstack-protector -fstack-check -std=gnu99 `pkg-config --cflags --libs glib-2.0 gthread-2.0`
+
+
 #CFLAGS_COMMON=-g -O2 -Wall -Wextra -fstack-check -std=gnu99 `pkg-config --cflags --libs glib-2.0 gthread-2.0` -llzo2 -DXNBD_LZO
 #CFLAGS_COMMON=-g -O2 -ftrapv -Wall -Wextra -Wstrict-aliasing=2 -Wformat=2 -Wcast-qual -Wcast-align -Wwrite-strings -Wfloat-equal -Wpointer-arith -Wswitch-enum -Wconversion -fstack-protector -fstack-check -std=gnu99 `pkg-config --cflags --libs glib-2.0 gthread-2.0` -llzo2
 XUTILSPATH=./lib
@@ -43,7 +47,7 @@ CFLAGS_DEBUG=$(CFLAGS_COMMON) -I$(XUTILSPATH) -L$(XUTILSPATH) -lxutils_dbg -DXNB
 SRC=xnbd.c xnbd_common.c xnbd_cachestat.c xnbd_proxy.c xnbd_proxy_forwarder.c xnbd_target.c xnbd_target_cow_lzo.c
 OBJ=$(SRC:%.c=%.o)
 
-xnbdobj_dbg=$(patsubst %.c, %___dbg.o, $(SRC))
+OBJ_DBG=$(patsubst %.c, %___dbg.o, $(SRC))
 
 
 %.o: %.c
@@ -72,13 +76,9 @@ xnbd-server: $(OBJ)
 	$(MAKE) -C $(XUTILSPATH)
 	$(CC) $^ $(CFLAGS) -o xnbd-server 
 
-xnbd-server-debug: $(xnbdobj_dbg)
+xnbd-server-debug: $(OBJ_DBG)
 	$(MAKE) -C $(XUTILSPATH)
 	$(CC) $^ $(CFLAGS_DEBUG) -o xnbd-server-debug
-
-xnbd-server-test: xnbd_proxy.c $(filter-out xnbd_proxy.o, $(OBJ))
-	$(MAKE) -C $(XUTILSPATH)
-	$(CC) $^ $(CFLAGS) -DXNBD_STATIC_BGCTLPATH -o xnbd-server-test
 
 xnbd-server-cachestat: $(OBJ)
 	$(MAKE) -C $(XUTILSPATH)
