@@ -228,9 +228,11 @@ int nbd_server_recv_request(int clientfd, off_t disksize, uint32_t *iotype_arg, 
 
 	bzero(&request, sizeof(request));
 
-	ret = net_recv_all(clientfd, &request, sizeof(request));
-	if (check_fin(ret, errno, sizeof(request))) {
-		warn("recv_request got FIN, disconnected");
+	ret = net_recv_all_or_error(clientfd, &request, sizeof(request));
+	// ret = net_recv_all(clientfd, &request, sizeof(request));
+	// if (check_fin(ret, errno, sizeof(request))) {
+	if (ret < 0) {
+		warn("recv_request: peer closed or error");
 		return -3;
 	}
 
