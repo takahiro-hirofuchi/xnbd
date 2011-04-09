@@ -61,9 +61,9 @@ void read_all(int fd, void *buf, size_t len)
 	io_all(fd, buf, len, 1);
 }
 
-void write_all(int fd, void *buf, size_t len)
+void write_all(int fd, const void *buf, size_t len)
 {
-	io_all(fd, buf, len, 0);
+	io_all(fd, (void *) buf, len, 0);
 }
 
 

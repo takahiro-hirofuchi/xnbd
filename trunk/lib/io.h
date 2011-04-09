@@ -36,7 +36,7 @@
 
 
 void read_all(int fd, void *buf, size_t len);
-void write_all(int fd, void *buf, size_t len);
+void write_all(int fd, const void *buf, size_t len);
 void dump_buffer(const char *buff, size_t bufflen);
 void dump_buffer_all(const char *buff, size_t bufflen);
 
