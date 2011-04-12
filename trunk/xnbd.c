@@ -29,7 +29,6 @@
 
 
 
-const int XNBD_PORT = 8520;
 
 
 
