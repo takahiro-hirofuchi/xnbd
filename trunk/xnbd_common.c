@@ -26,6 +26,7 @@
 const unsigned int CBLOCKSIZE = 4096;
 unsigned int PAGESIZE = 4096;
 
+const int XNBD_PORT = 8520;
 
 
 

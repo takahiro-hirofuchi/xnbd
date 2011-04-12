@@ -199,8 +199,8 @@ extern const unsigned long XNBD_BGCTL_MAGIC_SHUTDOWN;
 
 
 
-
-
+/* default XNBD server port */
+extern const int XNBD_PORT;
 
 
 
