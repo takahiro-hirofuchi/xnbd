@@ -60,17 +60,15 @@ static int del_diskimg(struct diskimg_list *list, int num)
 
 static int has_diskimg(struct diskimg_list *list, char *dname)
 {
-	int c = 0;
-	for (int i = 0; i < MAX_DISKIMG_NUM; i++) {
-		if (list->diskimgs[i] != NULL) {
+	int range = list->num_of_diskimgs;
+	for (int i = 0; i < range; i++) {
+		if (list->diskimgs[i] == NULL)
+			range++;
+		else
 			if (strcmp(list->diskimgs[i], dname) == 0)
 				return 0;
-		}
-		c++;
-		if (c == list->num_of_diskimgs)
-			return -1;
 	}
-	return -2;
+	return -1;
 }
 
 static void list_diskimg(struct diskimg_list *list, FILE *fp)
