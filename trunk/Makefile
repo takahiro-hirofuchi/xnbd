@@ -63,7 +63,7 @@ OBJ_DBG=$(patsubst %.c, %___dbg.o, $(SRC))
 	$(CC) -MM $(CFLAGS_DEBUG) $< -MQ $@ -MQ $(patsubst %.d, %.o, $@) -MF $@
 
 
-default: xnbd-server xnbd-bgctl xnbd-client xnbd-watchdog
+default: xnbd-server xnbd-bgctl xnbd-client xnbd-watchdog xnbd-wrapper
 
 # 1. Put $(OBJ) before $(CFLAGS). To avoid undefined reference error, object
 # files must be followed by static libraries to be linked with them.
@@ -107,6 +107,10 @@ xnbd-client: xnbd_client.c $(filter-out xnbd.o, $(OBJ))
 xnbd-watchdog: xnbd_watchdog.c $(filter-out xnbd.o, $(OBJ))
 	$(MAKE) -C $(XUTILSPATH)
 	$(CC) $^ $(CFLAGS) -o xnbd-watchdog
+
+xnbd-wrapper: xnbd_wrapper.c $(filter-out xnbd.o, $(OBJ))
+	$(MAKE) -C $(XUTILSPATH)
+	$(CC) $^ $(CFLAGS) -o xnbd-wrapper
 
 .PHONY: manpages
 manpages:
