@@ -240,6 +240,7 @@ int target_mode_main_mmap(struct xnbd_session *ses)
 
 int xnbd_target_session_server(struct xnbd_session *ses)
 {
+	set_process_name("target_wrk");
 	for (;;) {
 		int ret = 0;
 
