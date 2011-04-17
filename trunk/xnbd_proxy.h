@@ -61,6 +61,10 @@ struct proxy_priv {
 
 
 	int need_exit;
+
+	int need_retry;
+	int prepare_done;
+	unsigned long seqnum;
 };
 
 
@@ -76,6 +80,9 @@ struct xnbd_proxy {
 	/* queue between forwarder_tx and forwarder_rx */
 	GAsyncQueue *fwd_rx_queue;
 
+	/* queue between forwarder_tx and forwarder_rx */
+	GAsyncQueue *fwd_retry_queue;
+
 	struct xnbd_info *xnbd;
 
 	int remotefd;
@@ -90,7 +97,8 @@ struct xnbd_proxy {
 enum xnbd_proxy_cmd_type {
 	XNBD_PROXY_CMD_UNKNOWN = 0,
 	XNBD_PROXY_CMD_QUERY_STATUS,
-	XNBD_PROXY_CMD_REGISTER_FD
+	XNBD_PROXY_CMD_REGISTER_FD,
+	XNBD_PROXY_CMD_REGISTER_FORWARDER_FD,
 };
 
 /* query about current status via a unix socket */
@@ -106,4 +114,5 @@ void *forwarder_rx_thread_main(void *arg);
 void *forwarder_tx_thread_main(void *arg);
 
 extern struct proxy_priv priv_stop_forwarder;
+void proxy_priv_dump(struct proxy_priv *priv);
 void block_all_signals(void);
