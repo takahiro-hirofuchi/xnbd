@@ -300,17 +300,11 @@ static int xnbd_connect(const char *devpath, unsigned long blocksize, unsigned i
 				break;
 		}
 
-		/* re-read partition table */
+		/*
+		 * re-read partition table.
+		 * this may fail if the kernel does not support it.
+		 **/
 		ioctl(nbd, BLKRRPART);
-
-		/* Some kernels do not have BLKRRPART. */
-#if 0
-		if (ret < 0) {
-			warn("ioctl(BLKRRPART), ret %d, %m", ret);
-			close(nbd);
-			open(devpath, O_RDONLY);
-		}
-#endif 
 
 		close(sockfd);
 		close(nbd);
