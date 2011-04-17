@@ -146,7 +146,7 @@ static void nbddev_watchdog(const char *devpath, unsigned int timeout, unsigned 
 {
 	int listenfd, notifyfd;
 
-	get_event_connecter(&notifyfd, &listenfd);
+	make_pipe(&notifyfd, &listenfd);
 
 	pid_t pid = fork_or_abort();
 	if (pid == 0) {
