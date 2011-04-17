@@ -53,7 +53,8 @@ void reconnect(char *unix_path, char *rhost, char *rport)
 	close(fd);
 }
 
-void cache_all_blocks(char *unix_path, unsigned long *bm, unsigned long nblocks)
+
+void start_register_fd(char *unix_path, int *fd_ret, int *ctl_fd_ret)
 {
 	int fd = unix_connect(unix_path);
 
@@ -65,31 +66,137 @@ void cache_all_blocks(char *unix_path, unsigned long *bm, unsigned long nblocks)
 	unix_send_fd(fd, proxy_fd);
 	close(proxy_fd);
 
-	for (unsigned long index = 0; index < nblocks; index++) {
-		if (!bitmap_test(bm, index)) {
-			off_t iofrom = index * CBLOCKSIZE;
-			size_t iolen = CBLOCKSIZE;
-			int ret;
+	*fd_ret = fd;
+	*ctl_fd_ret = ctl_fd;
+}
 
-			ret = nbd_client_send_read_request(ctl_fd, iofrom, iolen);
-			if (ret < 0)
-				err("send_read_request, %m");
-
-			char *buf = g_malloc(iolen);
-			ret = nbd_client_recv_read_reply(ctl_fd, buf, iolen);
-			if (ret < 0)
-				err("recv_read_reply");
-
-			g_free(buf);
-		}
-	}
-
+void end_register_fd(int fd, int ctl_fd)
+{
+	nbd_client_send_disc_request(ctl_fd);
 	close(ctl_fd);
+
 	/* make sure this session is cleaned up in xnbd_proxy */
 	char buf[1];
 	net_recv_all_or_abort(fd, buf, 1);
 
 	close(fd);
+}
+
+void *setup_shared_buffer(char *unix_path)
+{
+	char tmppath[] = "/tmp/xnbd-proxy-shared-buffer.XXXXXX";
+	size_t len = XNBD_SHARED_BUFF_SIZE;
+
+	int buf_fd = mkstemp(tmppath);
+	if (buf_fd < 0) 
+		err("mkstemp, %m");
+
+	unlink(tmppath);
+
+	int ret = ftruncate(buf_fd, len);
+	if (ret < 0)
+		err("ftruncate, %m");
+
+	void *shared_buff = mmap(NULL, len, PROT_WRITE, MAP_SHARED, buf_fd, 0);
+	if (!shared_buff)
+		err("mmap, %m");
+
+	info("shared buffer allocated, %p (len %u)", shared_buff, len);
+
+	/* send buf_fd */
+	int unix_fd = unix_connect(unix_path);
+	enum xnbd_proxy_cmd_type cmd = XNBD_PROXY_CMD_REGISTER_SHARED_BUFFER_FD;
+	net_send_all_or_abort(unix_fd, &cmd, sizeof(cmd));
+	unix_send_fd(unix_fd, buf_fd);
+	close(unix_fd);
+
+
+	close(buf_fd);
+
+	return shared_buff;
+}
+
+void close_shared_buffer(void *shared_buff)
+{
+	size_t len = XNBD_SHARED_BUFF_SIZE;
+	munmap(shared_buff, len);
+	info("shared buffer deallocated, %p (len %u)", shared_buff, len);
+}
+
+void cache_block_range(char *unix_path, unsigned long *bm, unsigned long disk_nblocks, int remote_fd, char *shared_buff)
+{
+	int ctl_fd, unix_fd;
+	start_register_fd(unix_path, &unix_fd, &ctl_fd);
+
+
+	for (unsigned long index = 0; index < disk_nblocks; index += XNBD_SHARED_BUFF_NBLOCKS) {
+		unsigned long nblocks = XNBD_SHARED_BUFF_NBLOCKS;
+		if (disk_nblocks - index < XNBD_SHARED_BUFF_NBLOCKS)
+			nblocks = disk_nblocks - index;
+
+		int all_cached = 1;
+		for (unsigned long i = index; i < index + nblocks; i++) {
+			if (!bitmap_test(bm, i)) {
+				all_cached = 0;
+				break;
+			}
+		}
+
+		if (all_cached)
+			continue;
+
+		off_t iofrom = (off_t) index * CBLOCKSIZE;
+		size_t iolen = (size_t) nblocks * CBLOCKSIZE;
+		int ret = nbd_client_send_read_request(remote_fd, iofrom, iolen);
+		if (ret < 0)
+			err("send_read_request, %m");
+
+		ret = nbd_client_recv_read_reply(remote_fd, shared_buff, iolen);
+		if (ret < 0)
+			err("recv_read_reply, %m");
+
+		xnbd_proxy_control_cache_block(ctl_fd, index, nblocks);
+	}
+
+
+	end_register_fd(unix_fd, ctl_fd);
+}
+
+void cache_all_blocks_with_dedicated_connection(char *unix_path, unsigned long *bm, struct xnbd_proxy_query *query)
+{
+	int remote_fd = net_tcp_connect(query->rhost, query->rport);
+	if (remote_fd < 0)
+		err("connect, %m");
+
+	off_t remote_disksize = nbd_negotiate_with_server(remote_fd);
+	if (remote_disksize != query->disksize)
+		err("disksize mismatch");
+
+
+	char *shared_buff = setup_shared_buffer(unix_path);
+
+	unsigned long nblocks = get_disk_nblocks(query->disksize);
+	cache_block_range(unix_path, bm, nblocks, remote_fd, shared_buff);
+
+	close_shared_buffer(shared_buff);
+
+	nbd_client_send_disc_request(remote_fd);
+	close(remote_fd);
+}
+
+
+void cache_all_blocks(char *unix_path, unsigned long *bm, unsigned long nblocks)
+{
+	int unix_fd, ctl_fd;
+	start_register_fd(unix_path, &unix_fd, &ctl_fd);
+
+	for (unsigned long index = 0; index < nblocks; index++) {
+		if (!bitmap_test(bm, index)) {
+			xnbd_proxy_control_cache_block(ctl_fd, index, 1);
+		}
+	}
+
+	end_register_fd(unix_fd, ctl_fd);
 }
 
 unsigned long get_cached(unsigned long *bm, unsigned long nblocks)
@@ -105,21 +212,28 @@ unsigned long get_cached(unsigned long *bm, unsigned long nblocks)
 
 static struct option longopts[] = {
 	/* commands */
-	{"query", no_argument, NULL, 'q'},
-	{"cache-all-blocks", no_argument, NULL, 'c'},
-	{"restart-as-target", no_argument, NULL, 'r'},
-	{"reconnect", no_argument, NULL, 'R'},
+	{"query",      no_argument, NULL, 'q'},
+	{"shutdown",   no_argument, NULL, 's'},
+	{"cache-all",  no_argument, NULL, 'c'},
+	{"cache-all2", no_argument, NULL, 'C'},
+	{"reconnect",  no_argument, NULL, 'r'},
 	{NULL, 0, NULL, 0},
 };
 
 static const char *help_string = "\
 Usage: \n\
-  xnbd-bgctl {Options} control_unix_socket \n\
+  xnbd-bgctl --query       control_unix_socket \n\
+  xnbd-bgctl --shutdown    control_unix_socket \n\
+  xnbd-bgctl --cache-all   control_unix_socket \n\
+  xnbd-bgctl --cache-all2  control_unix_socket \n\
+  xnbd-bgctl --reconnect   control_unix_socket remote_host remote_port \n\
 \n\
-Options: \n\
-  --query              query current status of xnbd_proxy \n\
-  --cache-all-blocks   cache all blocks \n\
-  --restart-as-target  restart all sessions as target mode \n\
+Commands: \n\
+  --query       query current status of the proxy mode \n\
+  --cache-all   cache all blocks \n\
+  --cache-all2  cache all blocks with the background connection \n\
+  --shutdown    shutdown the proxy mode and start the target mode \n\
+  --reconnect   reconnect the forwarding session \n\
 ";
 
 
@@ -137,8 +251,9 @@ int main(int argc, char **argv)
 	enum xnbd_bgctl_cmd_type {
 		xnbd_bgctl_cmd_unknown,
 		xnbd_bgctl_cmd_query,
-		xnbd_bgctl_cmd_cache_all_blocks,
-		xnbd_bgctl_cmd_restart_as_target,
+		xnbd_bgctl_cmd_cache_all,
+		xnbd_bgctl_cmd_cache_all2,
+		xnbd_bgctl_cmd_shutdown,
 		xnbd_bgctl_cmd_reconnect,
 	} cmd = xnbd_bgctl_cmd_unknown;
 
@@ -146,7 +261,7 @@ int main(int argc, char **argv)
 		int c;
 		int index = 0;
 
-		c = getopt_long(argc, argv, "qcrR", longopts, &index);
+		c = getopt_long(argc, argv, "qscCr", longopts, &index);
 		if (c == -1) /* all options were parsed */
 			break;
 
@@ -158,21 +273,28 @@ int main(int argc, char **argv)
 				cmd = xnbd_bgctl_cmd_query;
 				break;
 
+			case 's':
+				if (cmd != xnbd_bgctl_cmd_unknown)
+					show_help_and_exit("specify one mode");
+
+				cmd = xnbd_bgctl_cmd_shutdown;
+				break;
+
 			case 'c':
 				if (cmd != xnbd_bgctl_cmd_unknown)
 					show_help_and_exit("specify one mode");
 
-				cmd = xnbd_bgctl_cmd_cache_all_blocks;
+				cmd = xnbd_bgctl_cmd_cache_all;
 				break;
 
-			case 'r':
+			case 'C':
 				if (cmd != xnbd_bgctl_cmd_unknown)
 					show_help_and_exit("specify one mode");
 
-				cmd = xnbd_bgctl_cmd_restart_as_target;
+				cmd = xnbd_bgctl_cmd_cache_all2;
 				break;
 
-			case 'R':
+			case 'r':
 				if (cmd != xnbd_bgctl_cmd_unknown)
 					show_help_and_exit("specify one mode");
 
@@ -193,7 +315,6 @@ int main(int argc, char **argv)
 	char *rport = NULL;
 
 
-
 	switch (cmd) {
 		case xnbd_bgctl_cmd_reconnect:
 			if (argc - optind == 3) {
@@ -205,8 +326,9 @@ int main(int argc, char **argv)
 
 			break;
 
-		case xnbd_bgctl_cmd_cache_all_blocks:
-		case xnbd_bgctl_cmd_restart_as_target:
+		case xnbd_bgctl_cmd_cache_all:
+		case xnbd_bgctl_cmd_cache_all2:
+		case xnbd_bgctl_cmd_shutdown:
 		case xnbd_bgctl_cmd_query:
 		case xnbd_bgctl_cmd_unknown:
 			if (argc - optind == 1)
@@ -234,17 +356,21 @@ int main(int argc, char **argv)
 		case xnbd_bgctl_cmd_query:
 			break;
 
-		case xnbd_bgctl_cmd_cache_all_blocks:
-			cache_all_blocks(unix_path, bm, nblocks);
-			break;
-
-		case xnbd_bgctl_cmd_restart_as_target:
+		case xnbd_bgctl_cmd_shutdown:
 			{
 				int ret = kill(query->master_pid, SIGHUP);
 				if (ret < 0)
 					err("send SIGHUP to %d", query->master_pid);
 			}
 			info("set xnbd (pid %d) to target mode", query->master_pid);
+			break;
+
+		case xnbd_bgctl_cmd_cache_all:
+			cache_all_blocks(unix_path, bm, nblocks);
+			break;
+
+		case xnbd_bgctl_cmd_cache_all2:
+			cache_all_blocks_with_dedicated_connection(unix_path, bm, query);
 			break;
 
 		case xnbd_bgctl_cmd_reconnect:
