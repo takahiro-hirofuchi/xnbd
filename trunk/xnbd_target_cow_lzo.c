@@ -862,6 +862,7 @@ int target_mode_main_cow(struct xnbd_session *ses)
 
 int xnbd_cow_target_session_server(struct xnbd_session *ses)
 {
+	set_process_name("cow_wrk");
 	//setup_debug_buf(ses->xnbd->ds);
 
 	for (;;) {
