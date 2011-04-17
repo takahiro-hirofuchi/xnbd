@@ -63,7 +63,7 @@ int nbd_client_send_request_header(int remotefd, uint32_t iotype, off_t iofrom, 
 
 	ssize_t ret = net_send_all(remotefd, &request, sizeof(request));
 	if (ret < (ssize_t) sizeof(request)) {
-		warn("send header");
+		warn("sending a nbd client header failed");
 		return -1;
 	}
 
