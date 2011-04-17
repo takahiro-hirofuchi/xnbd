@@ -55,18 +55,21 @@ void block_all_signals(void)
 }
 
 
+/* used in xnbd-tester */
+void xnbd_proxy_control_cache_block(int ctl_fd, unsigned long index, unsigned long nblocks)
+{
+	off_t iofrom = index * CBLOCKSIZE;
+	size_t iolen = nblocks * CBLOCKSIZE;
+	int ret;
 
+	ret = nbd_client_send_request_header(ctl_fd, NBD_CMD_BGCOPY, iofrom, iolen, (UINT64_MAX));
+	if (ret < 0)
+		err("send_read_request, %m");
 
-
-
-
-
-
-
-
-
-
-
+	ret = nbd_client_recv_header(ctl_fd);
+	if (ret < 0)
+		err("recv header, %m");
+}
 
 
 
@@ -428,6 +431,8 @@ int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
 					query.disksize = proxy->xnbd->disksize;
 					g_strlcpy(query.diskpath, proxy->xnbd->proxy_diskpath, sizeof(query.diskpath));
 					g_strlcpy(query.bmpath, proxy->xnbd->proxy_bmpath, sizeof(query.bmpath));
+					g_strlcpy(query.rhost, proxy->xnbd->proxy_rhost, sizeof(query.rhost));
+					g_strlcpy(query.rport, proxy->xnbd->proxy_rport, sizeof(query.rport));
 					query.master_pid = getppid();
 					info("send current status (wrk_fd %d)", wrk_fd);
 					net_send_all_or_error(wrk_fd, &query, sizeof(query));
