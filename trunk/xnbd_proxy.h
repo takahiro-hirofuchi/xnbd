@@ -68,6 +68,8 @@ struct proxy_priv {
 };
 
 
+#define XNBD_SHARED_BUFF_NBLOCKS  1000
+#define XNBD_SHARED_BUFF_SIZE (CBLOCKSIZE * XNBD_SHARED_BUFF_NBLOCKS)
 
 
 struct xnbd_proxy {
@@ -92,6 +94,9 @@ struct xnbd_proxy {
 	/* cached bitmap array (mmaped) */
 	unsigned long *cbitmap;
 	size_t cbitmaplen;
+
+
+	char *shared_buff;
 };
 
 enum xnbd_proxy_cmd_type {
@@ -99,6 +104,7 @@ enum xnbd_proxy_cmd_type {
 	XNBD_PROXY_CMD_QUERY_STATUS,
 	XNBD_PROXY_CMD_REGISTER_FD,
 	XNBD_PROXY_CMD_REGISTER_FORWARDER_FD,
+	XNBD_PROXY_CMD_REGISTER_SHARED_BUFFER_FD
 };
 
 /* query about current status via a unix socket */
