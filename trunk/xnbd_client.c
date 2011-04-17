@@ -301,7 +301,7 @@ static int xnbd_connect(const char *devpath, unsigned long blocksize, unsigned i
 		}
 
 		/* re-read partition table */
-		int ret = ioctl(nbd, BLKRRPART);
+		ioctl(nbd, BLKRRPART);
 
 		/* Some kernels do not have BLKRRPART. */
 #if 0
