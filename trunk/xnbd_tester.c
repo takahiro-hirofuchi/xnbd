@@ -118,6 +118,7 @@ void *bgctl_thread_main(void *data)
 			break;
 	}
 
+	nbd_client_send_disc_request(ctl_fd);
 	close(ctl_fd);
 	/* make sure this session is cleaned up in xnbd_proxy */
 	char buf[1];
