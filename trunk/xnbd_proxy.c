@@ -262,6 +262,8 @@ void proxy_shutdown(struct xnbd_proxy *proxy)
 	g_async_queue_unref(proxy->fwd_tx_queue);
 	g_async_queue_unref(proxy->fwd_rx_queue);
 
+	if (proxy->shared_buff)
+		munmap(proxy->shared_buff, XNBD_SHARED_BUFF_SIZE);
 
 	close(proxy->cachefd);
 	bitmap_close_file(proxy->cbitmap, proxy->cbitmaplen);
@@ -481,6 +483,25 @@ int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
 				}
 				break;
 
+			case XNBD_PROXY_CMD_REGISTER_SHARED_BUFFER_FD:
+				{
+					/* TODO use this */
+					if (proxy->shared_buff)
+						warn("shared_buff was already assigned; do nothing");
+					else {
+						int buf_fd = unix_recv_fd(wrk_fd);
+						info("register shared buffer fd (buf_fd %d wrk_fd %d)", buf_fd, wrk_fd);
+
+						proxy->shared_buff = mmap(NULL, XNBD_SHARED_BUFF_SIZE, PROT_READ, MAP_SHARED, buf_fd, 0);
+						if (!proxy->shared_buff)
+							err("mmap, %m");
+
+						close(buf_fd);
+					}
+				}
+				break;
+
+
 			case XNBD_PROXY_CMD_UNKNOWN:
 			default:
 				warn("uknown proxy cmd %d (wrk_fd %d)", cmd, wrk_fd);
@@ -661,6 +682,7 @@ void xnbd_proxy_start(struct xnbd_info *xnbd)
 int xnbd_proxy_session_server(struct xnbd_session *ses)
 {
 	struct xnbd_info *xnbd = ses->xnbd;
+	set_process_name("proxy_wrk");
 
 	/* unix_fd is connected to ps->wrk_fd */
 	int unix_fd = unix_connect(xnbd->proxy_unixpath);
