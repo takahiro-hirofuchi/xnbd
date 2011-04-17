@@ -26,7 +26,7 @@
 
 
 /* special entry to let threads exit */
-struct proxy_priv priv_stop_forwarder = { .nreq = 0 };
+struct proxy_priv priv_stop_forwarder = { .nreq = 0, .need_exit = 0, .iotype = -1 };
 
 struct proxy_session {
 	int nbd_fd;
@@ -109,7 +109,7 @@ int recv_request(struct proxy_session *ps)
 	}
 
 	if (proxy->xnbd->readonly) {
-		if (iotype != NBD_CMD_READ) {
+		if (iotype == NBD_CMD_WRITE) {
 			warn("write request to readonly cache");
 			goto err_handle;
 		}
@@ -156,6 +156,10 @@ int recv_request(struct proxy_session *ps)
 	} else if (iotype == NBD_CMD_READ) {
 		priv->read_buff = g_malloc(iolen);
 
+	} else if (iotype == NBD_CMD_BGCOPY) {
+		/* do nothing here */
+		;
+
 	} else {
 		warn("client bug: uknown iotype");
 		goto err_handle;
@@ -197,12 +201,26 @@ static void set_signal_xnbd_service(void)
 }
 
 
+void proxy_initialize_forwarder(struct xnbd_proxy *proxy, int remotefd)
+{
+	proxy->remotefd   = remotefd;
+	proxy->tid_fwd_rx = pthread_create_or_abort(forwarder_rx_thread_main, proxy);
+	proxy->tid_fwd_tx = pthread_create_or_abort(forwarder_tx_thread_main, proxy);
+}
+
+void proxy_shutdown_forwarder(struct xnbd_proxy *proxy)
+{
+	g_async_queue_push(proxy->fwd_tx_queue, &priv_stop_forwarder);
+
+	pthread_join(proxy->tid_fwd_tx, NULL);
+	info("forwarder_tx exited");
+	pthread_join(proxy->tid_fwd_rx, NULL);
+	info("forwarder_rx exited");
+}
 
 /* called in a proxy process */
 void proxy_initialize(struct xnbd_info *xnbd, struct xnbd_proxy *proxy)
 {
-
-
 	g_thread_init(NULL);
 
 
@@ -211,36 +229,36 @@ void proxy_initialize(struct xnbd_info *xnbd, struct xnbd_proxy *proxy)
 	/* keep reference count! */
 	proxy->fwd_tx_queue = g_async_queue_new();
 	proxy->fwd_rx_queue = g_async_queue_new();
+	proxy->fwd_retry_queue = g_async_queue_new();
 
 
 
+	/* set up a bitmap and a cache disk */
+	proxy->cbitmap = bitmap_open_file(xnbd->proxy_bmpath, xnbd->nblocks, &proxy->cbitmaplen, 0, 1);
 
-	proxy->tid_fwd_rx = pthread_create_or_abort(forwarder_rx_thread_main, proxy);
-	proxy->tid_fwd_tx = pthread_create_or_abort(forwarder_tx_thread_main, proxy);
+	int cachefd = open(xnbd->proxy_diskpath, O_RDWR | O_CREAT | O_NOATIME, S_IRUSR | S_IWUSR);
+	if (cachefd < 0)
+		err("open");
+	
+	off_t size = get_disksize(cachefd);
+	if (size != xnbd->disksize) {
+		warn("cache disk size (%ju) != target disk size (%ju)", size, xnbd->disksize);
+		warn("now ftruncate() it");
+		int ret = ftruncate(cachefd, xnbd->disksize);
+		if (ret < 0)
+			err("ftruncate");
+	}
+
+	proxy->cachefd = cachefd;
 }
 
-void xnbd_proxy_shutdown(struct xnbd_proxy *proxy)
+
+void proxy_shutdown(struct xnbd_proxy *proxy)
 {
-
-
-	g_async_queue_push(proxy->fwd_tx_queue, &priv_stop_forwarder);
-
-	pthread_join(proxy->tid_fwd_tx, NULL);
-	info("forwarder_tx exited");
-	pthread_join(proxy->tid_fwd_rx, NULL);
-	info("forwarder_rx exited");
-
-
-
-
+	g_async_queue_unref(proxy->fwd_retry_queue);
 	g_async_queue_unref(proxy->fwd_tx_queue);
 	g_async_queue_unref(proxy->fwd_rx_queue);
 
-
-	
-
-	nbd_client_send_disc_request(proxy->remotefd);
-	close(proxy->remotefd);
 
 	close(proxy->cachefd);
 	bitmap_close_file(proxy->cbitmap, proxy->cbitmaplen);
@@ -273,7 +291,6 @@ void *rx_thread_main(void *arg)
 	block_all_signals();
 
 	info("rx_thread %lu starts", pthread_self());
-	dbg("rx_thread %lu starts", pthread_self());
 
 
 	for (;;) {
@@ -299,10 +316,10 @@ void *tx_thread_main(void *arg)
 	block_all_signals();
 
 	info("tx_thread %lu starts", pthread_self());
-	dbg("tx_thread %lu starts", pthread_self());
 
 	for (;;) {
 		struct proxy_priv *priv = g_async_queue_pop(ps->tx_queue);
+		proxy_priv_dump(priv);
 
 		if (priv->need_exit)
 			need_exit = 1;
@@ -344,6 +361,18 @@ void *tx_thread_main(void *arg)
 	return NULL;
 }
 
+
+static gint unshift_func(gconstpointer a __attribute__((unused)),
+		       gconstpointer b __attribute__((unused)),
+			       gpointer user_data __attribute__((unused)))
+{
+	return -1;
+}
+
+static void g_async_queue_push_unshift(GAsyncQueue *queue, gpointer data)
+{
+	g_async_queue_push_sorted(queue, data, &unshift_func, NULL);
+}
 
 int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
 {
@@ -425,9 +454,31 @@ int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
 				}
 				break;
 
+			case XNBD_PROXY_CMD_REGISTER_FORWARDER_FD:
+				{
+					int fwd_fd = unix_recv_fd(wrk_fd);
+					info("register forwarder fd (nbd_fd %d wrk_fd %d)", fwd_fd, wrk_fd);
+					proxy_shutdown_forwarder(proxy);
+					nbd_client_send_disc_request(proxy->remotefd);
+					close(proxy->remotefd);
+
+					for (;;) {
+						struct proxy_priv *priv = g_async_queue_try_pop(proxy->fwd_retry_queue);
+						if (!priv)
+							break;
+
+						priv->need_retry = 0;
+
+						g_async_queue_push_unshift(proxy->fwd_tx_queue, priv);
+					}
+
+					proxy_initialize_forwarder(proxy, fwd_fd);
+				}
+				break;
+
 			case XNBD_PROXY_CMD_UNKNOWN:
 			default:
-				warn("uknown proxy cmd (wrk_fd %d)", wrk_fd);
+				warn("uknown proxy cmd %d (wrk_fd %d)", cmd, wrk_fd);
 		}
 
 		if (close_wrk_fd)
@@ -477,28 +528,6 @@ int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
 	return 0;
 }
 
-
-void proxy_initialize_cachedisk(struct xnbd_info *xnbd, struct xnbd_proxy *proxy)
-{
-	proxy->cbitmap = bitmap_open_file(xnbd->proxy_bmpath, xnbd->nblocks, &proxy->cbitmaplen, 0, 1);
-
-
-	int cachefd = open(xnbd->proxy_diskpath, O_RDWR | O_CREAT | O_NOATIME, S_IRUSR | S_IWUSR);
-	if (cachefd < 0)
-		err("open");
-	
-	off_t size = get_disksize(cachefd);
-	if (size != xnbd->disksize) {
-		warn("cache disk size (%ju) != target disk size (%ju)", size, xnbd->disksize);
-		warn("now ftruncate() it");
-		int ret = ftruncate(cachefd, xnbd->disksize);
-		if (ret < 0)
-			err("ftruncate");
-	}
-
-
-	proxy->cachefd = cachefd;
-}
 
 
 /* before calling this funciton, all sessions must be terminated */
@@ -553,9 +582,8 @@ void xnbd_proxy_start(struct xnbd_info *xnbd)
 		block_all_signals();
 
 		struct xnbd_proxy *proxy = g_malloc0(sizeof(struct xnbd_proxy));
-		proxy->remotefd = remotefd;
 		proxy_initialize(xnbd, proxy);
-		proxy_initialize_cachedisk(xnbd, proxy);
+		proxy_initialize_forwarder(proxy, remotefd);
 
 
 
@@ -597,7 +625,11 @@ void xnbd_proxy_start(struct xnbd_info *xnbd)
 
 
 		/* send an exit message to forwarder threads and join them */
-		xnbd_proxy_shutdown(proxy);
+
+		proxy_shutdown_forwarder(proxy);
+		proxy_shutdown(proxy);
+		nbd_client_send_disc_request(proxy->remotefd);
+		close(proxy->remotefd);
 		g_free(proxy);
 		close(unix_listen_fd);
 		unlink(xnbd->proxy_unixpath);

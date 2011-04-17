@@ -27,7 +27,11 @@
 void proxy_priv_dump(struct proxy_priv *priv)
 {
 	dbg("priv %p", priv);
+	dbg(" seqnum %lu", priv->seqnum);
 	dbg(" need_exit %d", priv->need_exit);
+	dbg(" need_retry %d", priv->need_retry);
+	dbg(" prepare_done %d", priv->prepare_done);
+
 	dbg(" tx_queue %p", priv->tx_queue);
 	dbg(" nreq   %d", priv->nreq);
 	for (int i = 0; i < priv->nreq; i++) {
@@ -210,17 +214,18 @@ void prepare_write_priv(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 	 **/
 }
 
+static unsigned long fwd_counter = 0;
 
 void *forwarder_tx_thread_main(void *arg)
 {
 	struct xnbd_proxy *proxy = (struct xnbd_proxy *) arg;
+	int sending_failed = 0;
 
 	set_process_name("proxy_fwd_tx");
 
 	block_all_signals();
 
 	info("create forwarder_tx thread %lu", pthread_self());
-	dbg("create forwarder_tx thread %lu", pthread_self());
 
 
 	for (;;) {
@@ -229,17 +234,30 @@ void *forwarder_tx_thread_main(void *arg)
 		priv = (struct proxy_priv *) g_async_queue_pop(proxy->fwd_tx_queue);
 		dbg("%lu --- process new queue element", pthread_self());
 
+		if (priv == &priv_stop_forwarder) {
+			g_async_queue_push(proxy->fwd_rx_queue, (gpointer) priv);
+			goto out_of_loop;
+		}
+
 		if (priv->need_exit) {
 			g_async_queue_push(proxy->fwd_rx_queue, (gpointer) priv);
 			continue;
 		}
 
 
-		/* TODO   */
-		if (priv->iotype == NBD_CMD_WRITE)
-			prepare_write_priv(proxy, priv);
-		else if (priv->iotype == NBD_CMD_READ)
-			prepare_read_priv(proxy, priv);
+
+		if (!priv->prepare_done) {
+			if (priv->iotype == NBD_CMD_WRITE)
+				prepare_write_priv(proxy, priv);
+			else if (priv->iotype == NBD_CMD_READ || priv->iotype == NBD_CMD_BGCOPY)
+				prepare_read_priv(proxy, priv);
+
+			priv->seqnum = fwd_counter;
+			fwd_counter += 1;
+
+			/* in retry, skip setting up forward requests */
+			priv->prepare_done = 1;
+		}
 
 
 		/* send read request as soon as possible */
@@ -248,19 +266,17 @@ void *forwarder_tx_thread_main(void *arg)
 
 			int ret = nbd_client_send_read_request(proxy->remotefd, priv->req[i].bindex_iofrom * CBLOCKSIZE, length);
 			if (ret < 0) {
-				/*
-				 * Should the proxy server fall back to a target mode?
-				 * See comments in the forwarder_rx thread.
-				 */
-				err("proxy: sending read request failed");
+				warn("sending read request failed, seqnum %lu", priv->seqnum);
+				sending_failed = 1;
+				break;
 			}
 		}
 
+		/* this marking works if nreq == 0 */
+		if (sending_failed)
+			priv->need_retry = 1;
+
 		g_async_queue_push(proxy->fwd_rx_queue, (gpointer) priv);
-
-
-		if (priv == &priv_stop_forwarder)
-			goto out_of_loop;
 	}
 
 out_of_loop:
@@ -271,6 +287,7 @@ out_of_loop:
 }
 
 
+static int receiving_failed = 0;
 int forwarder_rx_thread_mainloop(struct xnbd_proxy *proxy)
 {
 	struct xnbd_info *xnbd = proxy->xnbd;
@@ -286,13 +303,12 @@ int forwarder_rx_thread_mainloop(struct xnbd_proxy *proxy)
 
 	proxy_priv_dump(priv);
 
+	if (priv == &priv_stop_forwarder)
+		return -1;
 
 	if (priv->need_exit)
 		goto got_stop_session;
 
-
-	if (priv == &priv_stop_forwarder)
-		return -1;
 
 
 	/* large file support on 32bit architecutre */
@@ -319,23 +335,9 @@ int forwarder_rx_thread_mainloop(struct xnbd_proxy *proxy)
 		/* recv from server */
 		ret = nbd_client_recv_read_reply(proxy->remotefd, iobuf_partial, block_iolen);
 		if (ret < 0) {
-			warn("recv_read_reply error");
-			priv->reply.error = htonl(EPIPE);
-			net_send_all_or_abort(priv->clientfd, &priv->reply, sizeof(struct nbd_reply));
-
-			/*
-			 * The remote server is unexpectedly disconnected. The
-			 * proxy server may be able to
-			 *    - falls back to a target mode.
-			 *    - tries to reconnect the remote server.
-			 *    - etc.
-			 * 
-			 * Currently, the proxy server just exits. If you need
-			 * tough reliablity, consider DRBD or precopy disk
-			 * migration.
-			 *
-			 **/
-			exit(EXIT_FAILURE);
+			warn("forwarder: receiving a read reply failed, seqnum %lu", priv->seqnum);
+			receiving_failed = 1;
+			break;
 		}
 
 		/*
@@ -346,24 +348,28 @@ int forwarder_rx_thread_mainloop(struct xnbd_proxy *proxy)
 		 **/
 	}
 
+	if (receiving_failed)
+		priv->need_retry = 1;
 
-	if (priv->iotype == NBD_CMD_READ) {
-		/* we have to serialize all io to the cache disk. */
-		memcpy(priv->read_buff, iobuf, priv->iolen);
 
-	} else if (priv->iotype == NBD_CMD_WRITE) {
-		/*
-		 * This memcpy() must come before sending reply, so that xnbd-tester
-		 * avoids memcmp() mismatch.
-		 **/
-		memcpy(iobuf, priv->write_buff, priv->iolen);
+	if (!priv->need_retry) {
+		if (priv->iotype == NBD_CMD_READ) {
+			/* we have to serialize all io to the cache disk. */
+			memcpy(priv->read_buff, iobuf, priv->iolen);
 
-		/* Do not mark cbitmap here. */
-	}
+		} else if (priv->iotype == NBD_CMD_WRITE) {
+			/*
+			 * This memcpy() must come before sending reply, so that xnbd-tester
+			 * avoids memcmp() mismatch.
+			 **/
+			memcpy(iobuf, priv->write_buff, priv->iolen);
 
-	if (priv->iotype == NBD_CMD_BGCOPY) {
-		/* NBD_CMD_BGCOPY does not do nothing here */
-		;
+			/* Do not mark cbitmap here. */
+
+		} else if (priv->iotype == NBD_CMD_BGCOPY) {
+			/* NBD_CMD_BGCOPY does not do nothing here */
+			;
+		}
 	}
 
 	ret = munmap(mmaped_buf, mmaped_len);
@@ -371,14 +377,18 @@ int forwarder_rx_thread_mainloop(struct xnbd_proxy *proxy)
 		warn("munmap failed");
 
 
+	if (priv->need_retry) {
+		g_async_queue_push(proxy->fwd_retry_queue, priv);
+		return 0;
+	}
+
 got_stop_session:
-	/* pass priv to tx_thread */
+	/* do not touch priv after enqueue */
+	info("seqnum %lu", priv->seqnum);
 	g_async_queue_push(priv->tx_queue, priv);
 
 
-
 	dbg("send reply to client done");
-
 
 	return 0;
 }
@@ -389,11 +399,11 @@ void *forwarder_rx_thread_main(void *arg)
 	struct xnbd_proxy *proxy = (struct xnbd_proxy *) arg;
 	set_process_name("proxy_fwd_rx");
 
+	receiving_failed = 0;
 
 	block_all_signals();
 
 	info("create forwarder_rx thread %lu", pthread_self());
-	dbg("create forwarder_rx thread %lu", pthread_self());
 
 	for (;;) {
 		int ret = forwarder_rx_thread_mainloop(proxy);
