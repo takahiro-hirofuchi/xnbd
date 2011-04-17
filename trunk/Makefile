@@ -100,7 +100,7 @@ xnbd-bgctl: xnbd_bgctl.c $(filter-out xnbd.o, $(OBJ))
 	$(MAKE) -C $(XUTILSPATH)
 	$(CC) $^ $(CFLAGS) -o xnbd-bgctl
 
-xnbd-bgctl-debug: xnbd_bgctl.c $(filter-out xnbd.o, $(OBJ_DBG))
+xnbd-bgctl-debug: xnbd_bgctl.c $(filter-out xnbd___dbg.o, $(OBJ_DBG))
 	$(MAKE) -C $(XUTILSPATH)
 	$(CC) $^ $(CFLAGS_DEBUG) -o xnbd-bgctl-debug
 
