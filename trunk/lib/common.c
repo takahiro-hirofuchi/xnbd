@@ -145,3 +145,16 @@ void xutil_log_handler(const gchar   *log_domain, GLogLevelFlags log_level,
 
 	g_string_free(gstring, TRUE);
 }
+
+
+#include <sys/prctl.h>
+#include <string.h>
+
+void set_process_name(const char *name)
+{
+	char comm[16];
+	strncpy(comm, name, sizeof(comm));
+	int ret = prctl(PR_SET_NAME, (unsigned long) comm, 0l, 0l, 0l);
+	if (ret < 0)
+		warn("set_name %m");
+}

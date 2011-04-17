@@ -215,6 +215,7 @@ void *forwarder_tx_thread_main(void *arg)
 {
 	struct xnbd_proxy *proxy = (struct xnbd_proxy *) arg;
 
+	set_process_name("proxy_fwd_tx");
 
 	block_all_signals();
 
@@ -386,6 +387,7 @@ got_stop_session:
 void *forwarder_rx_thread_main(void *arg)
 {
 	struct xnbd_proxy *proxy = (struct xnbd_proxy *) arg;
+	set_process_name("proxy_fwd_rx");
 
 
 	block_all_signals();
