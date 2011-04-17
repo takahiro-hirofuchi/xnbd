@@ -384,7 +384,7 @@ int forwarder_rx_thread_mainloop(struct xnbd_proxy *proxy)
 
 got_stop_session:
 	/* do not touch priv after enqueue */
-	info("seqnum %lu", priv->seqnum);
+	dbg("seqnum %lu", priv->seqnum);
 	g_async_queue_push(priv->tx_queue, priv);
 
 
