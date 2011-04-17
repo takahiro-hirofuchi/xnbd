@@ -107,7 +107,10 @@ struct xnbd_proxy_query {
 	char diskpath[PATH_MAX];
 	char bmpath[PATH_MAX];
 	pid_t master_pid;
-} query;
+
+	char rhost[PATH_MAX];  /* FIXME: PATH_MAX is fine? */
+	char rport[PATH_MAX];
+};
 
 
 void *forwarder_rx_thread_main(void *arg);

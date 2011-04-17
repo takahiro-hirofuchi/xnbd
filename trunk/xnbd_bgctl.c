@@ -26,7 +26,6 @@
 
 struct xnbd_proxy_query *create_proxy_query(char *unix_path)
 {
-
 	int fd = unix_connect(unix_path);
 
 	enum xnbd_proxy_cmd_type cmd = XNBD_PROXY_CMD_QUERY_STATUS;
@@ -40,6 +39,19 @@ struct xnbd_proxy_query *create_proxy_query(char *unix_path)
 	return query;
 }
 
+void reconnect(char *unix_path, char *rhost, char *rport)
+{
+	int fd = unix_connect(unix_path);
+
+	int fwd_fd = net_tcp_connect(rhost, rport);
+	nbd_negotiate_with_server(fwd_fd);
+
+	enum xnbd_proxy_cmd_type cmd = XNBD_PROXY_CMD_REGISTER_FORWARDER_FD;
+	net_send_all_or_abort(fd, &cmd, sizeof(cmd));
+	unix_send_fd(fd, fwd_fd);
+
+	close(fd);
+}
 
 void cache_all_blocks(char *unix_path, unsigned long *bm, unsigned long nblocks)
 {
@@ -92,9 +104,11 @@ unsigned long get_cached(unsigned long *bm, unsigned long nblocks)
 }
 
 static struct option longopts[] = {
+	/* commands */
 	{"query", no_argument, NULL, 'q'},
 	{"cache-all-blocks", no_argument, NULL, 'c'},
 	{"restart-as-target", no_argument, NULL, 'r'},
+	{"reconnect", no_argument, NULL, 'R'},
 	{NULL, 0, NULL, 0},
 };
 
@@ -124,14 +138,15 @@ int main(int argc, char **argv)
 		xnbd_bgctl_cmd_unknown,
 		xnbd_bgctl_cmd_query,
 		xnbd_bgctl_cmd_cache_all_blocks,
-		xnbd_bgctl_cmd_restart_as_target
+		xnbd_bgctl_cmd_restart_as_target,
+		xnbd_bgctl_cmd_reconnect,
 	} cmd = xnbd_bgctl_cmd_unknown;
 
 	for (;;) {
 		int c;
 		int index = 0;
 
-		c = getopt_long(argc, argv, "qcr", longopts, &index);
+		c = getopt_long(argc, argv, "qcrR", longopts, &index);
 		if (c == -1) /* all options were parsed */
 			break;
 
@@ -157,6 +172,13 @@ int main(int argc, char **argv)
 				cmd = xnbd_bgctl_cmd_restart_as_target;
 				break;
 
+			case 'R':
+				if (cmd != xnbd_bgctl_cmd_unknown)
+					show_help_and_exit("specify one mode");
+
+				cmd = xnbd_bgctl_cmd_reconnect;
+				break;
+
 			case '?':
 				show_help_and_exit("unknown option");
 				break;
@@ -166,13 +188,36 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (argc - optind != 1)
-		show_help_and_exit("specify a control socket file");
+	char *unix_path = NULL;
+	char *rhost = NULL;
+	char *rport = NULL;
 
-	if (cmd == xnbd_bgctl_cmd_unknown)
-		cmd = xnbd_bgctl_cmd_query;
 
-	char *unix_path = argv[optind];
+
+	switch (cmd) {
+		case xnbd_bgctl_cmd_reconnect:
+			if (argc - optind == 3) {
+				unix_path = argv[optind];
+				rhost = argv[optind + 1];
+				rport = argv[optind + 2];
+			} else
+				show_help_and_exit("invalid arguments");
+
+			break;
+
+		case xnbd_bgctl_cmd_cache_all_blocks:
+		case xnbd_bgctl_cmd_restart_as_target:
+		case xnbd_bgctl_cmd_query:
+		case xnbd_bgctl_cmd_unknown:
+			if (argc - optind == 1)
+				unix_path = argv[optind];
+			else
+				show_help_and_exit("specify a control socket file");
+	}
+
+
+
+
 	size_t bmlen;
 
 	struct xnbd_proxy_query *query = create_proxy_query(unix_path);
@@ -181,9 +226,11 @@ int main(int argc, char **argv)
 	unsigned long cached = get_cached(bm, nblocks);
 
 	info("%s (%s): disksize %ju", query->diskpath, query->bmpath, query->disksize);
+	info("forwaded to %s:%s", query->rhost, query->rport);
 	info("cached blocks %lu / %lu", cached, nblocks);
 
 	switch (cmd) {
+		case xnbd_bgctl_cmd_unknown:
 		case xnbd_bgctl_cmd_query:
 			break;
 
@@ -200,7 +247,10 @@ int main(int argc, char **argv)
 			info("set xnbd (pid %d) to target mode", query->master_pid);
 			break;
 
-		case xnbd_bgctl_cmd_unknown:
+		case xnbd_bgctl_cmd_reconnect:
+			reconnect(unix_path, rhost, rport);
+			break;
+
 		default:
 			err("bug: not reached");
 	}
