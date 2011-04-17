@@ -732,12 +732,17 @@ void compress_iovec_and_send_advanced(int csock, const struct iovec *iov, const 
 
 #else
 
-void compress_iovec_and_send_advanced(int csock, const struct iovec *iov, const unsigned int count, int lzo_enabled)
+void compress_iovec_and_send_advanced(int csock __attribute__((unused)),
+	       	const struct iovec *iov __attribute__((unused)),
+		const unsigned int count __attribute__((unused)),
+		int lzo_enabled __attribute__((unused)))
 {
 	err("compression support was not compiled");
 }
 
-void compress_iovec_and_send(int csock, struct iovec *iov, int count)
+void compress_iovec_and_send(int csock __attribute__((unused)),
+	       struct iovec *iov __attribute__((unused)),
+	       int count __attribute__((unused)))
 {
 	err("lzo support was not compiled");
 }
