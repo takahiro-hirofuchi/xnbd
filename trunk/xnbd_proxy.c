@@ -268,6 +268,7 @@ void *rx_thread_main(void *arg)
 {
 	struct proxy_session *ps = (struct proxy_session *) arg;
 
+	set_process_name("proxy_rx");
 
 	block_all_signals();
 
@@ -293,6 +294,7 @@ void *tx_thread_main(void *arg)
 	struct proxy_session *ps = (struct proxy_session *) arg;
 	int need_exit = 0;
 
+	set_process_name("proxy_tx");
 
 	block_all_signals();
 
@@ -517,17 +519,6 @@ void xnbd_proxy_stop(struct xnbd_info *xnbd)
 }
 
 
-#include <sys/prctl.h>
-void set_process_name(const char *name)
-{
-	char comm[16];
-	strncpy(comm, name, sizeof(comm));
-	int ret = prctl(PR_SET_NAME, (unsigned long) comm, 0l, 0l, 0l);
-	if (ret < 0)
-		warn("set_name %m");
-}
-
-
 void xnbd_proxy_start(struct xnbd_info *xnbd)
 {
 	int ret;
@@ -554,7 +545,7 @@ void xnbd_proxy_start(struct xnbd_info *xnbd)
 
 	if (pid == 0) {
 		/* -- child -- */
-		set_process_name("xnbd_proxy");
+		set_process_name("proxy_main");
 
 		close(xnbd->proxy_sockpair_master_fd);
 
