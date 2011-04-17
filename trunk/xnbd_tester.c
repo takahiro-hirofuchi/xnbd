@@ -21,7 +21,7 @@
  * Place - Suite 330, Boston, MA 02111-1307, USA.
  */
 
-#include "xnbd.h"
+#include "xnbd_proxy.h"
 
 
 static void fill_random(char *buff, size_t len)
@@ -66,16 +66,16 @@ struct bginfo_struct {
 // pthread_t bgthread_tid;
 
 
+
 void *bgctl_thread_main(void *data)
 {
 	struct bginfo_struct *bginfo = (struct bginfo_struct *) data;
 
 	int bgctlfd = 0;
 
-
 	for (;;) {
 		info("try open %s", bginfo->ctlpath);
-		bgctlfd = open(bginfo->ctlpath, O_WRONLY);
+		bgctlfd = unix_connect(bginfo->ctlpath);
 		if (bgctlfd < 0) {
 			warn("open bgctl %s, %m", bginfo->ctlpath);
 			sleep(1);
@@ -86,6 +86,16 @@ void *bgctl_thread_main(void *data)
 
 	info("open %s done", bginfo->ctlpath);
 
+	int ctl_fd, proxy_fd;
+	make_sockpair(&ctl_fd, &proxy_fd);
+
+	enum xnbd_proxy_cmd_type cmd = XNBD_PROXY_CMD_REGISTER_FD;
+	net_send_all_or_abort(bgctlfd, &cmd, sizeof(cmd));
+	unix_send_fd(bgctlfd, proxy_fd);
+	close(proxy_fd);
+
+
+
 	pthread_mutex_lock(&bginfo->lock);
 	pthread_cond_signal(&bginfo->init_done);
 	pthread_mutex_unlock(&bginfo->lock);
@@ -93,28 +103,25 @@ void *bgctl_thread_main(void *data)
 
 	for (;;) {
 		off_t nblocks = bginfo->disksize / CBLOCKSIZE;
-		unsigned long bindex =  (unsigned long) (1.0L * nblocks * random() / RAND_MAX);
+		unsigned long index =  (unsigned long) (1.0L * nblocks * random() / RAND_MAX);
 
-#if 0
-		/* this stops bgctl threads, so io with tester will fail */
-		if (random() % 1000 == 0)
-			bindex = XNBD_BGCTL_MAGIC_CACHE_ALL;
-#endif
+		xnbd_proxy_control_cache_block(ctl_fd, index, 1);
 
-		ssize_t ret = write(bgctlfd, &bindex, sizeof(bindex));
-		if (ret != sizeof(bindex))
-			err("write bgctl");
-
-		info("%d bgctl bindex %lu (iofrom %ju)\n", bginfo->count, bindex, (off_t) bindex * CBLOCKSIZE);
+		info("%d bgctl index %lu (iofrom %ju)\n", bginfo->count, index, (off_t) index * CBLOCKSIZE);
 
 		bginfo->count += 1;
 
-		poll(NULL, 0, (int) (20.0L * random() / RAND_MAX));
+		// poll(NULL, 0, (int) (20.0L * random() / RAND_MAX));
 
 
 		if (bginfo->count > 1000)
 			break;
 	}
+
+	close(ctl_fd);
+	/* make sure this session is cleaned up in xnbd_proxy */
+	char buf[1];
+	net_recv_all_or_abort(bgctlfd, buf, 1);
 
 	close(bgctlfd);
 
