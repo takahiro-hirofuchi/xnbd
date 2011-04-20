@@ -131,7 +131,7 @@ manpages:
 clean:
 	$(MAKE) -C $(XUTILSPATH) clean
 	$(MAKE) -C doc clean
-	$(RM) -rf *.o *.d xnbd-server xnbd-server-debug xnbd-server-test xnbd-server-cachestat xnbd-cachestatdump xnbd-bgctl xnbd-tester xnbd-client xnbd-watchdog
+	$(RM) -rf *.o *.d xnbd-server xnbd-server-debug xnbd-server-test xnbd-server-cachestat xnbd-cachestatdump xnbd-bgctl xnbd-tester xnbd-client xnbd-watchdog xnbd-wrapper
 
 install: default
 	$(INSTALL) -D --mode=0755 xnbd-server $(DESTDIR)/usr/sbin/xnbd-server
