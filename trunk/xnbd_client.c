@@ -205,7 +205,7 @@ const char *recovery_command_internal_reboot_call = "reboot now";
  **/
 
 
-static int xnbd_connect(const char *devpath, unsigned long blocksize, unsigned int timeout, GList *dst_list, int max_retry, const char *recovery_command)
+static int xnbd_connect(const char *devpath, unsigned long blocksize, unsigned int timeout, GList *dst_list, int max_retry, const char *recovery_command, const char *exportname)
 {
 	int sockfd;
 	off_t disksize;
@@ -227,7 +227,12 @@ static int xnbd_connect(const char *devpath, unsigned long blocksize, unsigned i
 				continue;
 			}
 
-			int ret = nbd_negotiate_with_server2(sockfd, &disksize, &flags);
+			int ret;
+			if (exportname)
+				ret = nbd_negotiate_with_server_new(sockfd, &disksize, &flags, strlen(exportname), exportname);
+			else
+				ret = nbd_negotiate_with_server2(sockfd, &disksize, &flags);
+
 			if (ret < 0) {
 				warn("negotiation with %s:%s failed", host, port);
 				continue;
@@ -369,7 +374,7 @@ static int xnbd_connect(const char *devpath, unsigned long blocksize, unsigned i
 #include <getopt.h>
 
 static struct option longopts[] = {
-	{"connect",	required_argument, NULL, 'C'},
+	{"connect",	no_argument, NULL, 'C'},
 	{"disconnect",	required_argument, NULL, 'd'},
 	{"check",	required_argument, NULL, 'c'},
 	{"help", 	no_argument, NULL, 'h'},
@@ -378,6 +383,7 @@ static struct option longopts[] = {
 	{"retry",	required_argument, NULL, 'r'},
 	{"recovery-command", required_argument, NULL, 'R'},
 	{"recovery-command-reboot", no_argument, NULL, 'H'},
+	{"exportname",	required_argument, NULL, 'n'},
 	{NULL, 0, NULL, 0},
 };
 
@@ -412,6 +418,7 @@ Options: \n\
   --retry	set the maximum count of retries to connect to a server (default 1) \n\
   --recovery-command		invoke a specified command on unexpected disconnection \n\
   --recovery-command-reboot	invoke the reboot system call on unexpected disconnection \n\
+  --exportname	specify which disk image on the server \n\
 \n\
 Example: \n\
   xnbd-client fe80::250:45ff:fe00:ab8f%%eth0 8998 /dev/nbd0 \n\
@@ -439,13 +446,14 @@ int main(int argc, char *argv[]) {
 	int max_retry = 1;
 	const char *recovery_command = NULL;
 	GList *dst_list = NULL;
+	const char *exportname = NULL;
 
 
 	for (;;) {
 		int c;
 		int index = 0;
 
-		c = getopt_long(argc, argv, "C:d:c:ht:b:r:R:H", longopts, &index);
+		c = getopt_long(argc, argv, "Cd:c:ht:b:r:R:Hn:", longopts, &index);
 		if (c == -1) /* all options were parsed */
 			break;
 
@@ -455,7 +463,6 @@ int main(int argc, char *argv[]) {
 					show_help_and_exit("specify one mode");
 			
 				cmd = cmd_connect;
-				devpath = optarg;
 				break;
 
 			case 'd':
@@ -517,6 +524,10 @@ int main(int argc, char *argv[]) {
 				show_help_and_exit("unknown option");
 				break;
 
+			case 'n':
+				exportname = optarg;
+				break;
+
 			default:
 				err("getopt");
 		}
@@ -557,7 +568,7 @@ int main(int argc, char *argv[]) {
 		info("bs=%lu timeout=%d %s %s %s", blocksize, timeout, host, port, devpath);
 		dst_add(&dst_list, host, port);
 
-		xnbd_connect(devpath, blocksize, timeout, dst_list, 1, recovery_command);
+		xnbd_connect(devpath, blocksize, timeout, dst_list, 1, recovery_command, exportname);
 
 		exit(EXIT_SUCCESS);
 	}
@@ -601,6 +612,9 @@ int main(int argc, char *argv[]) {
 
 	/* handle the case in which cmd == cmd_connect */
 
+	devpath = argv[optind];
+	optind++;
+
 	if ((argc -optind) % 2 != 0)
 		show_help_and_exit("incomplete pairs of host and port");
 
@@ -612,7 +626,7 @@ int main(int argc, char *argv[]) {
 		info("bs=%lu timeout=%d %s %s %s", blocksize, timeout, host, port, devpath);
 	}
 
-	xnbd_connect(devpath, blocksize, timeout, dst_list, 1, recovery_command);
+	xnbd_connect(devpath, blocksize, timeout, dst_list, 1, recovery_command, exportname);
 
 
 	return 0;

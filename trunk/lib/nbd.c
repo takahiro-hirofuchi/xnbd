@@ -428,7 +428,7 @@ err_out:
 }
 
 
-int nbd_negotiate_with_server_new(int sockfd, off_t *exportsize, uint32_t *exportflags, size_t namesize, char *target_name)
+int nbd_negotiate_with_server_new(int sockfd, off_t *exportsize, uint32_t *exportflags, size_t namesize, const char *target_name)
 {
 	int ret;
 

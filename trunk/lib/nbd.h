@@ -76,6 +76,7 @@ int nbd_negotiate_with_client_new_phase_1(int sockfd, off_t exportsize, int read
 
 off_t nbd_negotiate_with_server(int sockfd);
 int nbd_negotiate_with_server2(int sockfd, off_t *exportsize, uint32_t *exportflags);
+int nbd_negotiate_with_server_new(int sockfd, off_t *exportsize, uint32_t *exportflags, size_t namesize, const char *target_name);
 
 #define NBD_FLAG_HAS_FLAGS      (1 << 0)
 #define NBD_FLAG_READ_ONLY      (1 << 1)

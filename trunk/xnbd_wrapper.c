@@ -295,17 +295,23 @@ int main(int argc, char **argv) {
 		pid = fork();
 		if (pid == 0) {
 			/* child */
+			close(sockfd);
+
 			requested_img = nbd_negotiate_with_client_new_phase_0(conn_sockfd);
 			printf("requested_img: %s\n", requested_img);
 
 			if (has_diskimg(&dsklist, requested_img) < 0) {
-				close(conn_sockfd);
+				if(close(conn_sockfd))
+					perror("close(p0)");
 				_exit(EXIT_FAILURE);
 			}
 
 			stat(requested_img, &sb);
-			if (nbd_negotiate_with_client_new_phase_1(conn_sockfd, sb.st_size, 0)) 
+			if (nbd_negotiate_with_client_new_phase_1(conn_sockfd, sb.st_size, 0)) {
+				if(close(conn_sockfd))
+					perror("close(p1)");
 				_exit(EXIT_FAILURE);
+			}
 
 			(void)execl(child_prog, child_prog, "--target", "--connected-fd", fd_num, requested_img, (char *)NULL);
 			perror("exec");
