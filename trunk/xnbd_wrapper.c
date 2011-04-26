@@ -1,5 +1,7 @@
 #include "xnbd.h"
 #include <libgen.h>
+#include <sys/signalfd.h>
+#include <sys/epoll.h>
 
 /* static const int MAX_DISKIMG_NUM = 32; */
 #define MAX_DISKIMG_NUM 32
@@ -85,50 +87,67 @@ static void list_diskimg(struct diskimg_list *list, FILE *fp)
 	fflush(fp);
 }
 
-static void *start_filemgr()
+static int make_unix_sock(const char *uxsock_path)
 {
-	const int rbufsize = 128;
-
-	int mgt_uxsock = socket(AF_UNIX, SOCK_STREAM, 0);
-	if (mgt_uxsock == -1) {
+	int uxsock = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (uxsock == -1) {
 		perror("socket(AF_UNIX)");
-		pthread_exit(NULL);
+		return -1;
 	}
-	struct sockaddr_un mgt_saddr;
-	char uxsock_path[] = "/tmp/xnbd_wrapper.sock";
-	strcpy(mgt_saddr.sun_path, uxsock_path);
-	mgt_saddr.sun_family = AF_UNIX;
-	if (bind(mgt_uxsock, &mgt_saddr, sizeof(mgt_saddr))) {
+	struct sockaddr_un ux_saddr;
+	strcpy(ux_saddr.sun_path, uxsock_path);
+	ux_saddr.sun_family = AF_UNIX;
+	if (bind(uxsock, &ux_saddr, sizeof(ux_saddr))) {
 		perror("bind(AF_UNIX)");
 		pthread_exit(NULL);
 	}
-	if (listen(mgt_uxsock, 8)) {
+	if (listen(uxsock, 8)) {
 		perror("listen(AF_UNIX)");
 		pthread_exit(NULL);
 	}
+	return uxsock;
+}
+
+static const int MAX_CTL_CONNS = 8;
+/* static pthread_once_t once_ctl = PTHREAD_ONCE_INIT; */
+static int mgr_threads = 0;
+
+static int count_mgr_threads(int val)
+{
+	int ret;
+	pthread_mutex_lock(&mutex);
+	ret = mgr_threads = mgr_threads + val;
+	pthread_mutex_unlock(&mutex);
+	return ret;
+}
+
+static void *start_filemgr_thread(void *uxsock)
+{
+	const int rbufsize = 128;
 	
 	char buf[rbufsize];
 	char cmd[rbufsize];
 	char arg[rbufsize];
 	int ret;
-	for(;;) {
-		int conn_uxsock = accept(mgt_uxsock, NULL, NULL);
-                if (conn_uxsock == -1) {
-                        perror("accept(AF_UNIX)");
-                        break;
-			pthread_exit(NULL);
-		}
-		FILE *fp = fdopen(conn_uxsock, "r+");
+
+	int conn_uxsock = accept(*(int *)uxsock, NULL, NULL);
+	if (conn_uxsock == -1) {
+		perror("accept(AF_UNIX)");
+		pthread_exit(NULL);
+	}
+	FILE *fp = fdopen(conn_uxsock, "r+");
+	if (count_mgr_threads(1) <= MAX_CTL_CONNS) {
 		fprintf(fp, "help command displays help for another command\n");
 		for(;;) {
 			fputs("(xnbd) ", fp);
+			fflush(fp);
 			if (fgets(buf, rbufsize, fp) == NULL)
 				break;
 			if (sscanf(buf, "%s%s", cmd, arg) < 1) {
 				/* perror("sscanf"); */
 				continue;
 			}
-
+	
 			if (strcmp(cmd, "list") == 0)
 				list_diskimg(&dsklist, fp);
 			else if (strcmp(cmd, "add") == 0) {
@@ -142,41 +161,100 @@ static void *start_filemgr()
 				del_diskimg(&dsklist, atoi(arg));
 			else if (strcmp(cmd, "help") == 0)
 				fprintf(fp,
-                                        "list     : show diskimage list\n"
-                                        "add PATH : add diskimage\n"
-                                        "del N    : delete diskimage (N = diskimage number on list)\n"
-                                        "quit     : quit(disconnect)\n");
+					"list     : show diskimage list\n"
+					"add PATH : add diskimage\n"
+					"del N    : delete diskimage (N = diskimage number on list)\n"
+					"quit     : quit(disconnect)\n");
 			else if (strcmp(cmd, "quit") == 0)
 				break;
 			else
 				fprintf(fp, "unknown command\n");
 		}
-		close(conn_uxsock);
-		free(fp);
+	} else {
+		fprintf(fp, "too many connections\n");
+		fflush(fp);
 	}
-	close(mgt_uxsock);
-	remove(uxsock_path);
+	free(fp);
+	close(conn_uxsock);
+	count_mgr_threads(-1);
+
 	/* just to avoid warning */
 	return NULL;
+}
+
+static int make_tcp_sock(const char *addr_or_name, const char *port)
+{
+	int tcp_sock;
+	struct addrinfo hints;
+	struct addrinfo *res, *rp;
+
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = AI_PASSIVE;
+
+	int error = getaddrinfo(addr_or_name, port, &hints, &res);
+	if (error) {
+		fprintf(stderr, "%s: %s\n", port, gai_strerror(error));
+		return -1;
+	}
+
+	for (rp = res; rp != NULL; rp = rp->ai_next) {
+		tcp_sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+		if (tcp_sock != -1)
+			break;
+	}
+
+	if (rp == NULL) {
+		fprintf(stderr, "rp is NULL\n");
+		return -1;
+	}
+
+	int optval = 1;
+	if (setsockopt(tcp_sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval))) {
+		perror("setsockopt");
+		return -1;
+	}
+
+	if (bind(tcp_sock, rp->ai_addr, rp->ai_addrlen)) {
+		perror("bind");
+		return -1;
+	}
+
+	freeaddrinfo(res);
+
+	if (listen(tcp_sock, 64)) {
+		perror("listen");
+		return EXIT_FAILURE;
+	}
+
+	return tcp_sock;
 }
 
 
 int main(int argc, char **argv) {
 	char *fd_num;
 	pid_t pid;
-	int error;
-	int optval;
 	char *child_prog = NULL;
 	char *laddr = NULL;
 	char *port = NULL;
-	int sockfd, conn_sockfd;
+	int sockfd, conn_sockfd, ux_sockfd;
 	int ch, ret;
-	struct addrinfo hints;
-	struct addrinfo *res, *rp;
 	char *requested_img = NULL;
 	struct stat sb;
 	pthread_t thread;
+	char ctl_path[] = "/tmp/xnbd_wrapper.ctl";
+	int forked_srvs = 0;
+	const int MAX_NSRVS = 512;
 	
+	sigset_t sigset;
+	int sigfd;
+	struct signalfd_siginfo sfd_siginfo;
+	ssize_t rbytes;
+
+	const int MAX_EVENTS = 8;
+	struct epoll_event sigfd_ev, uxfd_ev, tcpfd_ev, ep_events[MAX_EVENTS];
+	int epoll_fd;
+
 
 	struct option longopts[] = {
 		{"imgfile",     required_argument, NULL, 'f'},
@@ -232,97 +310,141 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	printf("port: %s\n", port);
-	printf("xnbd-binary: %s\n", child_prog);
+	g_message("port: %s", port);
+	g_message("xnbd-binary: %s", child_prog);
 	list_diskimg(&dsklist, stdout);
 
-	pthread_create(&thread, NULL, start_filemgr, NULL);
+	sigemptyset(&sigset);
+	sigaddset(&sigset, SIGINT);
+	sigaddset(&sigset, SIGTERM);
+	sigaddset(&sigset, SIGCHLD);
+	if (sigprocmask(SIG_BLOCK, &sigset, NULL) == -1)
+		g_error("sigprocmask() : %s", g_strerror(errno));  /* exit */
 
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_flags = AI_PASSIVE;
+	sigfd = signalfd(-1, &sigset, 0);
+	if (sigfd == -1)
+		g_error("signalfd() : %s", g_strerror(errno));  /* exit */
 
-	error = getaddrinfo(laddr, port, &hints, &res);
-	if (error) {
-		fprintf(stderr, "%s: %s\n", port, gai_strerror(error));
-		return EXIT_FAILURE;
+	epoll_fd = epoll_create1(0);
+	if (epoll_fd == -1)
+		g_error("epoll_create : %s", g_strerror(errno));
+
+	/* add signalfd */
+	sigfd_ev.events = POLLIN;
+	sigfd_ev.data.fd = sigfd;
+	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, sigfd, &sigfd_ev) == -1) {
+		g_error("epoll_ctl : %s", g_strerror(errno));
 	}
 
-	for (rp = res; rp != NULL; rp = rp->ai_next) {
-		sockfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-		if (sockfd != -1)
-			break;
+	/* add unix socket */
+	ux_sockfd = make_unix_sock(ctl_path);
+	uxfd_ev.events = POLLIN;
+	uxfd_ev.data.fd = ux_sockfd;
+	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, ux_sockfd, &uxfd_ev) == -1) {
+		g_error("epoll_ctl : %s", g_strerror(errno));
 	}
 
-	if (rp == NULL) {
-		fprintf(stderr, "rp is NULL\n");
-		return EXIT_FAILURE;
-	}
-
-	optval = 1;
-	if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval))) {
-		perror("setsockopt");
-		return EXIT_FAILURE;
-	}
-
-	if (bind(sockfd, rp->ai_addr, rp->ai_addrlen)) {
-		perror("bind");
-		return EXIT_FAILURE;
-	}
-
-	freeaddrinfo(res);
-
-	if (listen(sockfd, 64)) {
-		perror("listen");
-		return EXIT_FAILURE;
+	/* add tcp socket */
+	sockfd = make_tcp_sock(laddr, port);
+	tcpfd_ev.events = POLLIN;
+	tcpfd_ev.data.fd = sockfd;
+	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, sockfd, &tcpfd_ev) == -1) {
+		g_error("epoll_ctl : %s", g_strerror(errno));
 	}
 
 	for (;;) {
-		conn_sockfd = accept(sockfd, NULL, NULL);
-		if (conn_sockfd == -1) {
-			perror("accept");
-			break;
-		}
+		int num_of_fds = epoll_wait(epoll_fd, ep_events, MAX_EVENTS, -1);
+			if (num_of_fds == -1)
+				g_error("epoll_wait : %s", g_strerror(errno));
+		for (int c_ev = 0; c_ev < num_of_fds; c_ev++) {
+			if (ep_events[c_ev].data.fd == sigfd) {
+				/* signalfd */
+				rbytes = read(sigfd, &sfd_siginfo, sizeof(sfd_siginfo));
+				if (rbytes != sizeof(sfd_siginfo))
+					g_error("read sigfd : %s", strerror(errno));
+				if (sfd_siginfo.ssi_signo == SIGTERM || sfd_siginfo.ssi_signo == SIGINT) {
+					close(epoll_fd);
+					close(sockfd);
+					close(ux_sockfd);
+					close(sigfd);
+					unlink(ctl_path);
+					exit(EXIT_SUCCESS);
+				} else if (sfd_siginfo.ssi_signo == SIGCHLD) {
+					g_warning("Got SIGCHLD");
+					forked_srvs--;
+					g_message("forked_srvs : %d", forked_srvs);
+				}
+			} else if (ep_events[c_ev].data.fd == ux_sockfd) {
+				/* unix socket */
+				if (pthread_create(&thread, NULL, start_filemgr_thread, (void *)&ux_sockfd))
+					g_warning("pthread_create : %s", g_strerror(errno));
+				if (pthread_detach(thread))
+					g_warning("pthread_detach : %s", g_strerror(errno));
+				pthread_detach(thread);
+			} else if (ep_events[c_ev].data.fd == sockfd) {
+				/* tcp socket */
+				conn_sockfd = accept(sockfd, NULL, NULL);
+				if (conn_sockfd == -1) {
+					perror("accept");
+					break;
+				}
 
-		/* asprintf() is GNU extention */
-		if (asprintf(&fd_num, "%d", conn_sockfd) == -1) {
-			break;
-		}
+				/* asprintf() is GNU extention */
+				if (asprintf(&fd_num, "%d", conn_sockfd) == -1) {
+					break;
+				}
+				printf("conn_sockfd: %d\n", conn_sockfd);
 
-		printf("conn_sockfd: %d\n", conn_sockfd);
+				if (forked_srvs == MAX_NSRVS) {
+					close(conn_sockfd);
+					g_warning("fork : reached the limit");
+					break;
+				}
 
 
-		pid = fork();
-		if (pid == 0) {
-			/* child */
-			close(sockfd);
+				pid = fork();
+				if (pid == 0) {
+					/* child */
 
-			requested_img = nbd_negotiate_with_client_new_phase_0(conn_sockfd);
-			printf("requested_img: %s\n", requested_img);
+					if (sigprocmask(SIG_UNBLOCK, &sigset, NULL) == -1)
+						g_error("sigprocmask() : %s", g_strerror(errno));  /* exit */
 
-			if (has_diskimg(&dsklist, requested_img) < 0) {
-				if(close(conn_sockfd))
-					perror("close(p0)");
-				_exit(EXIT_FAILURE);
+					close(sockfd);
+					close(epoll_fd);
+					close(ux_sockfd);
+					close(sigfd);
+
+					requested_img = nbd_negotiate_with_client_new_phase_0(conn_sockfd);
+					printf("requested_img: %s\n", requested_img);
+
+					if (has_diskimg(&dsklist, requested_img) < 0) {
+						if(close(conn_sockfd))
+							perror("close(p0)");
+						_exit(EXIT_FAILURE);
+					}
+
+					stat(requested_img, &sb);
+					if (nbd_negotiate_with_client_new_phase_1(conn_sockfd, sb.st_size, 0)) {
+						if(close(conn_sockfd))
+							perror("close(p1)");
+						_exit(EXIT_FAILURE);
+					}
+
+					(void)execl(child_prog, child_prog, "--target", "--connected-fd", fd_num, requested_img, (char *)NULL);
+					perror("exec");
+					_exit(EXIT_FAILURE);
+				} else if (pid > 0) {
+					/* parent */
+					free(fd_num);
+					forked_srvs++;
+					g_message("forked_srvs : %d", forked_srvs);
+					printf("fork: pid %ld\n", (long)pid);
+					close(conn_sockfd);
+				} else {
+					perror("fork");
+					break;
+				}
 			}
-
-			stat(requested_img, &sb);
-			if (nbd_negotiate_with_client_new_phase_1(conn_sockfd, sb.st_size, 0)) {
-				if(close(conn_sockfd))
-					perror("close(p1)");
-				_exit(EXIT_FAILURE);
-			}
-
-			(void)execl(child_prog, child_prog, "--target", "--connected-fd", fd_num, requested_img, (char *)NULL);
-			perror("exec");
-			_exit(EXIT_FAILURE);
-		} else if (pid > 0) {
-			/* parent */
-			printf("fork: pid %ld\n", (long)pid);
-			close(conn_sockfd);
-		} else {
-			perror("fork");
-			break;
 		}
 	}
 
