@@ -139,7 +139,10 @@ static void *start_filemgr_thread(void *uxsock)
 	if (count_mgr_threads(1) <= MAX_CTL_CONNS) {
 		fprintf(fp, "help command displays help for another command\n");
 		for(;;) {
-			fputs("(xnbd) ", fp);
+			if (fputs("(xnbd) ", fp) == EOF){
+				g_warning("fputs : EOF");
+				break;
+			}
 			fflush(fp);
 			if (fgets(buf, rbufsize, fp) == NULL)
 				break;
@@ -174,7 +177,7 @@ static void *start_filemgr_thread(void *uxsock)
 		fprintf(fp, "too many connections\n");
 		fflush(fp);
 	}
-	free(fp);
+	fclose(fp);
 	close(conn_uxsock);
 	count_mgr_threads(-1);
 
@@ -318,6 +321,7 @@ int main(int argc, char **argv) {
 	sigaddset(&sigset, SIGINT);
 	sigaddset(&sigset, SIGTERM);
 	sigaddset(&sigset, SIGCHLD);
+	sigaddset(&sigset, SIGPIPE);
 	if (sigprocmask(SIG_BLOCK, &sigset, NULL) == -1)
 		g_error("sigprocmask() : %s", g_strerror(errno));  /* exit */
 
