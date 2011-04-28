@@ -248,6 +248,8 @@ int main(int argc, char **argv) {
 	char ctl_path[] = "/tmp/xnbd_wrapper.ctl";
 	int forked_srvs = 0;
 	const int MAX_NSRVS = 512;
+	int cstatus;
+	pid_t cpid;
 	
 	sigset_t sigset;
 	int sigfd;
@@ -374,7 +376,10 @@ int main(int argc, char **argv) {
 					unlink(ctl_path);
 					exit(EXIT_SUCCESS);
 				} else if (sfd_siginfo.ssi_signo == SIGCHLD) {
-					g_warning("Got SIGCHLD");
+					if ((cpid = waitpid(-1, &cstatus, WNOHANG)) == -1)
+						g_warning("waitpid : %s", g_strerror(errno));
+					if (WIFEXITED(cstatus)) 
+						g_message("pid %ld : exit status %d", (long)cpid, WEXITSTATUS(cstatus));
 					forked_srvs--;
 					g_message("forked_srvs : %d", forked_srvs);
 				}
