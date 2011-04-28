@@ -516,6 +516,11 @@ int master_server(int port, void *data, int connect_fd)
 				if (WIFSIGNALED(status))
 					info("   killed by signal=%d(%s)", WTERMSIG(status), sys_siglist[WTERMSIG(status)]);
 			}
+
+			if (connect_fd != -1) {
+				info("Using connect_fd. No need to wait for the next event");
+				break;
+			}
 		}
 
 		/* must be after the SIGCHLD handler */
