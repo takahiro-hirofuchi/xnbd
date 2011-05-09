@@ -245,7 +245,8 @@ int main(int argc, char **argv) {
 	char *requested_img = NULL;
 	struct stat sb;
 	pthread_t thread;
-	char ctl_path[] = "/tmp/xnbd_wrapper.ctl";
+	const char default_ctl_path[] = "/tmp/xnbd_wrapper.ctl";
+	char *ctl_path = NULL;
 	int forked_srvs = 0;
 	const int MAX_NSRVS = 512;
 	int cstatus;
@@ -265,13 +266,14 @@ int main(int argc, char **argv) {
 		{"imgfile",     required_argument, NULL, 'f'},
 		{"laddr",       required_argument, NULL, 'l'},
 		{"port",        required_argument, NULL, 'p'},
+		{"socket",      required_argument, NULL, 's'},
 		{"xnbd-binary", required_argument, NULL, 'b'},
 		{"help",        no_argument,       NULL, 'h'},
 		{ NULL,         0,                 NULL,  0 }
 	};
 
 
-	while((ch = getopt_long(argc, argv, "b:f:hl:p:", longopts, NULL)) != -1) {
+	while((ch = getopt_long(argc, argv, "b:f:hl:p:s:", longopts, NULL)) != -1) {
 		switch (ch) {
 			case 'l':
 				laddr = optarg;
@@ -289,14 +291,15 @@ int main(int argc, char **argv) {
 				}
 				break;
 			case 'b':
-				if (asprintf(&child_prog, "%s", optarg) == -1) {
-					return EXIT_FAILURE;
-				}
+				child_prog = optarg;
+				break;
+			case 's':
+				ctl_path = optarg;
 				break;
 			case 'h':
 			default:
 				printf("Usage: \n"
-				       "  %s [-p port | --port=port] [-b path-to-xnbdserver | --xnbd-binary=path-to-xnbdserver] [-f disk-image-file --imgfile disk-image-file] [-l listen-addr | --laddr listen-addr ]\n", *argv);
+				       "  %s [-p port | --port=port] [-b path-to-xnbdserver | --xnbd-binary=path-to-xnbdserver] [-f disk-image-file --imgfile disk-image-file] [-l listen-addr | --laddr listen-addr ] [-s socket-path | --socket socket-path]\n", *argv);
 				if (ch == 'h')
 					return EXIT_SUCCESS;
 				return EXIT_FAILURE;
@@ -343,7 +346,7 @@ int main(int argc, char **argv) {
 	}
 
 	/* add unix socket */
-	ux_sockfd = make_unix_sock(ctl_path);
+	ux_sockfd = make_unix_sock(ctl_path ? ctl_path : default_ctl_path);
 	uxfd_ev.events = POLLIN;
 	uxfd_ev.data.fd = ux_sockfd;
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, ux_sockfd, &uxfd_ev) == -1) {
