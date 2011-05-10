@@ -101,7 +101,7 @@ void *setup_shared_buffer(char *unix_path)
 	if (!shared_buff)
 		err("mmap, %m");
 
-	info("shared buffer allocated, %p (len %u)", shared_buff, len);
+	info("shared buffer allocated, %p (len %lu)", shared_buff, len);
 
 	/* send buf_fd */
 	int unix_fd = unix_connect(unix_path);
@@ -120,7 +120,7 @@ void close_shared_buffer(void *shared_buff)
 {
 	size_t len = XNBD_SHARED_BUFF_SIZE;
 	munmap(shared_buff, len);
-	info("shared buffer deallocated, %p (len %u)", shared_buff, len);
+	info("shared buffer deallocated, %p (len %lu)", shared_buff, len);
 }
 
 void cache_block_range(char *unix_path, unsigned long *bm, unsigned long disk_nblocks, int remote_fd, char *shared_buff)
