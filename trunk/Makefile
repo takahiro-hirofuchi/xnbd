@@ -136,6 +136,8 @@ clean:
 install: default
 	$(INSTALL) -D --mode=0755 xnbd-server $(DESTDIR)/usr/sbin/xnbd-server
 	$(INSTALL) -D --mode=0755 xnbd-bgctl  $(DESTDIR)/usr/sbin/xnbd-bgctl
+	$(INSTALL) -D --mode=0755 xnbd-wrapper  $(DESTDIR)/usr/sbin/xnbd-wrapper
+	$(INSTALL) -D --mode=0755 xnbd-wrapper-ctl.py  $(DESTDIR)/usr/sbin/xnbd-wrapper-ctl
 	$(INSTALL) -D --mode=0755 xnbd-client  $(DESTDIR)/usr/bin/xnbd-client
 	$(INSTALL) -D --mode=0755 xnbd-watchdog $(DESTDIR)/usr/bin/xnbd-watchdog
 
