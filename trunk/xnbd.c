@@ -744,7 +744,20 @@ Options: \n\
 ";
 
 
-static const char *version = "$Id$";
+
+static const char *version = "xNBD (version 0.1.0-pre)";
+static const char *copyright = "\
+Copyright (C) 2008-2011 National Institute of Advanced Industrial Science\n\
+and Technology\n\
+\n\
+This program is free software; you can redistribute it and/or modify it\n\
+under the terms of the GNU General Public License as published by the Free\n\
+Software Foundation; either version 2 of the License, or (at your option)\n\
+any later version.\n\
+\n\
+Development of xNBD was partially sponsored by Wavecon GmbH <www.wavecon.de>.\n\
+";
+
 
 
 		
@@ -877,7 +890,7 @@ int main(int argc, char **argv) {
 	}
 
 
-	if (cmd != xnbd_cmd_unknown)
+	if (cmd != xnbd_cmd_unknown && cmd != xnbd_cmd_version)
 		info("cmd %s mode", longopts[cmd].name);
 
 	switch (cmd) {
@@ -885,7 +898,8 @@ int main(int argc, char **argv) {
 			show_help_and_exit(NULL);
 
 		case xnbd_cmd_version:
-			printf("%s\n", version);
+			printf("%s\n\n", version);
+			printf("%s\n", copyright);
 			exit(EXIT_SUCCESS);
 
 		case xnbd_cmd_target:
