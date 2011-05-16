@@ -70,31 +70,34 @@ def setup(option, opt_str, value, parser):
         parser.print_help()
         sys.exit(2)
 
-    if opt_str == "-l":
+    if opt_str == "-l" or opt_str == "--list":
         parser.values.cmd = "list"
 
-    elif opt_str == "-a":
+    elif opt_str == "-a" or opt_str == "--add":
         parser.values.cmd = "add " + value
 
-    elif opt_str == "-d":
+    elif opt_str == "-d" or opt_str == "--delete":
+        if re.match("^[1-9][0-9]+$|^[0-9]$", value) == None:
+            parser.print_help()
+            sys.exit(2)
         parser.values.cmd = "del " + value
 
 
 if __name__ =='__main__':
 
-    clparser = OptionParser(usage="\n  %prog [-s SOCKPATH] -l\n"
-                                   +"  %prog [-s SOCKPATH] -a FILE\n"
-                                   +"  %prog [-s SOCKPATH] -d N")
+    clparser = OptionParser(usage="\n  %prog [-s SOCKPATH] --list\n"
+                                   +"  %prog [-s SOCKPATH] --add=FILE\n"
+                                   +"  %prog [-s SOCKPATH] --delete N")
     clparser.set_defaults(cmd=None)
-    clparser.add_option("-l", action="callback", callback=setup, nargs=0, 
+    clparser.add_option("-l", "--list", action="callback", callback=setup, nargs=0, 
                         help="list disk images")
-    clparser.add_option("-a", action="callback", callback=setup, nargs=1, 
+    clparser.add_option("-a", "--add", action="callback", callback=setup, nargs=1, 
                         help="add disk image file", 
                         type="string", metavar="FILE")
-    clparser.add_option("-d", action="callback", callback=setup, nargs=1, 
+    clparser.add_option("-d", "--delete", action="callback", callback=setup, nargs=1, 
                         help="delete disk image file. N is the diskimage number on the list", 
-                        type="int", metavar="N")
-    clparser.add_option("-s", 
+                        type="string", metavar="N")
+    clparser.add_option("-s", "--socket",
                         help="specify socket file path", 
                         dest="sockpath", default="/tmp/xnbd_wrapper.ctl")
     (opts, args) = clparser.parse_args()
@@ -104,5 +107,7 @@ if __name__ =='__main__':
         sys.exit(2)
 
     ctl = XNBDWrapperCtl(opts.sockpath)
-    print ctl.send_cmd(opts.cmd),
+    res = ctl.send_cmd(opts.cmd)
+    if not re.match("^ *(|\n)$", res):
+        print res,
 
