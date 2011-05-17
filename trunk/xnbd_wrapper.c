@@ -322,7 +322,19 @@ int main(int argc, char **argv) {
 			case 'h':
 			default:
 				printf("Usage: \n"
-				       "  %s [-p port | --port=port] [-b path-to-xnbdserver | --xnbd-binary=path-to-xnbdserver] [-f disk-image-file --imgfile disk-image-file] [-l listen-addr | --laddr listen-addr ] [-s socket-path | --socket socket-path]\n", *argv);
+				       "  %s [--port port] [--xnbd-binary path-to-xnbdserver] [--imgfile disk-image-file] [--laddr listen-addr] [--socket socket-path]\n"
+				       "\n"
+				       "Options: \n"
+				       "  --port        Listen port (default: 8520).\n"
+				       "  --xnbd-binary Path to xnbd-server.\n"
+				       "  --imgfile     Path to disk image file. This options can be used multiple times.\n"
+				       "  --laddr       Listen address.\n"
+				       "  --socket      Unix socket path to listen on (default: /tmp/xnbd_wrapper.ctl).\n"
+				       "\n"
+				       "Examples: \n"
+				       "  xnbd-wrapper --imgfile /data/disk1\n"
+				       "  xnbd-wrapper --imgfile /data/disk1 --imgfile /data/disk2 --xnbd-binary /usr/local/bin/xnbd-server --laddr 127.0.0.1 --port 18520 --socket /tmp/xnbd_wrapper_1.ctl\n"
+				       "", *argv);
 				if (ch == 'h')
 					return EXIT_SUCCESS;
 				return EXIT_FAILURE;
@@ -340,6 +352,10 @@ int main(int argc, char **argv) {
 			return EXIT_FAILURE;
 		}
 	}
+
+	if (! ctl_path)
+		ctl_path = (char *)default_ctl_path;
+
 
 	g_message("port: %s", port);
 	g_message("xnbd-binary: %s", child_prog);
@@ -369,7 +385,7 @@ int main(int argc, char **argv) {
 	}
 
 	/* add unix socket */
-	ux_sockfd = make_unix_sock(ctl_path ? ctl_path : default_ctl_path);
+	ux_sockfd = make_unix_sock(ctl_path);
 	uxfd_ev.events = POLLIN;
 	uxfd_ev.data.fd = ux_sockfd;
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, ux_sockfd, &uxfd_ev) == -1) {
