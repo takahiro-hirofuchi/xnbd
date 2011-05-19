@@ -411,7 +411,20 @@ int master_server(int port, void *data, int connect_fd)
 			ppoll_add_eventfd(lsock[i], POLLIN);
 
 	} else {
-		info("use already negotiated sockfd %d", connect_fd);
+		if (connect_fd == 0) {
+			int ret;
+			if (xnbd->readonly)
+				ret = nbd_negotiate_with_client_readonly(connect_fd, xnbd->disksize);
+			else
+				ret = nbd_negotiate_with_client(connect_fd, xnbd->disksize);
+			if (ret < 0) {
+				warn("negotiation with the client failed");
+			} else {
+				info("negotiation done (connect_fd = %d)", connect_fd);
+			}
+		} else {
+			info("use already negotiated sockfd %d", connect_fd);
+		}
 		invoke_new_session(xnbd, connect_fd);
 	}
 
@@ -702,6 +715,21 @@ skip_restarting:
 }
 
 
+static const char *default_xnbdserver_logfile = "/tmp/xnbd.log";
+
+static void redirect_stderr(const char *logfile)
+{
+	int logfd = open(logfile ? logfile : default_xnbdserver_logfile,
+	                 O_WRONLY | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR);
+	if (logfd < 0)
+		err("open %s, %m", logfile);
+
+	int ret = dup2(logfd, fileno(stderr));
+	if (ret < 0)
+		err("dup2 %m");
+
+	close(logfd);
+}
 
 
 
@@ -723,9 +751,11 @@ static struct option longopts[] = {
 	{"logpath", required_argument, NULL, 'L'},
 	{"tos", no_argument, NULL, 'T'},
 	{"connected-fd", required_argument, NULL, 'F'},
+	{"inetd", no_argument, NULL, 'i'},
 	{NULL, 0, NULL, 0},
 };
 
+static const char *opt_string = "tpchvl:G:drL:TF:i";
 
 
 static const char *help_string = "\
@@ -741,6 +771,7 @@ Options: \n\
   --daemonize	run as a daemon process\n\
   --readonly	export a disk as readonly\n\
   --logpath	logfile (default /tmp/xnbd.log)\n\
+  --inetd	redirect stderr for running from inetd\n\
 ";
 
 
@@ -784,7 +815,7 @@ int main(int argc, char **argv) {
 	int tos = 0;
 	int connected_fd = -1;
 	const char *logpath = NULL;
-	int logfd = -1;
+	int inetd = 0;
 
 	if (g_thread_supported())
 		err("glib thread not supported");
@@ -797,12 +828,35 @@ int main(int argc, char **argv) {
 	if (CBLOCKSIZE % PAGESIZE != 0)
 		warn("CBLOCKSIZE %u PAGESIZE %u", CBLOCKSIZE, PAGESIZE);
 
+	for (;;) {
+		int c;
+		int index = 0;
+
+		c = getopt_long(argc, argv, opt_string, longopts, &index);
+		if (c == -1)
+			break;
+
+		switch (c) {
+			case 'L':
+				logpath = optarg;
+				break;
+			case 'i':
+				inetd = 1;
+				connected_fd = 0;
+				break;
+		}
+	}
+
+	if (inetd)
+		redirect_stderr(logpath);
+
+	optind = 1;
 
 	for (;;) {
 		int c;
 		int index = 0;
 
-		c = getopt_long(argc, argv, "tpchvl:G:drL:TF:", longopts, &index);
+		c = getopt_long(argc, argv, opt_string, longopts, &index);
 		if (c == -1)
 			break;
 
@@ -856,6 +910,8 @@ int main(int argc, char **argv) {
 				break;
 
 			case 'd':
+				if (inetd)
+					err("daemonize option may not be specified with inetd option");
 				daemonize = 1;
 				info("daemonize enabled");
 				break;
@@ -865,11 +921,6 @@ int main(int argc, char **argv) {
 				info("readonly enabled");
 				break;
 
-			case 'L':
-				logpath = optarg;
-				info("log file %s", logpath);
-				break;
-
 			case 'T':
 				tos = 1;
 				info("ToS enabled");
@@ -877,8 +928,15 @@ int main(int argc, char **argv) {
 
 			case 'F':
 				/* use a file descriptor specified in a command line */
+				if (inetd)
+					err("connected_fd option may not be specified with inetd option");
 				connected_fd = atoi(optarg);
 				info("connected fd %d", connected_fd);
+				break;
+
+			case 'L':
+			case 'i':
+				/* previously processed options */
 				break;
 
 			case '?':
@@ -957,25 +1015,31 @@ int main(int argc, char **argv) {
 	if (xnbd.cmd == xnbd_cmd_proxy)
 		cachestat_initialize(DEFAULT_CACHESTAT_PATH, xnbd.nblocks);
 
-	if (daemonize) {
-		int ret = daemon(0, 0);
-		if (ret < 0)
-			err("daemon %m");
+	if (!inetd && logpath) {
+		info("logfile %s", logpath);
+		redirect_stderr(logpath);
 	}
 
-	if (logpath || daemonize) {
-		if (!logpath)
-			logpath = "/tmp/xnbd.log";
+	if (daemonize) {
+		close(STDIN_FILENO);
 
-		logfd = open(logpath, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-		if (logfd < 0)
-			err("open %s, %m", logpath);
+		int devnull = open("/dev/null", O_WRONLY);
+		if (devnull < 0) {
+			err("could not open /dev/null");
+		} else {
+			dup2(devnull, STDOUT_FILENO);
+		}
+		close(devnull);
 
-		int ret = dup2(logfd, fileno(stderr));
+		if (!logpath) {
+			logpath = default_xnbdserver_logfile;
+			info("logfile %s", logpath);
+			redirect_stderr(logpath);
+		}
+
+		int ret = daemon(0, 1);
 		if (ret < 0)
-			err("dup2 %m");
-
-		close(logfd);
+			err("daemon %m");
 	}
 
 
