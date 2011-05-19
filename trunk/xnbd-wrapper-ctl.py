@@ -76,7 +76,7 @@ def setup(option, opt_str, value, parser):
     elif opt_str == "-a" or opt_str == "--add":
         parser.values.cmd = "add " + value
 
-    elif opt_str == "-d" or opt_str == "--delete":
+    elif opt_str == "-r" or opt_str == "--remove":
         if re.match("^[1-9][0-9]+$|^[0-9]$", value) == None:
             parser.print_help()
             sys.exit(2)
@@ -87,15 +87,15 @@ if __name__ =='__main__':
 
     clparser = OptionParser(usage="\n  %prog [-s SOCKPATH] --list\n"
                                    +"  %prog [-s SOCKPATH] --add=FILE\n"
-                                   +"  %prog [-s SOCKPATH] --delete N")
+                                   +"  %prog [-s SOCKPATH] --remove N")
     clparser.set_defaults(cmd=None)
     clparser.add_option("-l", "--list", action="callback", callback=setup, nargs=0, 
                         help="list disk images")
     clparser.add_option("-a", "--add", action="callback", callback=setup, nargs=1, 
                         help="add disk image file", 
                         type="string", metavar="FILE")
-    clparser.add_option("-d", "--delete", action="callback", callback=setup, nargs=1, 
-                        help="delete disk image file. N is the diskimage number on the list", 
+    clparser.add_option("-r", "--remove", action="callback", callback=setup, nargs=1, 
+                        help="remove disk image file from the list. N is the diskimage number on the list", 
                         type="string", metavar="N")
     clparser.add_option("-s", "--socket",
                         help="specify socket file path", 
