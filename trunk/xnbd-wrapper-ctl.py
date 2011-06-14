@@ -86,19 +86,19 @@ def setup(option, opt_str, value, parser):
 if __name__ =='__main__':
 
     clparser = OptionParser(usage="\n  %prog [-s SOCKPATH] --list\n"
-                                   +"  %prog [-s SOCKPATH] --add=FILE\n"
+                                   +"  %prog [-s SOCKPATH] --add FILE\n"
                                    +"  %prog [-s SOCKPATH] --remove N")
     clparser.set_defaults(cmd=None)
     clparser.add_option("-l", "--list", action="callback", callback=setup, nargs=0, 
-                        help="list disk images")
+                        help="list registered disk images.")
     clparser.add_option("-a", "--add", action="callback", callback=setup, nargs=1, 
-                        help="add disk image file", 
+                        help="add a disk image file to the export list.", 
                         type="string", metavar="FILE")
     clparser.add_option("-r", "--remove", action="callback", callback=setup, nargs=1, 
-                        help="remove disk image file from the list. N is the diskimage number on the list", 
+                        help="remove a disk image file from the list. N is the index number on the list.", 
                         type="string", metavar="N")
     clparser.add_option("-s", "--socket",
-                        help="specify socket file path", 
+                        help="specify the socket file path of xnbd-wrapper.", 
                         dest="sockpath", default="/tmp/xnbd_wrapper.ctl")
     (opts, args) = clparser.parse_args()
 

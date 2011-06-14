@@ -418,11 +418,11 @@ Options: \n\
   --retry	set the maximum count of retries to connect to a server (default 1) \n\
   --recovery-command		invoke a specified command on unexpected disconnection \n\
   --recovery-command-reboot	invoke the reboot system call on unexpected disconnection \n\
-  --exportname	specify which disk image on the server \n\
+  --exportname	specify a target disk image \n\
 \n\
 Example: \n\
   xnbd-client fe80::250:45ff:fe00:ab8f%%eth0 8998 /dev/nbd0 \n\
-     This command line is compatible with nbd-client. But xnbd-client supports IPv6. \n\
+     This command line is compatible with nbd-client. xnbd-client supports IPv6. \n\
 \n\
   xnbd-client --connect /dev/nbd0 fe80::250:45ff:fe00:ab8f%%eth0 8998 10.1.1.1 8900 \n\
      This automatically tries the next server if the first one does not accept connection. \n\
