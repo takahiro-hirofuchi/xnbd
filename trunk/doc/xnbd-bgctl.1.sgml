@@ -49,20 +49,26 @@ manpage.1: manpage.sgml
   <refnamediv>
     <refname>&dhpackage;</refname>
 
-    <refpurpose>Control a server running <command>xnbd-server</command>(8) through its control pipe</refpurpose>
+    <refpurpose>Control a server running <command>xnbd-server</command>(8)
+    through its control socket</refpurpose>
   </refnamediv>
 
   <refsynopsisdiv>
     <cmdsynopsis>
       <command>&dhpackage;</command>
-      <arg>--cache-all-blocks</arg>
-      <arg><replaceable>control_file</replaceable></arg>
+      <arg>--cache-all</arg>
+      <arg>--cache-all2</arg>
+      <arg>--query</arg>
+      <arg>--reconnect <replaceable>REMOTE_HOST</replaceable>
+      <replaceable>REMOTE_PORT</replaceable></arg>
+      <arg>--shutdown</arg>
+      <arg><replaceable>control_socket</replaceable></arg>
     </cmdsynopsis>
   </refsynopsisdiv>
   <refsect1>
     <title>DESCRIPTION</title>
     <para>With the <command>xmbd-bgctl</command> command you can connect to a <command>xnbd-server</command> control
-    channel and instruct it to act as directed. You may pass an argument to the control program which is then forwarded, 
+    channel and instruct it to act as directed. You may pass an argument to the control program which is then forwarded,
     on your behalf, to the server instance.</para>
   </refsect1>
   <refsect1>
@@ -72,14 +78,53 @@ manpage.1: manpage.sgml
 
     <variablelist>
       <varlistentry>
-	<term><option>--cache-all-blocks</option></term>
+	<term><option>--cache-all</option></term>
 	<listitem>
-	  <para>If the remote xnbd-server acts as proxy server, this argument intstructs
-          the controlling <command>xnbd-server</command> instance to cache all blocks on its 
+	  <para>If the remote xnbd-server acts as proxy server, this command intstructs
+          the controlling <command>xnbd-server</command> instance to cache all blocks on its
           associated block disk. Upon completion the controlled xnbd instance holds all
           data from the origin instance and it is no longer necessary to act as proxy.</para>
 	</listitem>
       </varlistentry>
+      <varlistentry>
+      	<term><option>--cache-all2</option></term>
+	<listitem>
+	<para>This command is identical to
+	<option>cache-all</option> but detaches the process from the terminal
+	and is hence using a dedicated connection for data transfer.</para>
+        </listitem>
+      </varlistentry>
+
+
+      <varlistentry>
+      	<term><option>--query</option></term>
+	<listitem>
+	<para>This command retrieves completion statistics
+	from the proxy server instance. It returns the number of cached blocks
+	on the server.</para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+      	<term><option>--reconnect</option></term>
+	<listitem>
+	<para>This command recovers from a lost connection by re-establishing
+	connectivity with the origin server. This command expects two additional
+	arguments, the <replaceable>REMOTE_HOST</replaceable>, and the
+	<replaceable>REMOTE_PORT</replaceable>
+	you want to connect to, to recover from a disconnected session. </para>
+        </listitem>
+      </varlistentry>
+
+
+      <varlistentry>
+      	<term><option>--shutdown</option></term>
+	<listitem>
+	<para>This command stops the proxy server and restarts the target server.
+	All client sessions are preserved.</para>
+        </listitem>
+      </varlistentry>
+
     </variablelist>
   </refsect1>
   <refsect1>
@@ -89,9 +134,10 @@ manpage.1: manpage.sgml
 
     <variablelist>
         <varlistentry>
-        <term><option>control_file</option></term>
+        <term><option>CONTROL_SOCKET</option></term>
         <listitem>
-          <para>The named pipe, where the xnbd-server(8) programs opened its control channel.</para>
+          <para>The Unix domain socket, the <command>xnbd-server</command>(8)
+	  program is listening on.</para>
         </listitem>
       </varlistentry>
       </variablelist>
