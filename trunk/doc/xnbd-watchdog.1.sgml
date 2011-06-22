@@ -54,13 +54,13 @@ manpage.1: manpage.sgml
   <refsynopsisdiv>
     <cmdsynopsis>
       <command>&dhpackage;</command>
-      <arg>--timeout <replaceable>seconds</replaceable></arg>
-      <arg>--interval <replaceable>seconds</replaceable></arg>
-      <arg>--recovery-command <replaceable>command</replaceable></arg>
+      <arg>--timeout <replaceable>SECONDS</replaceable></arg>
+      <arg>--interval <replaceable>SECONDS</replaceable></arg>
+      <arg>--recovery-command <replaceable>COMMAND</replaceable></arg>
       <arg>--recovery-command-reboot</arg>
-      <arg><replaceable>nbd_device</replaceable></arg>
+      <arg><replaceable>NBD_DEVICE</replaceable></arg>
     </cmdsynopsis>
- </refsynopsisdiv> 
+ </refsynopsisdiv>
  <refsect1>
     <title>DESCRIPTION</title>
 
@@ -75,24 +75,24 @@ manpage.1: manpage.sgml
 
     <variablelist>
       <varlistentry>
-	<term><option>--timeout <replaceable>seconds</replaceable></option></term>
+	<term><option>--timeout <replaceable>SECONDS</replaceable></option></term>
 	<listitem>
 	  <para>Triggers the recovery command action if the watchdog process is unable to connect to
-          the <replaceable>nbd_device</replaceable> within the given timeout. If not given, this defaults to 10 seconds.</para>
+          the <replaceable>NBD_DEVICE</replaceable> within the given timeout. If not given, this defaults to 10 seconds.</para>
 	</listitem>
       </varlistentry>
 
       <varlistentry>
-	<term><option>--interval <replaceable>seconds</replaceable></option></term>
+	<term><option>--interval <replaceable>SECONDS</replaceable></option></term>
 	<listitem>
 	  <para>Specifies the polling interval between probes. If not given, this defaults to 10 seconds.</para>
 	</listitem>
       </varlistentry>
 
       <varlistentry>
-	<term><option>--recovery-command <replaceable>command</replaceable></option></term>
+	<term><option>--recovery-command <replaceable>COMMAND</replaceable></option></term>
 	<listitem>
-	  <para>If given, the <replaceable>command</replaceable> is executed if the watchdog is unable to connect
+	  <para>If given, the <replaceable>COMMAND</replaceable> is executed if the watchdog is unable to connect
           the NBD device after timeout exceeded.</para>
 	</listitem>
       </varlistentry>
@@ -106,7 +106,7 @@ manpage.1: manpage.sgml
       </varlistentry>
 
     </variablelist>
-  
+
   </refsect1>
   <refsect1>
     <title>POSITIONAL ARGUMENTS</title>
@@ -115,7 +115,7 @@ manpage.1: manpage.sgml
 
     <variablelist>
         <varlistentry>
-        <term><option>nbd_device</option></term>
+        <term><option>NBD_SERVER</option></term>
         <listitem>
           <para>The local nbd-device to be associated with the remote <command>xnbd-server</command>.</para>
         </listitem>
@@ -135,7 +135,7 @@ manpage.1: manpage.sgml
     Pavel Macheck (pavel@ucw.cz) and is now maintained by Paul Clements.
     (Paul.Clements@steeleye.com).</para>
 
-    <para>The xNBD userland (client and server) have been written by 
+    <para>The xNBD userland (client and server) have been written by
      Takahiro Hirofuchi (t.hirofuchi@aist.go.jp)</para>
 
     <para>This manual page was written by &dhusername; (&dhemail;) for

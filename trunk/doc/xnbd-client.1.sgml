@@ -55,36 +55,41 @@ manpage.1: manpage.sgml
   <refsynopsisdiv>
     <cmdsynopsis>
       <command>&dhpackage;</command>
+      <arg>--blocksize <replaceable>SIZE</replaceable></arg>
       <arg>--connect</arg>
-      <arg>--timeout <replaceable>seconds</replaceable></arg>
-      <arg>--blocksize <replaceable>size</replaceable></arg>
-      <arg>--retry <replaceable>count</replaceable></arg>
-      <arg>--recovery-command <replaceable>command</replaceable></arg>
-      <arg>--recovery-command-reboot <replaceable>command</replaceable></arg>
-      <arg choice=plain><replaceable>host</replaceable></arg>
-      <arg choice=plain><replaceable>port</replaceable></arg>
-      <arg choice=plain><replaceable>nbd-device</replaceable></arg>
+      <arg>--exportname <replaceable>NAME</replaceable></arg>
+      <arg>--recovery-command <replaceable>COMMAND</replaceable></arg>
+      <arg>--recovery-command-reboot <replaceable>COMMAND</replaceable></arg>
+      <arg>--retry <replaceable>COUNT</replaceable></arg>
+      <arg>--timeout <replaceable>SECONDS</replaceable></arg>
+      <arg choice=plain><replaceable>NBD-DEVICE</replaceable></arg>
+      <arg rep='repeat'>
+      <arg choice=plain><replaceable>HOST</replaceable></arg>
+      <arg choice=plain><replaceable>PORT</replaceable></arg>
+      </arg>
     </cmdsynopsis>
     <cmdsynopsis>
       <command>&dhpackage;</command>
-      <arg>bs=<replaceable>size</replaceable></arg>
-      <arg>timeout=<replaceable>seconds</replaceable></arg>
-      <arg choice=plain><option><replaceable>host</replaceable> <replaceable>port</replaceable> <replaceable>nbd-device</replaceable></option></arg>
+      <arg>bs=<replaceable>SIZE</replaceable></arg>
+      <arg>timeout=<replaceable>SECONDS</replaceable></arg>
+      <arg choice=plain><option><replaceable>HOST</replaceable>
+      <replaceable>PORT</replaceable> <replaceable>NBD-DEVICE</replaceable></option></arg>
     </cmdsynopsis>
     <cmdsynopsis>
       <command>&dhpackage;</command>
-      <arg choice=plain> --disconnect <replaceable>nbd-device</replaceable></arg>
+      <arg choice=plain> --disconnect <replaceable>NBD-DEVICE</replaceable></arg>
     </cmdsynopsis>
     <cmdsynopsis>
       <command>&dhpackage;</command>
-      <arg choice=plain> --check <replaceable>nbd-device</replaceable></arg>
+      <arg choice=plain> --check <replaceable>NBD-DEVICE</replaceable></arg>
     </cmdsynopsis>
   </refsynopsisdiv>
   <refsect1>
     <title>DESCRIPTION</title>
 
     <para>With <command>&dhpackage;</command>, you can connect to a
-    server running <command>xnbd-server</command>, thus using raw
+    server running <command>xnbd-server</command> or
+    <command>xnbd-wrapper</command>, thus using raw
     diskspace from that server as a blockdevice on the local
     client.</para>
 
@@ -105,12 +110,22 @@ manpage.1: manpage.sgml
     <para>The following options are supported:</para>
 
     <variablelist>
+
+
       <varlistentry>
-	<term><option>--connect</option>|<option>-C</option></term>
+	<term><option>--block-size <replaceable>SIZE</replaceable></option></term>
 	<listitem>
-	  <para>Connect to the nbd-server</para>
+	  <para>Use the provided value as block size.
+	    Default is 1024; allowed values are either 512, 1024, 2048 or 4096.
+	    For best results use a block size value of 4096</para>
+	  <para>
+		For compatibility to <command>nbd-client</command>(1) you can
+		also use <option>bs=<replaceable>SIZE</replaceable></option>
+	  </para>
 	</listitem>
       </varlistentry>
+
+
       <varlistentry>
 	<term><option>--check</option>|<option>-c</option></term>
 	<listitem>
@@ -119,14 +134,23 @@ manpage.1: manpage.sgml
 	  <para>If the device is connected, &dhpackage; will exit
 	  with an exit state of 0 and print the PID of the &dhpackage;
 	  instance that connected it to stdout. </para>
-	  <para>If the device is not connected or does not exist 
-          (for example because the nbd module was not loaded), 
-          &dhpackage; will exit with an exit state of 1 and not print 
+	  <para>If the device is not connected or does not exist
+          (for example because the nbd module was not loaded),
+          &dhpackage; will exit with an exit state of 1 and not print
           anything on stdout.</para>
 	  <para>If an error occurred, &dhpackage; will exit with an exit
 	  state of 2, and not print anything on stdout either.</para>
 	</listitem>
       </varlistentry>
+
+
+      <varlistentry>
+	<term><option>--connect</option>|<option>-C</option></term>
+	<listitem>
+	  <para>Connect to the nbd-server</para>
+	</listitem>
+      </varlistentry>
+
       <varlistentry>
 	<term><option>--disconnect</option>|<option>-d</option></term>
 	<listitem>
@@ -135,53 +159,55 @@ manpage.1: manpage.sgml
 	</listitem>
       </varlistentry>
 
-      <varlistentry>
-	<term><option>--timeout</option> <replaceable>seconds</replaceable></term>
-	<listitem>
-	  <para>Use a timeout period (default is 0 which means not to use a timeout). 
-	  Please do not use this option for now, as it seems not to work due to a bug 
-	  in the kernel module.</para>
 
-	  <para>
-		For compatibility to <command>nbd-client</command>(1) you can also use <option>timeout=<replaceable>seconds</replaceable></option>
-	  </para>
+      <varlistentry>
+        <term><option>--exportname</option> <replaceable>NAME</replaceable></term>
+        <listitem>
+	<para>If the server supports to access devices by an identifier, use
+	<replaceable>NAME</replaceable> to request access to a particular
+	volume. This command is useful in combination with a <command>xnbd-wrapper</command>
+	and only succeeds, if the remote host is exporting the requested device.
+	</para>
 	</listitem>
       </varlistentry>
 
       <varlistentry>
-	<term><option>--retry <replaceable>count</replaceable></option></term>
+	<term><option>--retry <replaceable>COUNT</replaceable></option></term>
 	<listitem>
-	  <para>Try up to "<replaceable>count</replaceable>" times to connect to 
-		the associated nbd-server. Default is 1, that is nbd-client will 
+	  <para>Try up to "<replaceable>COUNT</replaceable>" times to connect to
+		the associated nbd-server. Default is 1, that is nbd-client will
 		stop after the first unsuccessful try.</para>
 	</listitem>
       </varlistentry>
 
       <varlistentry>
-        <term><option>--recovery-command-reboot</option></term>
-        <listitem>
-          <para>Invoke the <command>reboot</command>(8) system call on unexpected disconnection</para>
-        </listitem>
-      </varlistentry>
-
-      <varlistentry>
         <term><option>--recovery-command</option></term>
         <listitem>
-          <para>invoke a specified command "<replaceable>command</replaceable>" on unexpected disconnection</para>
+          <para>invoke a specified command "<replaceable>COMMAND</replaceable>" on unexpected disconnection</para>
         </listitem>
       </varlistentry>
 
       <varlistentry>
-	<term><option>--block-size <replaceable>block size</replaceable></option></term>
+        <term><option>--recovery-command-reboot</option></term>
+        <listitem>
+          <para>Invoke the <command>reboot</command>(8) command on unexpected disconnection</para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+	<term><option>--timeout</option> <replaceable>SECONDS</replaceable></term>
 	<listitem>
-	  <para>Use the provided value as "<replaceable>block size</replaceable>". 
-	    Default is 1024; allowed values are either 512, 1024, 2048 or 4096. 
-	    For best retults use a block size value of 4096</para>
+	  <para>Use a timeout period (default is 0 which means not to use a timeout).
+	  Please do not use this option for now, as it seems not to work due to a bug
+	  in the kernel module.</para>
+
 	  <para>
-		For compatibility to <command>nbd-client</command>(1) you can also use <option>bs=<replaceable>block size</replaceable></option>
+		For compatibility to <command>nbd-client</command>(1) you can
+		also use <option>timeout=<replaceable>SECONDS</replaceable></option>
 	  </para>
 	</listitem>
       </varlistentry>
+
     </variablelist>
   </refsect1>
 
@@ -192,30 +218,35 @@ manpage.1: manpage.sgml
 
     <variablelist>
         <varlistentry>
-        <term><option>host</option></term>
+        <term><option>HOST</option></term>
         <listitem>
-          <para>The site to connect to a remote xnbd-server. You can specify 
+          <para>The site to connect to a remote xnbd-server. You can specify
 	  any resolvable hostname, IPv4 or IPv6 address.</para>
         </listitem>
       </varlistentry>
 
 
         <varlistentry>
-        <term><option>port</option></term>
+        <term><option>PORT</option></term>
         <listitem>
           <para>The port number to connect to on remote side</para>
         </listitem>
       </varlistentry>
 
         <varlistentry>
-        <term><option>nbd-device</option></term>
+        <term><option>NBD-DEVICE</option></term>
         <listitem>
           <para>The local nbd-device to be associated with the remote <command>xnbd-server</command>.</para>
         </listitem>
       </varlistentry>
     </variablelist>
 
+    <para> You can specify multiple <replaceable>host</replaceable> <replaceable>port</replaceable>
+    tuples. <command>xnbd-client</command> will try to connect to each of them
+    in order until it succeeds to establish a connection to a server. </para>
+
   </refsect1>
+
   <refsect1>
     <title>BUGS</title>
     <para>The NBD device is known to deadlock when not being used altogether with
@@ -229,7 +260,7 @@ manpage.1: manpage.sgml
   <refsect1>
     <title>SEE ALSO</title>
 
-    <para>xnbd-server (8).</para>
+    <para>xnbd-server (8), xnbd-wrapper (8).</para>
 
   </refsect1>
   <refsect1>
@@ -238,16 +269,17 @@ manpage.1: manpage.sgml
     Pavel Macheck (pavel@ucw.cz) and is now maintained by Paul Clements.
     (Paul.Clements@steeleye.com).</para>
 
-    <para>The xNBD userland (client and server) have been written by 
+    <para>The xNBD userland (client and server) have been written by
      Takahiro Hirofuchi (t.hirofuchi@aist.go.jp)</para>
 
     <para>This manual page was written by &dhusername; (&dhemail;) for
-    the &debian; system (but may be used by others). Large parts are 
-    verbatim copies of the original nbd-server and nbd-client manual 
-    pages written by Wouter Verhelst (wouter@debian.org). Permission is
-    granted to copy, distribute and/or modify this document under the
-    terms of the <acronym>GNU</acronym> General Public License,
-    version 2, as published by the Free Software Foundation.</para>
+    the &debian; system (but may be used by others). Large parts are
+    verbatim copies of the original <command>nbd-server</command> and
+    <command>nbd-client</command> manual pages written by Wouter Verhelst
+    (wouter@debian.org). Permission is granted to copy, distribute and/or
+    modify this document under the terms of the <acronym>GNU</acronym>
+    General Public License, version 2, as published by the Free Software
+    Foundation.</para>
 
   </refsect1>
 </refentry>
