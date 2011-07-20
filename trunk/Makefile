@@ -20,10 +20,11 @@
 #  Place - Suite 330, Boston, MA 02111-1307, USA.
 
 
-CC=gcc
-INSTALL=install
-MAKE=make
-RM=rm
+CC	= gcc
+RM	= rm
+MAKE	= make
+INSTALL	= install
+DESTDIR	?= /usr
 
 # -O3 $(MAKE)s a broken binary.
 # CFLAGS_COMMON=-g -O2 -Wall -Wextra -Wstrict-aliasing=2 -Wformat=2 -Wcast-qual -Wcast-align -Wwrite-strings -Wfloat-equal -Wpointer-arith -Wswitch-enum -Wconversion -fstack-protector -fstack-check -Wextra -std=gnu99 `pkg-config --cflags --libs glib-2.0 gthread-2.0` -llzo2
@@ -134,12 +135,12 @@ clean:
 	$(RM) -rf *.o *.d xnbd-server xnbd-server-debug xnbd-server-test xnbd-server-cachestat xnbd-cachestatdump xnbd-bgctl xnbd-tester xnbd-client xnbd-watchdog xnbd-wrapper
 
 install: default
-	$(INSTALL) -D --mode=0755 xnbd-server $(DESTDIR)/usr/sbin/xnbd-server
-	$(INSTALL) -D --mode=0755 xnbd-bgctl  $(DESTDIR)/usr/sbin/xnbd-bgctl
-	$(INSTALL) -D --mode=0755 xnbd-wrapper  $(DESTDIR)/usr/sbin/xnbd-wrapper
-	$(INSTALL) -D --mode=0755 xnbd-wrapper-ctl.py  $(DESTDIR)/usr/sbin/xnbd-wrapper-ctl
-	$(INSTALL) -D --mode=0755 xnbd-client  $(DESTDIR)/usr/bin/xnbd-client
-	$(INSTALL) -D --mode=0755 xnbd-watchdog $(DESTDIR)/usr/bin/xnbd-watchdog
+	$(INSTALL) -D --mode=0755 xnbd-server $(DESTDIR)/sbin/xnbd-server
+	$(INSTALL) -D --mode=0755 xnbd-bgctl  $(DESTDIR)/sbin/xnbd-bgctl
+	$(INSTALL) -D --mode=0755 xnbd-wrapper  $(DESTDIR)/sbin/xnbd-wrapper
+	$(INSTALL) -D --mode=0755 xnbd-wrapper-ctl.py  $(DESTDIR)/sbin/xnbd-wrapper-ctl
+	$(INSTALL) -D --mode=0755 xnbd-client  $(DESTDIR)/bin/xnbd-client
+	$(INSTALL) -D --mode=0755 xnbd-watchdog $(DESTDIR)/bin/xnbd-watchdog
 
 
 -include $(patsubst %.c, %.d, $(SRC))
