@@ -61,6 +61,8 @@ manpage.1: manpage.sgml
       <arg>--port  <replaceable>PORT</replaceable></arg>
       <arg>--socket  <replaceable>PATH</replaceable></arg>
       <arg>--xnbd-binary  <replaceable>PATH</replaceable></arg>
+      <arg>--daemonize</arg>
+      <arg>--logpath <replaceable>PATH</replaceable></arg>
     </cmdsynopsis>
   </refsynopsisdiv>
   <refsect1>
@@ -84,6 +86,13 @@ manpage.1: manpage.sgml
     <para>The following options are supported:</para>
 
     <variablelist>
+     <varlistentry>
+	<term><option>--daemonize</option>
+	</term>
+	<listitem>
+	<para>Go into background as soon as the xnbd-server is started up</para>
+	</listitem>
+      </varlistentry>
 
       <varlistentry>
 	<term><option>--imgfile <replaceable>IMAGE</replaceable></option>
@@ -112,6 +121,15 @@ manpage.1: manpage.sgml
 	being in IPv4 or IPv6 notation.</para>
 	</listitem>
       </varlistentry>
+
+      <varlistentry>
+        <term><option>--logpath <replaceable>FILE</replaceable></option>
+        </term>
+        <listitem>
+          <para>Log informational messages to the given <replaceable>FILE</replaceable> if given. Defaults to <replaceable>/tmp/xnbd.log</replaceable></para>
+        </listitem>
+      </varlistentry>
+
 
       <varlistentry>
 	<term><option>--lport <replaceable>PORT</replaceable></option>

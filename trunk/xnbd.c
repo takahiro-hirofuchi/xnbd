@@ -22,6 +22,7 @@
  */
 
 #include "xnbd.h"
+#include "xnbd_common.h"
 
 /* IPTOS */
 #include <netinet/in.h>
@@ -715,27 +716,6 @@ skip_restarting:
 }
 
 
-static const char *default_xnbdserver_logfile = "/tmp/xnbd.log";
-
-static void redirect_stderr(const char *logfile)
-{
-	int logfd = open(logfile ? logfile : default_xnbdserver_logfile,
-	                 O_WRONLY | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR);
-	if (logfd < 0)
-		err("open %s, %m", logfile);
-
-	int ret = dup2(logfd, fileno(stderr));
-	if (ret < 0)
-		err("dup2 %m");
-
-	close(logfd);
-}
-
-
-
-
-#include <getopt.h>
-
 static struct option longopts[] = {
 	/* commands */
 	{"target", no_argument, NULL, 't'},
@@ -1020,28 +1000,8 @@ int main(int argc, char **argv) {
 		redirect_stderr(logpath);
 	}
 
-	if (daemonize) {
-		close(STDIN_FILENO);
-
-		int devnull = open("/dev/null", O_WRONLY);
-		if (devnull < 0) {
-			err("could not open /dev/null");
-		} else {
-			dup2(devnull, STDOUT_FILENO);
-		}
-		close(devnull);
-
-		if (!logpath) {
-			logpath = default_xnbdserver_logfile;
-			info("logfile %s", logpath);
-			redirect_stderr(logpath);
-		}
-
-		int ret = daemon(0, 1);
-		if (ret < 0)
-			err("daemon %m");
-	}
-
+	if (daemonize)
+		detach(logpath);
 
 
 	master_server(lport, (void *) &xnbd, connected_fd);

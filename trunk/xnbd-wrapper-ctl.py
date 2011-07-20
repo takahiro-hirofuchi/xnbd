@@ -60,9 +60,13 @@ class XNBDWrapperCtl:
         return self._read_response()
 
     def __del__(self):
-        self.sock.send("quit")
-        #self.file_obj.close()
-        self.sock.close()
+    	try:
+        	self.sock.send("quit")
+        	#self.file_obj.close()
+        	self.sock.close()
+	except:
+		# We don't care about sockets being closed while closing sockets ...
+		pass
 
 
 def setup(option, opt_str, value, parser):
@@ -72,6 +76,9 @@ def setup(option, opt_str, value, parser):
 
     if opt_str == "-l" or opt_str == "--list":
         parser.values.cmd = "list"
+
+    elif opt_str == "-d" or opt_str == "--shutdown":
+        parser.values.cmd = "shutdown"
 
     elif opt_str == "-a" or opt_str == "--add":
         parser.values.cmd = "add " + value
@@ -87,7 +94,8 @@ if __name__ =='__main__':
 
     clparser = OptionParser(usage="\n  %prog [-s SOCKPATH] --list\n"
                                    +"  %prog [-s SOCKPATH] --add FILE\n"
-                                   +"  %prog [-s SOCKPATH] --remove N")
+                                   +"  %prog [-s SOCKPATH] --remove N\n"
+                                   +"  %prog [-s SOCKPATH] --shutdown")
     clparser.set_defaults(cmd=None)
     clparser.add_option("-l", "--list", action="callback", callback=setup, nargs=0, 
                         help="list registered disk images.")
@@ -100,6 +108,8 @@ if __name__ =='__main__':
     clparser.add_option("-s", "--socket",
                         help="specify the socket file path of xnbd-wrapper.", 
                         dest="sockpath", default="/tmp/xnbd_wrapper.ctl")
+    clparser.add_option("-d", "--shutdown", action="callback", callback=setup, nargs=0, 
+                        help="remove all disk images from the xnbd-wrapper instance and stop it afterwards.")
     (opts, args) = clparser.parse_args()
 
     if opts.cmd == None:

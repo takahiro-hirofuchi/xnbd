@@ -22,6 +22,7 @@
  */
 
 #include "xnbd.h"
+#include "xnbd_common.h"
 #include <libgen.h>
 #include <sys/signalfd.h>
 #include <sys/epoll.h>
@@ -185,11 +186,23 @@ static void *start_filemgr_thread(void *uxsock)
 			}
 			else if (strcmp(cmd, "del") == 0)
 				del_diskimg(&dsklist, atoi(arg));
+			else if (strcmp(cmd, "shutdown") == 0) {
+				int range = dsklist.num_of_diskimgs;
+				for (int i = 0; i < range; i++) {
+					if (dsklist.diskimgs[i] == NULL)
+                        			range++;
+                			else
+						del_diskimg(&dsklist, i);
+        			}
+				fprintf(fp, "All images terminated\n");
+				kill(0, SIGTERM);
+			}
 			else if (strcmp(cmd, "help") == 0)
 				fprintf(fp,
 					"list     : show diskimage list\n"
 					"add PATH : add diskimage\n"
 					"del N    : delete diskimage (N = diskimage number on list)\n"
+					"shutdown : terminate all images and shutdown xnbd-wrapper instance\n"
 					"quit     : quit(disconnect)\n");
 			else if (strcmp(cmd, "quit") == 0)
 				break;
@@ -274,7 +287,10 @@ int main(int argc, char **argv) {
 	const int MAX_NSRVS = 512;
 	int cstatus;
 	pid_t cpid;
-	
+	int daemonize = 0;
+	const char *logpath = NULL;
+
+
 	sigset_t sigset;
 	int sigfd;
 	struct signalfd_siginfo sfd_siginfo;
@@ -291,13 +307,21 @@ int main(int argc, char **argv) {
 		{"port",        required_argument, NULL, 'p'},
 		{"socket",      required_argument, NULL, 's'},
 		{"xnbd-binary", required_argument, NULL, 'b'},
+		{"daemonize",   no_argument,       NULL, 'd'},
+		{"logpath",     required_argument, NULL, 'L'},
 		{"help",        no_argument,       NULL, 'h'},
 		{ NULL,         0,                 NULL,  0 }
 	};
 
 
-	while((ch = getopt_long(argc, argv, "b:f:hl:p:s:", longopts, NULL)) != -1) {
+	while((ch = getopt_long(argc, argv, "b:f:hl:p:s:dL:", longopts, NULL)) != -1) {
 		switch (ch) {
+			case 'L':
+				logpath = optarg;
+				break;
+			case 'd':
+				daemonize = 1;
+				break;
 			case 'l':
 				laddr = optarg;
 				break;
@@ -325,10 +349,12 @@ int main(int argc, char **argv) {
 				       "  %s [--port port] [--xnbd-binary path-to-xnbdserver] [--imgfile disk-image-file] [--laddr listen-addr] [--socket socket-path]\n"
 				       "\n"
 				       "Options: \n"
+				       "  --daemonize   run as a daemon process\n"
 				       "  --port        Listen port (default: 8520).\n"
 				       "  --xnbd-binary Path to xnbd-server.\n"
 				       "  --imgfile     Path to disk image file. This options can be used multiple times.\n"
 				       "                You can also use xnbd-wrapper-ctl to (de)register disk images dynamically.\n"
+				       "  --logpath     logfile (default /tmp/xnbd.log)\n"
 				       "  --laddr       Listen address.\n"
 				       "  --socket      Unix socket path to listen on (default: /tmp/xnbd_wrapper.ctl).\n"
 				       "\n"
@@ -360,6 +386,17 @@ int main(int argc, char **argv) {
 
 	g_message("port: %s", port);
 	g_message("xnbd-binary: %s", child_prog);
+
+	if (logpath) {
+		info("logfile %s", logpath);
+		redirect_stderr(logpath);
+        }
+
+
+        if (daemonize)
+		detach(logpath);
+
+
 	list_diskimg(&dsklist, stdout);
 
 	sigemptyset(&sigset);
