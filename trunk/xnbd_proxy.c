@@ -58,7 +58,7 @@ void block_all_signals(void)
 /* used in xnbd-tester */
 void xnbd_proxy_control_cache_block(int ctl_fd, unsigned long index, unsigned long nblocks)
 {
-	off_t iofrom = index * CBLOCKSIZE;
+	off_t iofrom = (off_t) index * CBLOCKSIZE;
 	size_t iolen = nblocks * CBLOCKSIZE;
 	int ret;
 
