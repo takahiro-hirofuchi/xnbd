@@ -32,7 +32,7 @@ struct remote_read_request {
 	size_t bindex_iolen;
 };
 
-#define MAXNBLOCK 10
+#define MAXNBLOCK 32
 
 struct proxy_priv {
 	int clientfd;
