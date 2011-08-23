@@ -262,7 +262,7 @@ void *forwarder_tx_thread_main(void *arg)
 
 		/* send read request as soon as possible */
 		for (int i = 0; i < priv->nreq; i++) {
-			off_t iofrom = (iofrom) priv->req[i].bindex_iofrom * CBLOCKSIZE;
+			off_t iofrom = (off_t) priv->req[i].bindex_iofrom * CBLOCKSIZE;
 			size_t length = priv->req[i].bindex_iolen * CBLOCKSIZE;
 
 			int ret = nbd_client_send_read_request(proxy->remotefd, iofrom, length);
