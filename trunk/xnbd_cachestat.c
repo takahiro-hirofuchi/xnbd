@@ -225,7 +225,9 @@ int cachestat_initialize(const char *path, unsigned long nblocks)
 	{
 		char *tmpbuf = g_malloc(logsize);
 		bzero(tmpbuf, logsize);
-		writeit(cachestfd, tmpbuf, logsize);
+		//The line below fails, as the symbol is not imported from
+		//anywhere
+		//writeit(cachestfd, tmpbuf, logsize);
 		g_free(tmpbuf);
 	}
 

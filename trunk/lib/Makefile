@@ -22,34 +22,33 @@
 
 
 
+COMMON_BUILD_FLAGS	?=  -g -O2 -Wall -fstack-protector -fstack-check -Wextra -std=gnu99 `pkg-config --cflags --libs glib-2.0 gthread-2.0`
+DEFAULT_BUILD_FLAGS	= $(COMMON_BUILD_FLAGS)
+DEBUG_BUILD_FLAGS	= $(COMMON_BUILD_FLAGS)
+SRC			:= $(wildcard *.c)
+OBJ			:= $(SRC:%.c=%.o)
+OBJ_DBG			:= $(patsubst %.c, %___dbg.o, $(SRC))
 
-CC=gcc
-CFLAGS=-g -O2 -Wall -fstack-protector -fstack-check -Wextra -std=gnu99 `pkg-config --cflags --libs glib-2.0 gthread-2.0` 
-SRC=common.c net.c io.c bitmap.c nbd.c
-OBJ=$(SRC:%.c=%.o)
-
-obj_dbg=$(patsubst %.c, %___dbg.o, $(SRC))
-
-
-%.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
-
-%___dbg.o: %.c
-	$(CC) $(CFLAGS) -DXNBD_DEBUG -c $< -o $@
-
-%.d: %.c
-	$(CC) -MM $(CFLAGS) $< -MQ $@ -MQ $(patsubst %.d, %.o, $@) -MF $@
 
 all: libxutils.a libxutils_dbg.a
 
+%.o: %.c
+	$(COMPILE.c) $(DEFAULT_BUILD_FLAGS) -c $< -o $@
+
+%___dbg.o: %.c
+	$(COMPILE.c) $(DEBUG_BUILD_FLAGS) -DXNBD_DEBUG -c $< -o $@
+
+%.d: %.c
+	$(COMPILE.c) $(DEFAULT_BUILD_FLAGS) -MM $< -MQ $@ -MQ $(patsubst %.d, %.o, $@) -MF $@
+
 libxutils.a: $(OBJ)
-	ar crsv $@ $^
+	$(AR) crsv $@ $^
 
-libxutils_dbg.a: $(obj_dbg)
-	ar crsv $@ $^
+libxutils_dbg.a: $(OBJ_DBG)
+	$(AR) crsv $@ $^
 
-.PHONY: all clean 
+.PHONY: all clean
 clean:
-	rm -rf *.o *.d *.a
+	rm -rf *.o *.d *.a libxutils.a libxutils_dbg.a
 
 -include $(patsubst %.c, %.d, $(SRC))
