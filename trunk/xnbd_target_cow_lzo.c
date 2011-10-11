@@ -570,7 +570,7 @@ struct disk_stack_io *disk_stack_mmap(struct disk_stack *ds, off_t iofrom, size_
 
 
 	for (unsigned int i = 0; i < iov_size; i++) {
-		dbg("iov %d: base %p len %d", i, iov[i].iov_base, iov[i].iov_len);
+		dbg("iov %d: base %p len %zu", i, iov[i].iov_base, iov[i].iov_len);
 	}
 
 	io->iov = iov;
@@ -809,7 +809,7 @@ int target_mode_main_cow(struct xnbd_session *ses)
 
 	switch (iotype) {
 		case NBD_CMD_WRITE:
-			dbg("disk write iofrom %llu iolen %u", iofrom, iolen);
+			dbg("disk write iofrom %ju iolen %zu", iofrom, iolen);
 #ifdef DEBUG_COW
 			check_write();
 			net_recv_all_or_abort(csock, debug_buf + iofrom, iolen);
@@ -825,7 +825,7 @@ int target_mode_main_cow(struct xnbd_session *ses)
 			break;
 
 		case NBD_CMD_READ:
-			dbg("disk read iofrom %llu iolen %u", iofrom, iolen);
+			dbg("disk read iofrom %ju iolen %zu", iofrom, iolen);
 
 			/* send normal header */
 			net_send_all_or_abort(csock, &reply, sizeof(reply));

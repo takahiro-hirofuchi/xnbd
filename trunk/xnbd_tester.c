@@ -232,7 +232,7 @@ void *sender_thread_main(void *data)
 		 **/
 		req->iolen  = (size_t) MIN((off_t) tmp_iolen, params->disksize - req->iofrom);
 
-		g_message("index %d req %p iotype %s iofrom %ju iolen %u", index, req,
+		g_message("index %d req %p iotype %s iofrom %ju iolen %zu", index, req,
 				(req->iotype == NBD_CMD_READ) ? "read" : "write",
 				req->iofrom, req->iolen);
 
@@ -282,7 +282,7 @@ void recv_reply_header(int remotefd, uint64_t expected_index)
 	dbg("index %ju %ju", reply_index, reply.handle);
 
 	if (reply_index != expected_index)
-		err("wrong reply ordering, reply_index %llu (%llx) expected_index %llu", reply_index, reply_index, expected_index);
+		err("wrong reply ordering, reply_index %ju (%jx) expected_index %ju", reply_index, reply_index, expected_index);
 }
 
 void *receiver_thread_main(void *data)
@@ -428,7 +428,7 @@ int check_consistency_by_partial_mmap(char *srcdisk, int tgtdiskfd, struct crequ
 	int ret = memcmp(srciobuf, tgtiobuf, req->iolen);
 
 	if (ret) {
-		g_warning("mismatch index %d iotype %s iofrom %ju iolen %u",
+		g_warning("mismatch index %d iotype %s iofrom %ju iolen %zu",
 				req->index, (req->iotype == NBD_CMD_READ) ? "read" : "write",
 				req->iofrom, req->iolen);
 
