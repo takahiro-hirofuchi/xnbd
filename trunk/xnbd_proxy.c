@@ -493,7 +493,7 @@ int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
 						info("register shared buffer fd (buf_fd %d wrk_fd %d)", buf_fd, wrk_fd);
 
 						proxy->shared_buff = mmap(NULL, XNBD_SHARED_BUFF_SIZE, PROT_READ, MAP_SHARED, buf_fd, 0);
-						if (!proxy->shared_buff)
+						if (proxy->shared_buff == MAP_FAILED)
 							err("mmap, %m");
 
 						close(buf_fd);

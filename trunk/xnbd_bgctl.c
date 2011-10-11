@@ -98,7 +98,7 @@ void *setup_shared_buffer(char *unix_path)
 		err("ftruncate, %m");
 
 	void *shared_buff = mmap(NULL, len, PROT_WRITE, MAP_SHARED, buf_fd, 0);
-	if (!shared_buff)
+	if (shared_buff == MAP_FAILED)
 		err("mmap, %m");
 
 	info("shared buffer allocated, %p (len %lu)", shared_buff, len);
