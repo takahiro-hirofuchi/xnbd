@@ -30,9 +30,11 @@ XUTILSPATH = ./lib
 # -O3 $(MAKE)s a broken binary.
 COMMON_BUILD_FLAGS	:= -g -O2 -Wall -Wextra -Wstrict-aliasing=2 -Wformat=2 -Wcast-align -Wwrite-strings -Wfloat-equal -Wpointer-arith -Wswitch-enum -fstack-protector -fstack-check -std=gnu99 `pkg-config --cflags --libs glib-2.0 gthread-2.0` -I$(XUTILSPATH) -L$(XUTILSPATH)
 DEFAULT_BUILD_FLAGS	:= $(COMMON_BUILD_FLAGS) -lxutils
-DEBUG_BUILD_FLAGS	:= $(COMMON_BUILD_FLAGS) -lxutils_dbg -DXNBD_DEBUG -DCACHESTAT_ENABLED
+# -DCACHESTAT_ENABLED does not work.
+DEBUG_BUILD_FLAGS	:= $(COMMON_BUILD_FLAGS) -lxutils_dbg -DXNBD_DEBUG
 
 SRC			:= $(wildcard *.c)
+# xnbd-cachestatdump is out-of-date.
 BINARIES 		:= xnbd-server xnbd-bgctl xnbd-client xnbd-watchdog xnbd-wrapper xnbd-cachestatdump xnbd-tester
 BINARIES_OBJ		:= $(subst -,_,$(BINARIES:%=%.o))
 OBJ			:= $(SRC:%.c=%.o)
