@@ -97,5 +97,6 @@ install: default
 	do \
 		$(INSTALL) -D --mode=0755 $$file "$(PREFIX)/$$file" ; \
 	done
+	$(INSTALL) -D --mode=0755 xnbd-wrapper-ctl.py "$(PREFIX)/xnbd-wrapper-ctl"
 
 -include $(patsubst %.c, %.d, $(SRC))
