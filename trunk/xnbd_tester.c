@@ -297,7 +297,7 @@ void *receiver_thread_main(void *data)
 		recv_reply_header(params->remotefd, req->index);
 
 
-		dbg("req %p index %d iofrom %ju iolen %u", req, req->index, req->iofrom, req->iolen);
+		dbg("req %p index %d iofrom %ju iolen %zu", req, req->index, req->iofrom, req->iolen);
 
 
 		struct mmap_partial *tgtmp = mmap_partial_map(params->tgtdiskfd, req->iofrom, req->iolen, 0);
