@@ -36,7 +36,7 @@ void proxy_priv_dump(struct proxy_priv *priv)
 	dbg(" nreq   %d", priv->nreq);
 	for (int i = 0; i < priv->nreq; i++) {
 		dbg("  bindex_iofrom %ju", priv->req[i].bindex_iofrom);
-		dbg("  bindex_iolen  %u", priv->req[i].bindex_iolen);
+		dbg("  bindex_iolen  %zu", priv->req[i].bindex_iolen);
 	}
 
 	dbg(" iofrom %ju", priv->iofrom);
