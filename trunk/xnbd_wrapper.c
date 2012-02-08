@@ -287,7 +287,10 @@ int main(int argc, char **argv) {
 	const int MAX_NSRVS = 512;
 	int cstatus;
 	pid_t cpid;
+	const char default_server_target[] = "--target";
+	const char *server_target = NULL;
 	int daemonize = 0;
+	int readonly = 0;
 	const char *logpath = NULL;
 
 
@@ -307,6 +310,8 @@ int main(int argc, char **argv) {
 		{"port",        required_argument, NULL, 'p'},
 		{"socket",      required_argument, NULL, 's'},
 		{"xnbd-binary", required_argument, NULL, 'b'},
+		{"cow",         no_argument,       NULL, 'c'},
+		{"readonly",    no_argument,       NULL, 'r'},
 		{"daemonize",   no_argument,       NULL, 'd'},
 		{"logpath",     required_argument, NULL, 'L'},
 		{"help",        no_argument,       NULL, 'h'},
@@ -318,6 +323,12 @@ int main(int argc, char **argv) {
 		switch (ch) {
 			case 'L':
 				logpath = optarg;
+				break;
+			case 'c':
+				server_target = "--cow-target";
+				break;
+			case 'r':
+				readonly = 1;
 				break;
 			case 'd':
 				daemonize = 1;
@@ -349,7 +360,9 @@ int main(int argc, char **argv) {
 				       "  %s [--port port] [--xnbd-binary path-to-xnbdserver] [--imgfile disk-image-file] [--laddr listen-addr] [--socket socket-path]\n"
 				       "\n"
 				       "Options: \n"
-				       "  --daemonize   run as a daemon process\n"
+				       "  --daemonize   run wrapper as a daemon process\n"
+				       "  --cow         run server instances as a cow target\n"
+				       "  --readonly    run server instances as a readonly target.\n"
 				       "  --port        Listen port (default: 8520).\n"
 				       "  --xnbd-binary Path to xnbd-server.\n"
 				       "  --imgfile     Path to disk image file. This options can be used multiple times.\n"
@@ -382,6 +395,9 @@ int main(int argc, char **argv) {
 
 	if (! ctl_path)
 		ctl_path = (char *)default_ctl_path;
+
+	if (! server_target)
+		server_target = (char *)default_server_target;
 
 
 	g_message("port: %s", port);
@@ -519,7 +535,10 @@ int main(int argc, char **argv) {
 						_exit(EXIT_FAILURE);
 					}
 
-					(void)execl(child_prog, child_prog, "--target", "--connected-fd", fd_num, requested_img, (char *)NULL);
+					if (readonly)
+						(void)execl(child_prog, child_prog, server_target, "--readonly", "--connected-fd", fd_num, requested_img, (char *)NULL);
+					else
+						(void)execl(child_prog, child_prog, server_target, "--connected-fd", fd_num, requested_img, (char *)NULL);
 					perror("exec");
 					_exit(EXIT_FAILURE);
 				} else if (pid > 0) {
