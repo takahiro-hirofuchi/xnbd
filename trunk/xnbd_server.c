@@ -797,11 +797,6 @@ int main(int argc, char **argv) {
 	const char *logpath = NULL;
 	int inetd = 0;
 
-#ifdef NEED_GTHREAD_INIT
-	if (g_thread_supported())
-		err("glib thread not supported");
-#endif
-
 	bzero(&xnbd, sizeof(xnbd));
 
 	g_log_set_default_handler(xutil_log_handler, (void *) &xnbd);
