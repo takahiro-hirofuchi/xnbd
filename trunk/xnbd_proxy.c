@@ -224,9 +224,7 @@ void proxy_shutdown_forwarder(struct xnbd_proxy *proxy)
 /* called in a proxy process */
 void proxy_initialize(struct xnbd_info *xnbd, struct xnbd_proxy *proxy)
 {
-#ifdef NEED_GTHREAD_INIT
 	g_thread_init(NULL);
-#endif
 
 
 	proxy->xnbd  = xnbd;
