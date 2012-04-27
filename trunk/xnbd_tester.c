@@ -666,7 +666,9 @@ int main(int argc, char **argv) {
 
 
 	set_sigactions();
+#ifdef NEED_GTHREAD_INIT
 	g_thread_init(NULL);
+#endif
 
 	/* @srcdisk: disk file for a direct mode, cache file for a redirect mode */
 	/* @dstdisk: temporary space */
