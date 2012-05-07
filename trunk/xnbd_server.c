@@ -785,6 +785,26 @@ static void show_help_and_exit(const char *msg)
 
   
 
+static int check_given_fd(int given_fd)
+{
+	int flags;
+
+	if ((flags = fcntl(given_fd, F_GETFL, 0)) == -1)
+		return -1;
+
+	if (flags & O_NONBLOCK) {
+		info("socket is in non-blocking mode");
+		info("set socket to blocking mode");
+		flags &= ~O_NONBLOCK;
+		if (fcntl(given_fd, F_SETFL, flags) == -1)
+			return -1;
+	}
+
+	return 0;
+}
+
+
+
 int main(int argc, char **argv) {
 	struct xnbd_info xnbd;
 	enum xnbd_cmd_type cmd = xnbd_cmd_unknown;
@@ -909,6 +929,8 @@ int main(int argc, char **argv) {
 					err("connected_fd option may not be specified with inetd option");
 				connected_fd = atoi(optarg);
 				info("connected fd %d", connected_fd);
+				if (check_given_fd(connected_fd) < 0)
+					err("check_given_fd, %m");
 				break;
 
 			case 'L':
