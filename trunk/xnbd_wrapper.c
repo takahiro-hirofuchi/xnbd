@@ -382,9 +382,16 @@ int main(int argc, char **argv) {
 	}
 
 	if (child_prog == NULL) {
-		if (asprintf(&child_prog, "%s/xnbd-server", dirname(*argv)) == -1) {
+		char *wrapper_abspath = realpath(argv[0], NULL);
+		if (asprintf(&child_prog, "%s/xnbd-server", dirname(wrapper_abspath)) == -1) {
 			return EXIT_FAILURE;
 		}
+		free(wrapper_abspath);
+	}
+
+	if (access(child_prog, X_OK) != 0) {
+		perror("check xnbd-binary");
+		return EXIT_FAILURE;
 	}
 
 	if (port == NULL) {
