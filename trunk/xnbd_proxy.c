@@ -594,9 +594,7 @@ void xnbd_proxy_start(struct xnbd_info *xnbd)
 
 	make_sockpair(&xnbd->proxy_sockpair_master_fd, &xnbd->proxy_sockpair_proxy_fd);
 
-	pid_t pid = fork();
-	if (pid == -1)
-		err("fork, %m");
+	pid_t pid = fork_or_abort();
 
 	if (pid == 0) {
 		/* -- child -- */
