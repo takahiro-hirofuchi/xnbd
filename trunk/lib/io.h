@@ -33,6 +33,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/mman.h>
 
 
 void read_all(int fd, void *buf, size_t len);
@@ -44,7 +45,7 @@ pthread_t pthread_create_or_abort(void * (*start_routine)(void *), void *arg);
 pid_t fork_or_abort(void);
 
 off_t get_disksize(int fd);
-off_t get_disksize_of_path(char *path);
+off_t get_disksize_of_path(const char *path);
 void calc_block_index(const unsigned int blocksize, off_t iofrom, size_t iolen, unsigned long *index_start, unsigned long *index_end);
 
 char *get_line(int fd);
@@ -61,4 +62,5 @@ void make_pipe(int *write_fd, int *read_fd);
 void make_sockpair(int *fd0, int *fd1);
 int poll_data_and_event(int datafd, int event_listener_fd) __attribute__((deprecated));
 void get_event_connecter(int *notifier, int *listener) __attribute__((deprecated));
+void munmap_or_abort(void *addr, size_t len);
 #endif

@@ -49,7 +49,6 @@ void cachestat_dump(char *path)
 {
 	int fd;
 	char *buf;
-	int ret;
 
 	fd = open(path, O_RDONLY);
 	if (fd < 0)
@@ -76,9 +75,7 @@ void cachestat_dump(char *path)
 	printf("cache_hit_ratio %lf\n", 100.0 * (double) st->cache_hit / (double) (st->cache_hit + st->cache_miss));
 	printf("transferred blocks %lu\n", st->cache_miss + st->cache_bgcopy);
 
-	ret = munmap(buf, logsize);
-	if (ret < 0) 
-		warn("munmap failed");
+	munmap_or_abort(buf, logsize);
 
 	close(fd);
 }
@@ -88,7 +85,6 @@ void cachestat_dump_loop(char *path, unsigned int interval)
 {
 	int fd;
 	char *buf;
-	int ret;
 
 	fd = open(path, O_RDONLY);
 	if (fd < 0)
@@ -164,9 +160,7 @@ void cachestat_dump_loop(char *path, unsigned int interval)
 		sleep(interval);
 	}
 
-	ret = munmap(buf, logsize);
-	if (ret < 0) 
-		warn("munmap failed");
+	munmap_or_abort(buf, logsize);
 
 	close(fd);
 }
@@ -257,9 +251,7 @@ int cachestat_shutdown(void)
 	if (ret < 0) 
 		warn("msync failed");
 
-	ret = munmap(cachestbuf, logsize);
-	if (ret < 0) 
-		warn("munmap failed");
+	munmap_or_abort(cachestbuf, logsize);
 
 	close(cachestfd);
 

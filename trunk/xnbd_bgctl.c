@@ -119,7 +119,7 @@ void *setup_shared_buffer(char *unix_path)
 void close_shared_buffer(void *shared_buff)
 {
 	size_t len = XNBD_SHARED_BUFF_SIZE;
-	munmap(shared_buff, len);
+	munmap_or_abort(shared_buff, len);
 	info("shared buffer deallocated, %p (len %lu)", shared_buff, len);
 }
 

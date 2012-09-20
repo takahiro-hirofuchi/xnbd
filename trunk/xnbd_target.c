@@ -224,9 +224,7 @@ int target_mode_main_mmap(struct xnbd_session *ses)
 	//ret = msync(mmaped_buf, mmaped_len, MS_SYNC);
 	//if (ret < 0) 
 	//	warn("msync failed");
-	ret = munmap(mmaped_buf, mmaped_len);
-	if (ret < 0) 
-		warn("munmap failed");
+	munmap_or_abort(mmaped_buf, mmaped_len);
 
 #if 0
 	if (iotype == NBD_CMD_READ)
