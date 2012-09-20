@@ -247,9 +247,7 @@ void invoke_new_session(struct xnbd_info *xnbd, int csockfd)
 
 	info("negotiations done");
 
-	pid_t pid = fork(); 
-	if (pid == -1)
-		err("fork failed");
+	pid_t pid = fork_or_abort(); 
 
 	if (pid == 0) {
 		/* worker child does not need master_fd */

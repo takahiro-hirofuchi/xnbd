@@ -283,9 +283,7 @@ static int xnbd_connect(const char *devpath, unsigned long blocksize, unsigned i
 	sigaddset(&set, SIGUSR1);
 	sigprocmask(SIG_BLOCK, &set, &oldset);
 
-	pid_t pid = fork();
-	if (pid < 0)
-		err("fork() %m");
+	pid_t pid = fork_or_abort();
 
 
 	if (pid != 0) {
