@@ -106,9 +106,7 @@ void setup_debug_buf(struct disk_stack *ds)
 
 	memcpy(debug_buf, buf, len);
 
-	int ret = munmap(buf, len);
-	if (ret < 0)
-		err("munmap");
+	munmap_or_abort(buf, len);
 
 	info("setup debug_buf done");
 }
@@ -265,9 +263,7 @@ void destroy_disk_stack(struct disk_stack *ds)
 			if (ret < 0)
 				err("msync");
 
-			ret = munmap(di->bm, di->bmlen);
-			if (ret < 0)
-				err("munmap");
+			munmap_or_abort(di->bm, di->bmlen);
 		}
 
 		g_free(di->path);
@@ -412,11 +408,9 @@ static struct disk_stack_io *create_disk_stack_io(struct disk_stack *ds)
 
 void free_disk_stack_io(struct disk_stack_io *io)
 {
-	for (int i = 0; i < io->ds->nlayers; i++) {
-		int ret = munmap(io->bufs[i], io->buflen);
-		if (ret < 0)
-			err("munmap");
-	}
+	for (int i = 0; i < io->ds->nlayers; i++)
+		munmap_or_abort(io->bufs[i], io->buflen);
+
 	g_free(io->iov);
 	g_free(io);
 }

@@ -373,9 +373,7 @@ int forwarder_rx_thread_mainloop(struct xnbd_proxy *proxy)
 		}
 	}
 
-	ret = munmap(mmaped_buf, mmaped_len);
-	if (ret < 0) 
-		warn("munmap failed");
+	munmap_or_abort(mmaped_buf, mmaped_len);
 
 
 	if (priv->need_retry) {

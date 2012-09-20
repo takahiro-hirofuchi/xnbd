@@ -88,9 +88,7 @@ struct mmap_partial *mmap_partial_map(int fd, off_t iofrom, const size_t iolen_i
 
 void mmap_partial_unmap(struct mmap_partial *mpinfo)
 {
-	int ret = munmap(mpinfo->buf, mpinfo->len);
-	if (ret < 0) 
-		warn("munmap failed, %m");
+	munmap_or_abort(mpinfo->buf, mpinfo->len);
 
 	g_free(mpinfo);
 }

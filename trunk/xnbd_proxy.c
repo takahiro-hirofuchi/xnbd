@@ -263,7 +263,7 @@ void proxy_shutdown(struct xnbd_proxy *proxy)
 	g_async_queue_unref(proxy->fwd_rx_queue);
 
 	if (proxy->shared_buff)
-		munmap(proxy->shared_buff, XNBD_SHARED_BUFF_SIZE);
+		munmap_or_abort(proxy->shared_buff, XNBD_SHARED_BUFF_SIZE);
 
 	close(proxy->cachefd);
 	bitmap_close_file(proxy->cbitmap, proxy->cbitmaplen);

@@ -26,9 +26,9 @@
 static void io_all(int fd, void *buf, size_t len, int read_ops)
 {
 	int   next_len = len;
-	void *next_buf = buf;
+	char *next_buf = buf;
 
-	char *mode = read_ops ? "read" : "write";
+	const char *mode = read_ops ? "read" : "write";
 	size_t total = 0;
 
 	for (;;) {
@@ -169,7 +169,7 @@ off_t get_disksize(int fd) {
 #include <sys/stat.h>
 #include <fcntl.h>
 
-off_t get_disksize_of_path(char *path)
+off_t get_disksize_of_path(const char *path)
 {
 	int fd = open(path, O_RDONLY);
 	if (fd < 0)
@@ -344,4 +344,11 @@ void make_sockpair(int *fd0, int *fd1)
 void get_event_connecter(int *notifier, int *listener)
 {
 	make_pipe(notifier, listener);
+}
+
+void munmap_or_abort(void *addr, size_t len)
+{
+	int ret = munmap(addr, len);
+	if (ret < 0)
+		err("munmap %m");
 }

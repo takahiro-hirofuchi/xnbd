@@ -148,9 +148,7 @@ void bitmap_close_file(unsigned long *bitmap, size_t bitmaplen)
 	if (ret < 0) 
 		err("msync bitmap failed");
 
-	ret = munmap(bitmap, bitmaplen);
-	if (ret < 0) 
-		err("munmap bitmap failed");
+	munmap_or_abort(bitmap, bitmaplen);
 }
 
 
