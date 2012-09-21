@@ -214,11 +214,11 @@ void detach(const char *logpath)
         close(STDIN_FILENO);
 
         int devnull = open("/dev/null", O_WRONLY);
-        if (devnull < 0) {
-        err("could not open /dev/null");
-        } else {
-                dup2(devnull, STDOUT_FILENO);
-        }
+        if (devnull < 0)
+		err("open /dev/null, %m");
+
+	dup2(devnull, STDOUT_FILENO);
+
         close(devnull);
 
         if(!logpath) {

@@ -29,6 +29,7 @@
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
+#include <syslog.h>
 
 #if 0
 static pid_t mygettid(void)
@@ -40,11 +41,50 @@ static pid_t mygettid(void)
 #include <sys/prctl.h>
 #include <stdlib.h>
 
-#define ALERT_LEVELS            (G_LOG_LEVEL_ERROR | G_LOG_LEVEL_CRITICAL | G_LOG_LEVEL_WARNING)
+#define ALERT_LEVELS (G_LOG_LEVEL_ERROR | G_LOG_LEVEL_CRITICAL | G_LOG_LEVEL_WARNING)
 
-void xutil_log_handler(const gchar   *log_domain, GLogLevelFlags log_level,
-		const gchar   *message, gpointer data __attribute__((unused)))
+int syslog_level(int glib_log_level)
 {
+	int level = LOG_INFO;
+
+	switch (glib_log_level & G_LOG_LEVEL_MASK)
+	{
+		case G_LOG_LEVEL_CRITICAL:
+			level = LOG_CRIT;
+			break;
+
+		case G_LOG_LEVEL_ERROR:
+			level = LOG_ERR;
+			break;
+
+		case G_LOG_LEVEL_WARNING:
+			level = LOG_WARNING;
+			break;
+
+		case G_LOG_LEVEL_MESSAGE:
+			level = LOG_NOTICE;
+			break;
+
+		case G_LOG_LEVEL_INFO:
+			level = LOG_INFO;
+			break;
+
+		case G_LOG_LEVEL_DEBUG:
+			level = LOG_DEBUG;
+			break;
+
+		default:
+			level = LOG_CRIT;
+	}
+
+	return level | LOG_DAEMON;
+}
+
+void custom_log_handler(const gchar *log_domain, GLogLevelFlags log_level,
+		const gchar *message, gpointer data)
+{
+	struct custom_log_handler_params *params = data;
+
 	GString *gstring = g_string_new(NULL);
 
 	/* we may not call _any_ GLib functions here */
@@ -141,7 +181,17 @@ void xutil_log_handler(const gchar   *log_domain, GLogLevelFlags log_level,
 	//struct xnbd_info *xnbd = (struct xnbd_info *) data;
 	//printf("%d %d\n", gstring->len, strlen(gstring->str));
 
-	write(2, gstring->str, gstring->len);
+	if (params) {
+		if (params->use_syslog)
+			syslog(syslog_level(log_level), gstring->str);
+		if (params->use_fd) {
+			g_assert(params->fd != -1);
+			write(params->fd, gstring->str, gstring->len);
+		}
+	} else {
+		/* compatibility for the past */
+		write(2, gstring->str, gstring->len);
+	}
 
 	g_string_free(gstring, TRUE);
 }
