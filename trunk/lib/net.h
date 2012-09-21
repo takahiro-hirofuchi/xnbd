@@ -46,13 +46,13 @@
 #include <stdlib.h>
 
 
-#define MAXLISTENSOCK 20
-unsigned int net_listen_all_addrinfo(struct addrinfo *ai_head, int lsock[]);
+struct addrinfo *net_getaddrinfo(char *host, int port, int ai_family, int socktype, int proto);
+unsigned int net_create_server_sockets(struct addrinfo *ai_head, int *fds, size_t nfds);
 int net_accept(int lsock);
-struct addrinfo *net_getaddrinfo(char *host, int port, int ai_family);
 int net_set_reuseaddr(int sockfd);
 int net_set_nodelay(int sockfd);
-int net_tcp_connect(const char *hostname, const char *service);
+int net_set_bindv6only(int sockfd);
+int net_connect(const char *hostname, const char *service, int type, int proto);
 
 int net_writev_all(int fd, struct iovec *iov, int count);
 int net_readv_all(int fd, struct iovec *iov, int count);

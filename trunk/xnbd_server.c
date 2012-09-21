@@ -215,6 +215,7 @@ static void set_sigactions()
 }
 
 
+#define MAXLISTENSOCK 20
 static struct pollfd ppoll_eventfds[MAXLISTENSOCK];
 static nfds_t ppoll_neventfds = 0;
 
@@ -378,13 +379,9 @@ int master_server(int port, void *data, int connect_fd)
 
 
 	if (connect_fd == -1) {
-		ai_head = net_getaddrinfo(NULL, port, PF_UNSPEC);
-		if (!ai_head)
-			return 0;
+		ai_head = net_getaddrinfo(NULL, port, PF_UNSPEC, SOCK_STREAM, IPPROTO_TCP);
 
-		unsigned int nlistened = net_listen_all_addrinfo(ai_head, lsock);
-		if (nlistened <= 0)
-			err("no socket to listen to");
+		unsigned int nlistened = net_create_server_sockets(ai_head, lsock, MAXLISTENSOCK);
 
 		freeaddrinfo(ai_head);
 
@@ -808,7 +805,6 @@ static int get_log_fd(const char *path)
 
 	return fd;
 }
-
 
 int main(int argc, char **argv) {
 	struct xnbd_info xnbd;

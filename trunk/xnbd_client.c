@@ -221,7 +221,7 @@ static int xnbd_connect(const char *devpath, unsigned long blocksize, unsigned i
 			const char *port = dst->port;
 
 			info("connecting to %s(%s)", host, port);
-			sockfd = net_tcp_connect(host, port);
+			sockfd = net_connect(host, port, SOCK_STREAM, IPPROTO_TCP);
 			if (sockfd < 0) {
 				warn("cannot connect to %s(%s)", host, port);
 				continue;

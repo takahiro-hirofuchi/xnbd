@@ -43,7 +43,7 @@ void reconnect(char *unix_path, char *rhost, char *rport)
 {
 	int fd = unix_connect(unix_path);
 
-	int fwd_fd = net_tcp_connect(rhost, rport);
+	int fwd_fd = net_connect(rhost, rport, SOCK_STREAM, IPPROTO_TCP);
 	nbd_negotiate_with_server(fwd_fd);
 
 	enum xnbd_proxy_cmd_type cmd = XNBD_PROXY_CMD_REGISTER_FORWARDER_FD;
@@ -101,7 +101,7 @@ void *setup_shared_buffer(char *unix_path)
 	if (shared_buff == MAP_FAILED)
 		err("mmap, %m");
 
-	info("shared buffer allocated, %p (len %lu)", shared_buff, len);
+	info("shared buffer allocated, %p (len %zu)", shared_buff, len);
 
 	/* send buf_fd */
 	int unix_fd = unix_connect(unix_path);
@@ -120,7 +120,7 @@ void close_shared_buffer(void *shared_buff)
 {
 	size_t len = XNBD_SHARED_BUFF_SIZE;
 	munmap_or_abort(shared_buff, len);
-	info("shared buffer deallocated, %p (len %lu)", shared_buff, len);
+	info("shared buffer deallocated, %p (len %zu)", shared_buff, len);
 }
 
 void cache_block_range(char *unix_path, unsigned long *bm, unsigned long disk_nblocks, int remote_fd, char *shared_buff)
@@ -164,7 +164,7 @@ void cache_block_range(char *unix_path, unsigned long *bm, unsigned long disk_nb
 
 void cache_all_blocks_with_dedicated_connection(char *unix_path, unsigned long *bm, struct xnbd_proxy_query *query)
 {
-	int remote_fd = net_tcp_connect(query->rhost, query->rport);
+	int remote_fd = net_connect(query->rhost, query->rport, SOCK_STREAM, IPPROTO_TCP);
 	if (remote_fd < 0)
 		err("connect, %m");
 

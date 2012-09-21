@@ -235,7 +235,6 @@ void proxy_initialize(struct xnbd_info *xnbd, struct xnbd_proxy *proxy)
 	proxy->fwd_retry_queue = g_async_queue_new();
 
 
-
 	/* set up a bitmap and a cache disk */
 	proxy->cbitmap = bitmap_open_file(xnbd->proxy_bmpath, xnbd->nblocks, &proxy->cbitmaplen, 0, 1);
 
@@ -584,7 +583,7 @@ void xnbd_proxy_start(struct xnbd_info *xnbd)
 			xnbd->proxy_rhost, xnbd->proxy_rport,
 			xnbd->proxy_diskpath, xnbd->proxy_bmpath);
 
-	int remotefd = net_tcp_connect(xnbd->proxy_rhost, xnbd->proxy_rport);
+	int remotefd = net_connect(xnbd->proxy_rhost, xnbd->proxy_rport, SOCK_STREAM, IPPROTO_TCP);
 	if (remotefd < 0)
 		err("connecting %s:%s failed", xnbd->proxy_rhost, xnbd->proxy_rport);
 

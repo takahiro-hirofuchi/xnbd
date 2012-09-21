@@ -673,7 +673,7 @@ int main(int argc, char **argv) {
 
 
 	for (;;) {
-		int remotefd = net_tcp_connect(remotehost, remoteport);
+		int remotefd = net_connect(remotehost, remoteport, SOCK_STREAM, IPPROTO_TCP);
 
 		int ret = test_direct_mode(srcpath, dstpath, remotefd, cowmode, rwmode, bgctlpath);
 		if (ret < 0)

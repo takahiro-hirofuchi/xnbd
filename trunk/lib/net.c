@@ -26,10 +26,7 @@
 
 /* ------------------------------------------------------------------------------------------ */
 
-
-/* some functions are excerpted and modified from usbip */
-
-static void log_addrinfo(struct addrinfo *ai)
+static char *get_nameinfo_string(struct addrinfo *ai)
 {
 	int ret;
 	char hbuf[NI_MAXHOST];
@@ -40,82 +37,122 @@ static void log_addrinfo(struct addrinfo *ai)
 	if (ret)
 		g_warning("getnameinfo failed, %s", gai_strerror(ret));
 
-	g_message("listen at [%s]:%s", hbuf, sbuf);
+	const char *type = "unknown_ai_socktype";
+
+	if (ai->ai_protocol == IPPROTO_TCP)
+		type = "TCP";
+	else if (ai->ai_protocol == IPPROTO_UDP)
+		type = "UDP";
+	else if (ai->ai_protocol == IPPROTO_SCTP)
+		type = "SCTP";
+	else if (ai->ai_protocol == IPPROTO_DCCP)
+		type = "DCCP";
+
+	if (ai->ai_family == AF_INET)
+		return g_strdup_printf("%s:%s,%s", hbuf, sbuf, type);
+	else
+		return g_strdup_printf("[%s]:%s,%s", hbuf, sbuf, type);
 }
 
-struct addrinfo *net_getaddrinfo(char *host, int port, int ai_family)
+struct addrinfo *net_getaddrinfo(char *host, int port, int ai_family, int socktype, int proto)
 {
 	int ret;
 	struct addrinfo hints, *ai_head;
-	char portstr[100];
+	char portstr[NI_MAXSERV];
 
 	bzero(&hints, sizeof(hints));
 
 	hints.ai_family   = ai_family;
-	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_socktype = socktype; /* SOCK_STREAM */
 	hints.ai_flags    = AI_PASSIVE;
+	hints.ai_protocol = proto; /* IPPROTO_TCP */
 
 	snprintf(portstr, sizeof(portstr), "%d", port);
 
 	ret = getaddrinfo(host, portstr, &hints, &ai_head);
-	if (ret) {
-		g_warning("getaddrinfo failed %s: %s", portstr, gai_strerror(ret));
-		return NULL;
-	}
+	if (ret)
+		g_error("getaddrinfo() failed %s: %s", portstr, gai_strerror(ret));
 
 	return ai_head;
 }
 
-unsigned int net_listen_all_addrinfo(struct addrinfo *ai_head, int lsock[])
+unsigned int net_create_server_sockets(struct addrinfo *ai_head, int *fds, size_t nfds)
 {
 	struct addrinfo *ai;
-	int n = 0;		/* number of sockets */
+	size_t index = 0;		/* number of sockets */
 
-	for (ai = ai_head; ai && n < MAXLISTENSOCK; ai = ai->ai_next) {
-		int ret;
+	for (ai = ai_head; ai != NULL; ai = ai->ai_next) {
+		if (index >= nfds) {
+			info("skip other addresses");
+			break;
+		}
 
-		lsock[n] = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
-		if (lsock[n] < 0)
-			continue;
+		char *name = get_nameinfo_string(ai);
+		int reuseaddr = 0;
+		int tcpnodelay = 0;
 
-		net_set_reuseaddr(lsock[n]);
-		net_set_nodelay(lsock[n]);
 
-		if (lsock[n] >= FD_SETSIZE) {
-			close(lsock[n]);
-			lsock[n] = -1;
+		int sockfd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
+		if (sockfd < 0)  {
+			/* if the host does not support ipv6, this might happen. */
+			g_warning("socket(%s) failed, %m", name);
+			g_free(name);
 			continue;
 		}
 
-		ret = bind(lsock[n], ai->ai_addr, ai->ai_addrlen);
-		if (ret < 0) {
-			close(lsock[n]);
-			lsock[n] = -1;
-			continue;
+
+
+		net_set_reuseaddr(sockfd);
+		reuseaddr = 1;
+
+		if (ai->ai_socktype == SOCK_STREAM && ai->ai_protocol == IPPROTO_TCP) {
+			net_set_nodelay(sockfd);
+			tcpnodelay = 1;
 		}
 
-		ret = listen(lsock[n], SOMAXCONN);
-		if (ret < 0) {
-			close(lsock[n]);
-			lsock[n] = -1;
-			continue;
+		if (ai->ai_family == AF_INET6)
+			net_set_bindv6only(sockfd);
+
+		/* just for double check */
+		if (sockfd >= FD_SETSIZE)
+			g_warning("select/poll() may fail because sockfd (%d) >= FD_SETSIZE.", sockfd);
+
+		int ret = bind(sockfd, ai->ai_addr, ai->ai_addrlen);
+		if (ret < 0)
+			g_error("bind(%s) failed, %m", name);
+
+
+		if ((ai->ai_socktype == SOCK_STREAM && ai->ai_protocol == IPPROTO_TCP) ||
+				(ai->ai_socktype == SOCK_DCCP && ai->ai_protocol == IPPROTO_DCCP)) {
+			ret = listen(sockfd, SOMAXCONN);
+			if (ret < 0)
+				g_error("listen(%s) failed, %m", name);
 		}
 
-		log_addrinfo(ai);
+		GString *gs = g_string_new(NULL);
+		g_string_append_printf(gs, "server %s,fd=%d", name, sockfd);
+		if (reuseaddr)
+			g_string_append(gs, ",reuseaddr");
+		if (tcpnodelay)
+			g_string_append(gs, ",nodelay");
 
-		/* next if succeed */
-		n++;
+		info("%s", gs->str);
+		g_string_free(gs, TRUE);
+
+
+
+		fds[index] = sockfd;
+		index++;
+
+		g_free(name);
 	}
 
-	if (n == 0) {
-		g_warning("no socket to listen to");
-		return 0;
-	}
+	if (index == 0)
+		g_warning("no server sockets created");
 
-	dbg("listen %d address%s", n, (n==1)?"":"es");
-
-	return n;
+	return index;
 }
+
 
 int net_accept(int lsock)
 {
@@ -139,7 +176,15 @@ int net_accept(int lsock)
 	if (ret)
 		g_warning("getnameinfo failed, %s", gai_strerror(ret));
 
-	g_message("connected from %s:%s", host, port);
+	if (ss.ss_family == AF_INET) 
+		g_message("connected from %s:%s", host, port);
+	else if (ss.ss_family == AF_INET6) 
+		g_message("connected from [%s]:%s", host, port);
+	else if (ss.ss_family == AF_UNIX) 
+		// g_message("connected at %s", ((struct sockaddr_un *) &ss)->sun_path);
+		g_message("connected (unix)");
+	else 
+		g_message("connected (unknown pf)");
 
 	return csock;
 }
@@ -168,6 +213,18 @@ int net_set_nodelay(int sockfd)
 	return ret;
 }
 
+int net_set_bindv6only(int sockfd)
+{
+	const int val = 1;
+	int ret;
+
+	ret = setsockopt(sockfd, IPPROTO_IPV6, IPV6_V6ONLY, &val, sizeof(val));
+	if (ret < 0)
+		g_warning("setsockopt IPV6_V6ONLY failed");
+
+	return ret;
+}
+
 int net_set_keepalive(int sockfd)
 {
 	const int val = 1;
@@ -181,64 +238,70 @@ int net_set_keepalive(int sockfd)
 }
 
 /* IPv6 Ready */
-int net_tcp_connect(const char *hostname, const char *service)
+int net_connect(const char *hostname, const char *service, int socktype, int proto)
 {
-	struct addrinfo hints, *res, *res0;
+	struct addrinfo hints, *ai_head;
 	int sockfd;
-	int err;
+	int found = 0;
 
 
 	memset(&hints, 0, sizeof(hints));
-	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_socktype = socktype;
+	hints.ai_protocol = proto;
 
 	/* get all possible addresses */
-	err = getaddrinfo(hostname, service, &hints, &res0);
-	if (err) {
-		g_warning("getaddrinfo failed, %s %s: %s", hostname, service, gai_strerror(err));
+	int ret = getaddrinfo(hostname, service, &hints, &ai_head);
+	if (ret) {
+		g_warning("getaddrinfo failed, %s %s: %s", hostname, service, gai_strerror(ret));
 		return -1;
 	}
 
 	/* try all the addresses */
-	for (res = res0; res; res = res->ai_next) {
-		char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
+	for (struct addrinfo *ai = ai_head; ai != NULL; ai = ai->ai_next) {
+		char *nameinfo = get_nameinfo_string(ai);
 
-		err = getnameinfo(res->ai_addr, res->ai_addrlen,
-				hbuf, sizeof(hbuf), sbuf, sizeof(sbuf), NI_NUMERICHOST | NI_NUMERICSERV);
-		if (err) {
-			g_warning("getnameinfo failed %s %s: %s", hostname, service, gai_strerror(err));
-			continue;
-		}
+		dbg("trying %s", nameinfo);
 
-		dbg("trying %s port %s\n", hbuf, sbuf);
-
-		sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+		sockfd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
 		if (sockfd < 0) {
-			g_warning("socket() failed");
-			continue;
+			g_warning("socket() failed, %m");
+			goto cleanup;
 		}
 
-		/* should set TCP_NODELAY for tcp_connect */
-		net_set_nodelay(sockfd);
-		/* TODO: write code for heatbeat */
-		net_set_keepalive(sockfd);
+		if (proto == IPPROTO_TCP) {
+			net_set_nodelay(sockfd);
+			net_set_keepalive(sockfd);
+		}
 
-		err = connect(sockfd, res->ai_addr, res->ai_addrlen);
-		if (err < 0) {
+
+		ret = connect(sockfd, ai->ai_addr, ai->ai_addrlen);
+		if (ret < 0) {
+			dbg("connect() %s failed, %m", nameinfo);
 			close(sockfd);
-			continue;
+			goto cleanup;
 		}
 
 		/* connected */
-		dbg("connected to %s:%s", hbuf, sbuf);
-		freeaddrinfo(res0);
-		return sockfd;
+		found = 1;
+		info("connected to %s", nameinfo);
+
+cleanup:
+		g_free(nameinfo);
+
+		if (found) 
+			break;
+		/* continue if not found */
 	}
 
 
-	dbg("%s:%s, %s", hostname, service, "no destination to connect to");
-	freeaddrinfo(res0);
+	freeaddrinfo(ai_head);
 
-	return -1;
+	if (found) {
+		return sockfd;
+	} else {
+		dbg("%s:%s, %s", hostname, service, "no destination to connect to");
+		return -1;
+	}
 }
 
 
@@ -270,7 +333,7 @@ static int net_iov_all(int fd, struct iovec *iov, int count, int reading)
 	int next_count = count;
 	struct iovec *next_iov = iov;
 
-	char *mode = reading ? "readv" : "writev";
+	const char *mode = reading ? "readv" : "writev";
 
 
 	/* all bytes we have read */
@@ -591,7 +654,7 @@ int unix_send_fd(int socket, int fd)
 	bzero(&msg, sizeof(msg));
 
 	struct iovec iov[1];
-	iov[0].iov_base = "";
+	iov[0].iov_base = (char *) "";
 	iov[0].iov_len = 1;
 	msg.msg_iov = iov;
 	msg.msg_iovlen = 1;
