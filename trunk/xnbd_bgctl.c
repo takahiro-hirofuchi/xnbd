@@ -185,6 +185,71 @@ void cache_all_blocks_with_dedicated_connection(char *unix_path, unsigned long *
 }
 
 
+struct cache_rx_ctl {
+	int ctl_fd;
+	GAsyncQueue *q;
+};
+
+char cache_rx_req_eof;
+char cache_rx_req_data;
+
+void *cache_all_blocks_receiver_main(void *arg)
+{
+	struct cache_rx_ctl *cache_rx = (struct cache_rx_ctl *) arg;
+
+	set_process_name("cache_rx");
+	block_all_signals();
+	info("create cache_rx thread %lu", pthread_self());
+
+	for (;;) {
+		char *data = g_async_queue_pop(cache_rx->q);
+		if (data == &cache_rx_req_eof)
+			break;
+
+		int ret = nbd_client_recv_header(cache_rx->ctl_fd);
+		if (ret < 0)
+			err("recv header, %m");
+	}
+
+	info("done cache_rx thread %lu", pthread_self());
+
+	return NULL;
+}
+
+void cache_all_blocks_async(char *unix_path, unsigned long *bm, unsigned long nblocks)
+{
+	int unix_fd, ctl_fd;
+	start_register_fd(unix_path, &unix_fd, &ctl_fd);
+
+	struct cache_rx_ctl cache_rx;
+	cache_rx.ctl_fd = ctl_fd;
+	cache_rx.q      = g_async_queue_new();
+	pthread_t cache_rx_tid = pthread_create_or_abort(cache_all_blocks_receiver_main, &cache_rx);
+
+	for (unsigned long index = 0; index < nblocks; index++) {
+		if (!bitmap_test(bm, index)) {
+			off_t iofrom = (off_t) index * CBLOCKSIZE;
+			// size_t iolen = nblocks * CBLOCKSIZE;
+			size_t iolen = CBLOCKSIZE;
+
+			int ret = nbd_client_send_request_header(ctl_fd, NBD_CMD_BGCOPY, iofrom, iolen, (UINT64_MAX));
+			if (ret < 0)
+				err("send_read_request, %m");
+
+			g_async_queue_push(cache_rx.q, &cache_rx_req_data);
+		}
+	}
+
+	g_async_queue_push(cache_rx.q, &cache_rx_req_eof);
+	pthread_join(cache_rx_tid, NULL);
+	g_async_queue_unref(cache_rx.q);
+
+	end_register_fd(unix_fd, ctl_fd);
+}
+
+
+
+
 void cache_all_blocks(char *unix_path, unsigned long *bm, unsigned long nblocks)
 {
 	int unix_fd, ctl_fd;
@@ -366,7 +431,8 @@ int main(int argc, char **argv)
 			break;
 
 		case xnbd_bgctl_cmd_cache_all:
-			cache_all_blocks(unix_path, bm, nblocks);
+			// cache_all_blocks(unix_path, bm, nblocks);
+			cache_all_blocks_async(unix_path, bm, nblocks);
 			break;
 
 		case xnbd_bgctl_cmd_cache_all2:
