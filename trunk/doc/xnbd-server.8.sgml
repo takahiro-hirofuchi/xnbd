@@ -49,74 +49,115 @@ manpage.1: manpage.sgml
   <refnamediv>
     <refname>&dhpackage;</refname>
 
-    <refpurpose>serve a file as a block device to other computers
-    running the &gnu;/Linux(tm) Operating
-    System</refpurpose>
+    <refpurpose>serve a file as a block device to other computers via the NBD protocol</refpurpose>
   </refnamediv>
   <refsynopsisdiv>
     <cmdsynopsis>
-      <command>&dhpackage;</command>
-      <arg>--bgctlprefix  <replaceable>PATH</replaceable></arg>
-      <arg>--cow</arg>
-      <arg>--daemonize</arg>
-      <arg>--help</arg>
-      <arg>--inetd</arg>
-      <arg>--logpath <replaceable>PATH</replaceable></arg>
-      <arg>--lport <replaceable>PORT</replaceable></arg>
-      <arg>--proxy</arg>
-      <arg>--readonly</arg>
-      <arg>--target</arg>
-      <arg>--version</arg>
-      <arg choice=plain><replaceable>FILE</replaceable></arg>
-    </cmdsynopsis>
-    <cmdsynopsis>
-      <command>&dhpackage;</command>
-      <arg>--proxy</arg>
+      <command>&dhpackage; --target</command>
       <arg><replaceable>options</replaceable></arg>
-      <arg choice=plain><option><replaceable>TARGET_HOST</replaceable>
-      <replaceable>TARGET_PORT</replaceable>
-      <replaceable>CACHE_IMAGE</replaceable> <replaceable>BITMAP_IMAGE</replaceable></option></arg>
+      <arg choice=plain><option>
+		      <replaceable>DISK_IMAGE</replaceable>
+      </option></arg>
     </cmdsynopsis>
 
     <cmdsynopsis>
-      <command>&dhpackage;</command>
-      <arg>--target</arg>
+      <command>&dhpackage; --cow-target</command>
       <arg><replaceable>options</replaceable></arg>
-      <arg choice=plain><option><replaceable>CACHE_IMAGE</replaceable></option></arg>
+      <arg choice=plain><option>
+		      <replaceable>BASE_DISK_IMAGE</replaceable>
+      </option></arg>
     </cmdsynopsis>
+
     <cmdsynopsis>
-      <command>&dhpackage;</command>
-      <arg>--help</arg>
-      <arg>--version</arg>
+      <command>&dhpackage; --proxy</command>
+      <arg><replaceable>options</replaceable></arg>
+      <arg choice=plain><option>
+		      <replaceable>REMOTE_HOST</replaceable>
+		      <replaceable>REMOTE_PORT</replaceable>
+		      <replaceable>CACHE_IMAGE</replaceable>
+		      <replaceable>CACHE_BITMAP_IMAGE</replaceable>
+		      <replaceable>CONTROL_SOCKET_PATH</replaceable>
+      </option></arg>
+    </cmdsynopsis>
+
+    <cmdsynopsis>
+      <command>&dhpackage; --help</command>
+    </cmdsynopsis>
+
+    <cmdsynopsis>
+      <command>&dhpackage; --version</command>
     </cmdsynopsis>
   </refsynopsisdiv>
   <refsect1>
     <title>DESCRIPTION</title>
 
-    <para><command>&dhpackage;</command> is the server for the Linux
-    Network Block Device (NBD). With xNBD, a client can use a file,
-    exported over the network from a server, as a block device. It can
-    then be used for whatever purpose a normal block device (hard disk,
-    CD-ROM, ...) can be used for.</para>
+    <para>
+	    <command>&dhpackage;</command> is a server program of the 
+	    Network Block Device (NBD) protocol.
+	    It exports an image file to the clients of the NBD protocol over network.
+	    A client node can access to the exported file through a block-level I/O interface;
+	    it is possible to create swap areas on it or create file systems on it.
+	    <!-- 
+	    With xNBD, a client can use a file,
+	    exported over the network from a server, as a block device.
+	    It can then be used for whatever purpose a normal block device (hard disk,
+	    CD-ROM, ...) can be used for.
 
-    <para>xNBD can be useful for diskless clients that need swap space,
-    but you can also create a file system on it and use it as though it
-    were a local file system.</para>
+	    The NBD protocol is used for diskless clients that need swap space and 
+	    but also create a file system on it and use it as though it
+	    were a local file system.
+	    -->
+    </para>
 
     <para>
-    xNBD offers several advantages over the original NBD implementation. In
-    addition to features offered by NBD, xNBD supports better performance,
-    (distributed) Copy-on-Write, (basic) snapshot support and Live Storage
-    Migration along with IPv6 support.
+	    The xNBD (i.e., extended NBD) programs offer several advantages over the original NBD implementation. In
+	    addition to the original features, xNBD is intended to achieve better performance. It supports
+	    (distributed) copy-on-write, (basic) snapshot support, live storage
+	    migration for virtual machines, and IPv6 networking.
     </para>
-    <para>xNBD can operate in two modes, the target mode and the alternative
-     proxy mode.
-     In target mode, xNBD offers a listening TCP connection which allows a
-     <command>xnbd-client</command>(1) to access the exported
-     <replaceable>CACHE_IMAGE</replaceable>.
-     In proxy mode, xNBD connects another running xnbd-server instance and acts
-     as transparent proxy to the origin target server. This is very useful for
-     storage migration for Virtual Machine Monitors.</para>
+
+    <para>
+	    <command>&dhpackage;</command> can operate in three modes (i.e., the
+	    target mode, the copy-on-write target mode, and the proxy mode).
+    </para>
+    <para> <command>&dhpackage; --target </command>
+	    exports <replaceable>DISK_IMAGE</replaceable> to clients.
+    </para>
+    <para> <command>&dhpackage; --cow-target </command>
+	    exports
+	    <replaceable>BASE_DISK_IMAGE</replaceable> to clients. Write-operations are
+	    not committed to the exported disk image, but to a separate file.
+	    This separate file is removed when the server instance
+	    is shutdown, and all changes are lost.
+	    <!--
+	    which means that serving this way will make xnbd-server slow down (especially on large block devices
+	    with lots of writes). After disconnecting and reconnecting the client or the server,
+	    -->
+    </para>
+    <para> 
+	    <command>&dhpackage; --proxy </command>
+	    provides the image server of the NBD protocol,
+	    but it actually works as a proxy to a remote <command>&dhpackage;</command> specified with
+	    <replaceable>REMOTE_HOST</replaceable> and
+	    <replaceable>REMOTE_PORT</replaceable>. All I/O requests from
+	    clients are intercepted, and redirected to the remote target server
+	    if needed.  All updated blocks are cached at the proxy server, and
+	    read blocks are also cached. No write operation does not happen at the remote
+	    server. Cached blocks are saved in
+	    <replaceable>CACHE_DISK_IMAGE</replaceable>.  The block numbers of
+	    cached blocks are saved in
+	    <replaceable>CACHE_BITMAP_IMAGE</replaceable>.  The proxy server is
+	    controlled by <command>xnbd-bgctl</command>(1) through
+	    <replaceable>CONTROL_SOCKET_PATH</replaceable>.  The proxy server
+	    can be used for distributed copy-on-write NBD disks; one read-only
+	    disk image is shared among multiple clients. It is also useful for
+	    live storage migration of virtual machines.
+    </para>
+    <para>
+	    <emphasis>WARNING:</emphasis> Multiple clients can concurrently access to a single server instance.
+	    Yet <command>&dhpackage;</command> does not offer any locking or synchronization mechanism among concurent clients.
+	    In most cases you WILL need a cluster file system on the exported image to avoid damage on your data.
+    </para>
   </refsect1>
   <refsect1>
     <title>OPTIONS</title>
@@ -126,45 +167,19 @@ manpage.1: manpage.sgml
     <variablelist>
 
       <varlistentry>
-	<term><option>--bgctlprefix <replaceable>PATH</replaceable></option>
-	</term>
-	<listitem>
-	  <para>The xNBD server can be controlled through a control socket. When given, use
-          <replaceable>prefix</replaceable> as file name, default is <emphasis>/tmp/xnbd-bg.ctl</emphasis>).</para>
-	</listitem>
-      </varlistentry>
-
-
-      <varlistentry>
-	<term><option>--cow</option></term>
-	<listitem>
-	  <para>Enable Copy-on-Write mode. When this option is provided,
-	    write-operations are not committed to the exported <replaceable>FILE</replaceable>,
-            but to a separate file. This separate file is removed when the
-	    connection is closed, which means that serving this way will
-	    make xnbd-server slow down (especially on large block devices
-	    with lots of writes), and that after disconnecting and
-	    reconnecting the client or the server, all changes are
-	    lost.</para>
-	</listitem>
-      </varlistentry>
-
-
-      <varlistentry>
 	<term><option>--daemonize</option>
 	</term>
 	<listitem>
-	  <para>Go into background as soon as the xnbd-server is started up</para>
+		<para>Run <command>&dhpackage;</command> in the background</para>
 	</listitem>
       </varlistentry>
 
       <varlistentry>
         <term><option>--inetd</option></term>
         <listitem>
-          <para>If xNBD shall be run from a Internet super-server,
-	  (e.g. inetd), this argument instructs xNBD to redirect output to
-	  <emphasis>stderr</emphasis> instead of a log file.
-	  </para>
+		<para>
+			Run <command>&dhpackage;</command> for an Internet super-server daemon (e.g., inetd). All network I/O is redirected to the stdin descriptor.
+		</para>
         </listitem>
       </varlistentry>
 
@@ -172,58 +187,46 @@ manpage.1: manpage.sgml
         <term><option>--logpath <replaceable>FILE</replaceable></option>
         </term>
         <listitem>
-          <para>Log informational messages to the given <replaceable>FILE</replaceable> if given. Defaults to <replaceable>/tmp/xnbd.log</replaceable></para>
+          <para>Log informational messages to the given <replaceable>FILE</replaceable>. </para>
         </listitem>
       </varlistentry>
 
+      <varlistentry>
+        <term><option>--syslog</option>
+        </term>
+        <listitem>
+          <para>Log informational messages to syslog. </para>
+        </listitem>
+      </varlistentry>
 
       <varlistentry>
 	<term><option>--lport <replaceable>PORT</replaceable></option>
 	</term>
 	<listitem>
-	  <para>Accept incoming connections on the given <replaceable>PORT</replaceable>. A valid port is
-	    any number between 1 and 65536. You may not use the same listeing
-	    port more than once per system. If this argument is not given, xNBD
-	    will listen on port 8520 by default.</para>
+		<para>
+			Listen incoming connections on the given <replaceable>PORT</replaceable>.
+			<!--
+			A valid port is any number between 1 and 65536. You may not use the same listeing
+			port more than once per system. 
+			-->
+			If this argument is not given, <command>&dhpackage;</command> will listen on port 8520 by default.
+		</para>
 	</listitem>
-      </varlistentry>
-
-      <varlistentry>
-        <term><option>--proxy</option></term>
-        <listitem>
-          <para>In the proxy server mode of xNBD, all I/O requests are intercepted, and redirected to a origin target server if needed.
-          All updated blocks are saved at the proxy server, and read blocks are also cached. No write does not happen at the target server.</para>
-          <para>
-          This feature is used for distributed Copy-on-Write NBD disks; one read-only disk image is shared among multiple clients,
-          and updated disk data is saved at each proxy</para>
-        </listitem>
       </varlistentry>
 
       <varlistentry>
 	<term><option>--readonly</option></term>
 	<listitem>
-	  <para>Export the <replaceable>FILE</replaceable> read only. If a client tries to write
-	    to a read-only exported file, it will receive an error, but
-	    the connection will stay up.</para>
+		<para>Export the image file as read only. If a client sends a write request, it will receive an error, but
+			the connection will stay up.</para>
 	</listitem>
       </varlistentry>
-
-      <varlistentry>
-        <term><option>--target</option></term>
-        <listitem>
-        <para>Start an xNBD server in target mode, that is it will export block
-	level access to the given <replaceable>FILE</replaceable>.</para>
-        <para><emphasis>WARNING:</emphasis> If you need concurrent access from multiple clients, you can access an exported image concurrently from
-        multiple clients. Yet xNBD does not do any locking or synchronization.
-	In most cases you WILL need a cluster file system on the exported
-	<replaceable>FILE</replaceable> image to avoid damage on your data.</para>
-        </listitem>
-      </varlistentry>
-
 
     </variablelist>
   </refsect1>
 
+  <!-- TODO: POSITIONAL ARGUMENTS are explained above, but summarized here? -->
+  <!-- 
   <refsect1>
     <title>POSITIONAL ARGUMENTS</title>
 
@@ -231,30 +234,27 @@ manpage.1: manpage.sgml
 
     <variablelist>
       <varlistentry>
-	<term><option>FILE</option></term>
+	<term><option>DISK_IMAGE</option></term>
 	<listitem>
-	  <para>The filename of the <replaceable>FILE</replaceable> that should be exported. This
-	  can be an arbitrary file, including disk images and real block devices (i.e. a block device like <emphasis>/dev/sda1</emphasis>).</para>
+	  <para>The file that should be exported. This
+	  can be an arbitrary file, including a disk image file and a real block device (i.e., a block device like <emphasis>/dev/sda1</emphasis>).</para>
 	</listitem>
       </varlistentry>
 
-
       <varlistentry>
-	<term><option>TARGET_HOST</option></term>
+	<term><option>REMOTE_HOST</option></term>
 	<listitem>
-	  <para>When in proxy mode, use the given <replaceable>TARGET_HOST</replaceable> as origin host. The resulting
+	  <para>When in the proxy mode, use the given <replaceable>REMOTE_HOST</replaceable> as the origin host. The resulting
           xnbd-server instance will forward requests transparently to this remote side.</para>
 	</listitem>
       </varlistentry>
 
-
       <varlistentry>
-	<term><option>TARGET_PORT</option></term>
+	<term><option>REMOTE_PORT</option></term>
 	<listitem>
 	  <para>The target origin port to connect in proxy mode</para>
 	</listitem>
       </varlistentry>
-
 
       <varlistentry>
 	<term><option>BITMAP_IMAGE</option></term>
@@ -265,14 +265,24 @@ manpage.1: manpage.sgml
       </varlistentry>
   </variablelist>
   </refsect1>
+  -->
   <refsect1>
     <title>SIGNALS</title>
     <variablelist>
       <varlistentry>
+        <term><option>SIGUSR</option></term>
+        <listitem>
+		<para>
+			Take a snapshot of the image file. Currently, this feature works only in the targert mode.
+		</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
         <term><option>SIGHUP</option></term>
         <listitem>
-          <para>When in proxy mode, a SIGHUP instructs the <command>nbd-server</command> to detach from its origin.
-          From there and beyond, the nbd server instance will run as if it would have been started in target mode.</para>
+		<para>
+			Change the proxy mode to the target mode. Use <command>xnbd-bgctl --shutdown</command> instead of sending this signal. 
+		</para>
         </listitem>
       </varlistentry>
     </variablelist>
@@ -282,6 +292,7 @@ manpage.1: manpage.sgml
     <title>SEE ALSO</title>
 
     <para>xnbd-client (1).</para>
+    <para>xnbd-bgctl (1).</para>
 
   </refsect1>
   <refsect1>
@@ -290,10 +301,10 @@ manpage.1: manpage.sgml
     Pavel Macheck (pavel@ucw.cz) and is now maintained by Paul Clements.
     (Paul.Clements@steeleye.com).</para>
 
-    <para>The xNBD userland (client and server) have been written by
+    <para>The xNBD userland progams have been written by
      Takahiro Hirofuchi (t.hirofuchi@aist.go.jp)</para>
 
-    <para>This manual page was written by &dhusername; (&dhemail;) for
+    <para>This manual page was firstly written by &dhusername; (&dhemail;) for
     the &debian; system (but may be used by others). Large parts are
     verbatim copies of the original nbd-server and nbd-client manual
     pages written by Wouter Verhelst (wouter@debian.org). Permission is
