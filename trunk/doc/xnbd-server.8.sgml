@@ -155,7 +155,7 @@ manpage.1: manpage.sgml
     </para>
     <para>
 	    <emphasis>WARNING:</emphasis> Multiple clients can concurrently access to a single server instance.
-	    Yet <command>&dhpackage;</command> does not offer any locking or synchronization mechanism among concurent clients.
+	    Yet <command>&dhpackage;</command> does not offer any locking or synchronization mechanism among concurrent clients.
 	    In most cases you WILL need a cluster file system on the exported image to avoid damage on your data.
     </para>
   </refsect1>
@@ -206,7 +206,7 @@ manpage.1: manpage.sgml
 		<para>
 			Listen incoming connections on the given <replaceable>PORT</replaceable>.
 			<!--
-			A valid port is any number between 1 and 65536. You may not use the same listeing
+			A valid port is any number between 1 and 65536. You may not use the same listening
 			port more than once per system. 
 			-->
 			If this argument is not given, <command>&dhpackage;</command> will listen on port 8520 by default.
@@ -273,7 +273,7 @@ manpage.1: manpage.sgml
         <term><option>SIGUSR</option></term>
         <listitem>
 		<para>
-			Take a snapshot of the image file. Currently, this feature works only in the targert mode.
+			Take a snapshot of the image file. Currently, this feature works only in the target mode.
 		</para>
         </listitem>
       </varlistentry>
@@ -301,7 +301,7 @@ manpage.1: manpage.sgml
     Pavel Macheck (pavel@ucw.cz) and is now maintained by Paul Clements.
     (Paul.Clements@steeleye.com).</para>
 
-    <para>The xNBD userland progams have been written by
+    <para>The xNBD userland programs have been written by
      Takahiro Hirofuchi (t.hirofuchi@aist.go.jp)</para>
 
     <para>This manual page was firstly written by &dhusername; (&dhemail;) for
