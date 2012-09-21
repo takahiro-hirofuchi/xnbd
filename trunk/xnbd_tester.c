@@ -155,9 +155,7 @@ void bgctl_thread_create(off_t disksize, const char *bgctlpath)
 	 * never wakes up. */
 	pthread_mutex_lock(&bginfo->lock);
 
-	int ret = pthread_create(&bginfo->tid, NULL, bgctl_thread_main, bginfo);
-	if (ret < 0)
-		err("create thread");
+	bginfo->tid = pthread_create_or_abort(bgctl_thread_main, bginfo);
 
 	pthread_cond_wait(&bginfo->init_done, &bginfo->lock);
 	pthread_mutex_unlock(&bginfo->lock);
