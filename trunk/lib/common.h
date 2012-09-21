@@ -82,9 +82,14 @@ static inline void null_logger(const gchar *domain __attribute__((unused)),
 // 		const gchar *message __attribute__((unused)),
 // 		gpointer data __attribute__((unused)));
 
-void xutil_log_handler(const gchar   *log_domain, GLogLevelFlags log_level,
-		const gchar   *message, gpointer       data);
+struct custom_log_handler_params {
+	int use_syslog;
+	int use_fd;
+	int fd;
+};
 
+void custom_log_handler(const gchar   *log_domain, GLogLevelFlags log_level,
+		const gchar   *message, gpointer       data);
 #endif
 
 void set_process_name(const char *name);

@@ -32,24 +32,6 @@
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /* called once in the master process */
 void xnbd_initialize(struct xnbd_info *xnbd)
 {
@@ -727,13 +709,14 @@ static struct option longopts[] = {
 	{"daemonize", no_argument, NULL, 'd'},
 	{"readonly", no_argument, NULL, 'r'},
 	{"logpath", required_argument, NULL, 'L'},
+	{"syslog", no_argument, NULL, 'S'},
 	{"tos", no_argument, NULL, 'T'},
 	{"connected-fd", required_argument, NULL, 'F'},
 	{"inetd", no_argument, NULL, 'i'},
 	{NULL, 0, NULL, 0},
 };
 
-static const char *opt_string = "tpchvl:G:drL:TF:i";
+static const char *opt_string = "tpchvl:G:drL:STF:i";
 
 
 static const char *help_string = "\
@@ -745,11 +728,12 @@ Usage: \n\
   xnbd-server --version\n\
 \n\
 Options: \n\
-  --lport	listen port (default 8520)\n\
-  --daemonize	run as a daemon process\n\
-  --readonly	export a disk as readonly\n\
-  --logpath	logfile (default /tmp/xnbd.log)\n\
-  --inetd	redirect stderr for running from inetd\n\
+  --lport port   set the listen port (default: 8520)\n\
+  --daemonize    run as a daemon process\n\
+  --readonly     export a disk as readonly\n\
+  --logpath path use the given path for logging (default: stderr)\n\
+  --syslog       use syslog for logging\n\
+  --inetd        set the inetd mode (use fd 0 for TCP connection)\n\
 ";
 
 
@@ -777,30 +761,53 @@ static void show_help_and_exit(const char *msg)
 	if (msg)
 		g_warning("%s", msg);
 
-	fprintf(stderr, "%s", help_string);
+	info("\n%s", help_string);
 	exit(EXIT_SUCCESS);
 }
 
   
 
-static int check_given_fd(int given_fd)
+static void unset_nonblock(int fd)
 {
-	int flags;
-
-	if ((flags = fcntl(given_fd, F_GETFL, 0)) == -1)
-		return -1;
+	int flags = fcntl(fd, F_GETFL, 0);
+	if (flags < 0)
+		err("fcntl F_GETFL, %m");
 
 	if (flags & O_NONBLOCK) {
-		info("socket is in non-blocking mode");
-		info("set socket to blocking mode");
-		flags &= ~O_NONBLOCK;
-		if (fcntl(given_fd, F_SETFL, flags) == -1)
-			return -1;
-	}
+		info("set socket (fd %d) to blocking mode", fd);
 
-	return 0;
+		flags &= ~O_NONBLOCK;
+		int ret = fcntl(fd, F_SETFL, flags);
+		if (ret < 0)
+			err("fcntl F_SETFL, %m");
+	}
 }
 
+/* 
+ * If the case of the --inetd/--daemon mode, xnbd-server uses syslog in the default. If
+ * --logpath is specified, the given path, instead of syslog, is used for logging.
+ *
+ * [The --inetd/--daemon mode]
+ *  default                : use syslog
+ *  --syslog               : use syslog
+ *  --logpath FILE         : use FILE
+ *  --logpath FILE --syslog: use FILE and syslog
+ *
+ * [The normal mode]
+ *  default                : use stderr
+ *  --syslog               : use syslog
+ *  --logpath FILE         : use FILE
+ *  --logpath FILE --syslog: use FILE and syslog
+ **/
+
+static int get_log_fd(const char *path)
+{
+	int fd = open(path, O_WRONLY | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR);
+	if (fd < 0)
+		err("open %s, %m", path);
+
+	return fd;
+}
 
 
 int main(int argc, char **argv) {
@@ -813,16 +820,13 @@ int main(int argc, char **argv) {
 	int tos = 0;
 	int connected_fd = -1;
 	const char *logpath = NULL;
+	int use_syslog = 0;
 	int inetd = 0;
 
 	bzero(&xnbd, sizeof(xnbd));
 
-	g_log_set_default_handler(xutil_log_handler, (void *) &xnbd);
 
-	PAGESIZE = (unsigned int) getpagesize();
-	if (CBLOCKSIZE % PAGESIZE != 0)
-		warn("CBLOCKSIZE %u PAGESIZE %u", CBLOCKSIZE, PAGESIZE);
-
+	/* First, scan the options that effect the way of logging. */
 	for (;;) {
 		int c;
 		int index = 0;
@@ -835,16 +839,49 @@ int main(int argc, char **argv) {
 			case 'L':
 				logpath = optarg;
 				break;
+			case 'S':
+				use_syslog = 1;
+				break;
 			case 'i':
 				inetd = 1;
-				connected_fd = 0;
+				connected_fd = 0;  /* stdin */
+				break;
+			case 'd':
+				daemonize = 1;
 				break;
 		}
 	}
 
-	if (inetd)
-		redirect_stderr(logpath);
+	struct custom_log_handler_params log_params = {
+		.use_syslog = 0,
+		.use_fd = 0,
+		.fd = -1,
+	};
 
+	if (logpath) {
+		log_params.use_fd = 1;
+		log_params.fd = get_log_fd(logpath);
+	}
+
+	if (use_syslog)
+		log_params.use_syslog = 1;
+
+	if (!use_syslog && !logpath) {
+		if (inetd || daemonize) {
+			log_params.use_syslog = 1;
+		} else {
+			log_params.use_fd = 1;
+			log_params.fd = fileno(stderr);
+		}
+	}
+
+
+	g_log_set_default_handler(custom_log_handler, (void *) &log_params);
+
+
+
+
+	/* Second, scan the other options. Rollback optind. */
 	optind = 1;
 
 	for (;;) {
@@ -904,13 +941,6 @@ int main(int argc, char **argv) {
 				err("not-yet-released feature");
 				break;
 
-			case 'd':
-				if (inetd)
-					err("daemonize option may not be specified with inetd option");
-				daemonize = 1;
-				info("daemonize enabled");
-				break;
-
 			case 'r':
 				readonly = 1;
 				info("readonly enabled");
@@ -922,16 +952,24 @@ int main(int argc, char **argv) {
 				break;
 
 			case 'F':
-				/* use a file descriptor specified in a command line */
+				/* use a file descriptor specified in the command line */
 				if (inetd)
-					err("connected_fd option may not be specified with inetd option");
+					err("--connected-fd cannot to be specified with --inetd.");
 				connected_fd = atoi(optarg);
 				info("connected fd %d", connected_fd);
-				if (check_given_fd(connected_fd) < 0)
-					err("check_given_fd, %m");
+				/* 
+				 * In this case, a file descriptor is given in
+				 * the command line. The TCP connection has
+				 * been established in the outside of
+				 * xnbd-server. Make sure that the O_NONBLOCK
+				 * flag is unset for the descriptor.
+				 **/
+				unset_nonblock(connected_fd);
 				break;
 
+			case 'd':
 			case 'L':
+			case 'S':
 			case 'i':
 				/* previously processed options */
 				break;
@@ -1009,16 +1047,21 @@ int main(int argc, char **argv) {
 	xnbd.tos = tos;
 	xnbd_initialize(&xnbd);
 
+	PAGESIZE = (unsigned int) getpagesize();
+	if (CBLOCKSIZE % PAGESIZE != 0)
+		warn("CBLOCKSIZE %u PAGESIZE %u", CBLOCKSIZE, PAGESIZE);
+
 	if (xnbd.cmd == xnbd_cmd_proxy)
 		cachestat_initialize(DEFAULT_CACHESTAT_PATH, xnbd.nblocks);
 
-	if (!inetd && logpath) {
-		info("logfile %s", logpath);
-		redirect_stderr(logpath);
-	}
+	if (daemonize) {
+		if (inetd) 
+			err("--daemon cannot be specified with --inetd.");
 
-	if (daemonize)
-		detach(logpath);
+		int ret = daemon(0, 0);
+		if (ret < 0)
+			err("daemon %m");
+	}
 
 
 	master_server(lport, (void *) &xnbd, connected_fd);
