@@ -797,15 +797,6 @@ static void unset_nonblock(int fd)
  *  --logpath FILE --syslog: use FILE and syslog
  **/
 
-static int get_log_fd(const char *path)
-{
-	int fd = open(path, O_WRONLY | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR);
-	if (fd < 0)
-		err("open %s, %m", path);
-
-	return fd;
-}
-
 int main(int argc, char **argv) {
 	struct xnbd_info xnbd;
 	enum xnbd_cmd_type cmd = xnbd_cmd_unknown;
