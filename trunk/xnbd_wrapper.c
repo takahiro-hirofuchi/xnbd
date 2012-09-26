@@ -115,19 +115,19 @@ static int make_unix_sock(const char *uxsock_path)
 {
 	int uxsock = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (uxsock == -1) {
-		perror("socket(AF_UNIX)");
+		warn("socket(AF_UNIX): %m");
 		return -1;
 	}
 	struct sockaddr_un ux_saddr;
 	strcpy(ux_saddr.sun_path, uxsock_path);
 	ux_saddr.sun_family = AF_UNIX;
 	if (bind(uxsock, &ux_saddr, sizeof(ux_saddr))) {
-		perror("bind(AF_UNIX)");
-		pthread_exit(NULL);
+		warn("bind(AF_UNIX): %m");
+		return -2;
 	}
 	if (listen(uxsock, 8)) {
-		perror("listen(AF_UNIX)");
-		pthread_exit(NULL);
+		warn("listen(AF_UNIX): %m");
+		return -3;
 	}
 	return uxsock;
 }
@@ -156,15 +156,15 @@ static void *start_filemgr_thread(void *uxsock)
 
 	int conn_uxsock = accept(*(int *)uxsock, NULL, NULL);
 	if (conn_uxsock == -1) {
-		perror("accept(AF_UNIX)");
+		warn("accept(AF_UNIX): %m");
 		pthread_exit(NULL);
 	}
 	FILE *fp = fdopen(conn_uxsock, "r+");
 	if (count_mgr_threads(1) <= MAX_CTL_CONNS) {
-		fprintf(fp, "help command displays help for another command\n");
+		fprintf(fp, "\"help\" command displays help for other commands\n");
 		for(;;) {
 			if (fputs("(xnbd) ", fp) == EOF){
-				g_warning("fputs : EOF");
+				warn("fputs : EOF");
 				break;
 			}
 			fflush(fp);
@@ -233,7 +233,7 @@ static int make_tcp_sock(const char *addr_or_name, const char *port)
 
 	int error = getaddrinfo(addr_or_name, port, &hints, &res);
 	if (error) {
-		fprintf(stderr, "%s: %s\n", port, gai_strerror(error));
+		warn("%s: %s", port, gai_strerror(error));
 		return -1;
 	}
 
@@ -244,7 +244,7 @@ static int make_tcp_sock(const char *addr_or_name, const char *port)
 	}
 
 	if (rp == NULL) {
-		fprintf(stderr, "rp is NULL\n");
+		warn("rp is NULL\n");
 		return -1;
 	}
 
@@ -263,11 +263,61 @@ static int make_tcp_sock(const char *addr_or_name, const char *port)
 
 	if (listen(tcp_sock, 64)) {
 		perror("listen");
-		return EXIT_FAILURE;
+		return -1;
 	}
 
 	return tcp_sock;
 }
+
+struct exec_params {
+	char *binpath;
+	const char *target_mode;
+	int readonly;
+	int syslog;
+};
+
+static void exec_xnbd_server(struct exec_params *params, char *fd_num, char *requested_img)
+{
+	char *args[8];
+	int i = 0;
+	args[i] = (char *)"forked_xnbd_wrapper";
+	args[++i] = (char *)params->target_mode;
+	if (params->readonly)
+		args[++i] = (char *)"--readonly";
+	if (params->syslog)
+		args[++i] = (char *)"--syslog";
+	args[++i] = (char *)"--connected-fd";
+	args[++i] = fd_num;
+	args[++i] = requested_img;
+	args[++i] = NULL;
+
+	(void)execv(params->binpath, args);
+
+	warn("exec failed");
+	_exit(EXIT_FAILURE);
+}
+
+static const char help_string[] =
+	"\n\n"
+	"Usage: \n"
+	"  %s [--port port] [--xnbd-binary path-to-xnbdserver] [--imgfile disk-image-file] [--laddr listen-addr] [--socket socket-path]\n"
+	"\n"
+	"Options: \n"
+	"  --daemonize   run wrapper as a daemon process\n"
+	"  --cow         run server instances as a cow target\n"
+	"  --readonly    run server instances as a readonly target.\n"
+	"  --port        Listen port (default: 8520).\n"
+	"  --xnbd-binary Path to xnbd-server.\n"
+	"  --imgfile     Path to disk image file. This options can be used multiple times.\n"
+	"                You can also use xnbd-wrapper-ctl to (de)register disk images dynamically.\n"
+	"  --logpath     logfile (default /tmp/xnbd.log)\n"
+	"  --laddr       Listen address.\n"
+	"  --socket      Unix socket path to listen on (default: /tmp/xnbd_wrapper.ctl).\n"
+	"  --syslog      use syslog for logging\n"
+	"\n"
+	"Examples: \n"
+	"  xnbd-wrapper --imgfile /data/disk1\n"
+	"  xnbd-wrapper --imgfile /data/disk1 --imgfile /data/disk2 --xnbd-binary /usr/local/bin/xnbd-server --laddr 127.0.0.1 --port 18520 --socket /tmp/xnbd_wrapper_1.ctl\n";
 
 
 int main(int argc, char **argv) {
@@ -290,8 +340,9 @@ int main(int argc, char **argv) {
 	const char default_server_target[] = "--target";
 	const char *server_target = NULL;
 	int daemonize = 0;
-	int readonly = 0;
+	int syslog = 0;
 	const char *logpath = NULL;
+	struct exec_params exec_srv_params = { .readonly = 0 };
 
 
 	sigset_t sigset;
@@ -314,21 +365,42 @@ int main(int argc, char **argv) {
 		{"readonly",    no_argument,       NULL, 'r'},
 		{"daemonize",   no_argument,       NULL, 'd'},
 		{"logpath",     required_argument, NULL, 'L'},
+		{"syslog",      no_argument,       NULL, 'S'},
 		{"help",        no_argument,       NULL, 'h'},
 		{ NULL,         0,                 NULL,  0 }
 	};
 
 
-	while((ch = getopt_long(argc, argv, "b:f:hl:p:s:dL:", longopts, NULL)) != -1) {
+	struct custom_log_handler_params log_params = {
+		.use_syslog = 0,
+		.use_fd = 1,
+		.fd = fileno(stderr),
+	};
+	g_log_set_default_handler(custom_log_handler, (void *)&log_params);
+
+        // default            ...  stderr: on,   syslog: off,  logfile: off
+        // logpath            ...  stderr: off,  syslog: off,  logfile: on
+        // syslog             ...  stderr: off,  syslog: on,   logfile: off
+        // syslog,logpath     ...  stderr: off,  syslog: on,   logfile on
+        // daemonize          ...  stderr: off,  syslog: on,   logfile: off
+        // daemonize, syslog  ...  stderr: off,  syslog: on,   logfile: off
+        // daemonize, logpath ...  stderr: off,  syslog: off,  lofgile: on  // syslog off !
+        // daemonize, logpath, syslog  ...  stderr: off,  syslog: on,   logfile: on
+
+	while((ch = getopt_long(argc, argv, "b:f:hl:p:s:SdL:", longopts, NULL)) != -1) {
 		switch (ch) {
 			case 'L':
 				logpath = optarg;
+				log_params.use_fd = 1;
+				log_params.fd = get_log_fd(logpath);
+				info("LOGFILE: %s", logpath);
+				g_log_set_default_handler(custom_log_handler, (void *)&log_params);
 				break;
 			case 'c':
 				server_target = "--cow-target";
 				break;
 			case 'r':
-				readonly = 1;
+				exec_srv_params.readonly = 1;
 				break;
 			case 'd':
 				daemonize = 1;
@@ -342,10 +414,9 @@ int main(int argc, char **argv) {
 			case 'f':
 				if ((ret = add_diskimg(&dsklist, optarg)) < 0) {
 					if (ret == -1)
-						fprintf(stderr, "cannot open %s\n", optarg);
+						warn("cannot open %s", optarg);
 					else if (ret == -2)
-						fprintf(stderr, "list is full\n");
-					return EXIT_FAILURE;
+						warn("list is full");
 				}
 				break;
 			case 'b':
@@ -354,32 +425,33 @@ int main(int argc, char **argv) {
 			case 's':
 				ctl_path = optarg;
 				break;
+			case 'S':
+				//log_params.use_syslog = 1;
+				syslog = 1;
+				break;
 			case 'h':
+				log_params.fd = fileno(stdout);
+				g_log_set_default_handler(custom_log_handler, (void *)&log_params);
+				// fall through
 			default:
-				printf("Usage: \n"
-				       "  %s [--port port] [--xnbd-binary path-to-xnbdserver] [--imgfile disk-image-file] [--laddr listen-addr] [--socket socket-path]\n"
-				       "\n"
-				       "Options: \n"
-				       "  --daemonize   run wrapper as a daemon process\n"
-				       "  --cow         run server instances as a cow target\n"
-				       "  --readonly    run server instances as a readonly target.\n"
-				       "  --port        Listen port (default: 8520).\n"
-				       "  --xnbd-binary Path to xnbd-server.\n"
-				       "  --imgfile     Path to disk image file. This options can be used multiple times.\n"
-				       "                You can also use xnbd-wrapper-ctl to (de)register disk images dynamically.\n"
-				       "  --logpath     logfile (default /tmp/xnbd.log)\n"
-				       "  --laddr       Listen address.\n"
-				       "  --socket      Unix socket path to listen on (default: /tmp/xnbd_wrapper.ctl).\n"
-				       "\n"
-				       "Examples: \n"
-				       "  xnbd-wrapper --imgfile /data/disk1\n"
-				       "  xnbd-wrapper --imgfile /data/disk1 --imgfile /data/disk2 --xnbd-binary /usr/local/bin/xnbd-server --laddr 127.0.0.1 --port 18520 --socket /tmp/xnbd_wrapper_1.ctl\n"
-				       "", *argv);
+				info(help_string, argv[0]);
+
 				if (ch == 'h')
 					return EXIT_SUCCESS;
+
 				return EXIT_FAILURE;
 		}
 	}
+
+	if (syslog || (daemonize && (logpath == NULL))) {
+		log_params.use_syslog = 1;
+		exec_srv_params.syslog = 1;
+		if (!daemonize)
+			log_params.use_fd = 0;
+	} else {
+		exec_srv_params.syslog = 0;
+	}
+
 
 	if (child_prog == NULL) {
 		char *wrapper_abspath = realpath(argv[0], NULL);
@@ -394,33 +466,33 @@ int main(int argc, char **argv) {
 		return EXIT_FAILURE;
 	}
 
+	info("xnbd-binary: %s", child_prog);
+	exec_srv_params.binpath = child_prog;
+
+
 	if (port == NULL) {
 		if (asprintf(&port, "%d", XNBD_PORT) == -1) {
 			return EXIT_FAILURE;
 		}
 	}
+	info("port: %s", port);
+
 
 	if (! ctl_path)
 		ctl_path = (char *)default_ctl_path;
 
+
 	if (! server_target)
-		server_target = (char *)default_server_target;
+		server_target = default_server_target;
+		//server_target = (char *)default_server_target;
 
-
-	g_message("port: %s", port);
-	g_message("xnbd-binary: %s", child_prog);
-
-	if (logpath) {
-		info("logfile %s", logpath);
-		redirect_stderr(logpath);
-        }
+	exec_srv_params.target_mode = server_target;
 
 
         if (daemonize)
-		detach(logpath);
+		if (daemon(0, 0) == -1)
+			err("daemon %m");
 
-
-	list_diskimg(&dsklist, stdout);
 
 	sigemptyset(&sigset);
 	sigaddset(&sigset, SIGINT);
@@ -428,49 +500,51 @@ int main(int argc, char **argv) {
 	sigaddset(&sigset, SIGCHLD);
 	sigaddset(&sigset, SIGPIPE);
 	if (sigprocmask(SIG_BLOCK, &sigset, NULL) == -1)
-		g_error("sigprocmask() : %s", g_strerror(errno));  /* exit */
+		err("sigprocmask() : %m");  /* exit */
 
 	sigfd = signalfd(-1, &sigset, 0);
 	if (sigfd == -1)
-		g_error("signalfd() : %s", g_strerror(errno));  /* exit */
+		err("signalfd() : %m");  /* exit */
 
 	epoll_fd = epoll_create1(0);
 	if (epoll_fd == -1)
-		g_error("epoll_create : %s", g_strerror(errno));
+		err("epoll_create : %m");
 
 	/* add signalfd */
 	sigfd_ev.events = POLLIN;
 	sigfd_ev.data.fd = sigfd;
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, sigfd, &sigfd_ev) == -1) {
-		g_error("epoll_ctl : %s", g_strerror(errno));
-	}
-
-	/* add unix socket */
-	ux_sockfd = make_unix_sock(ctl_path);
-	uxfd_ev.events = POLLIN;
-	uxfd_ev.data.fd = ux_sockfd;
-	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, ux_sockfd, &uxfd_ev) == -1) {
-		g_error("epoll_ctl : %s", g_strerror(errno));
+		err("epoll_ctl : %m");
 	}
 
 	/* add tcp socket */
-	sockfd = make_tcp_sock(laddr, port);
+	if ((sockfd = make_tcp_sock(laddr, port)) == -1)
+		err("make_tcp_sock() returned %d", sockfd);
 	tcpfd_ev.events = POLLIN;
 	tcpfd_ev.data.fd = sockfd;
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, sockfd, &tcpfd_ev) == -1) {
-		g_error("epoll_ctl : %s", g_strerror(errno));
+		err("epoll_ctl : %m");
+	}
+
+	/* add unix socket */
+	if ((ux_sockfd = make_unix_sock(ctl_path)) < 0)
+		err("make_unix_sock() returned %d", ux_sockfd);
+	uxfd_ev.events = POLLIN;
+	uxfd_ev.data.fd = ux_sockfd;
+	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, ux_sockfd, &uxfd_ev) == -1) {
+		err("epoll_ctl : %m");
 	}
 
 	for (;;) {
 		int num_of_fds = epoll_wait(epoll_fd, ep_events, MAX_EVENTS, -1);
 			if (num_of_fds == -1)
-				g_error("epoll_wait : %s", g_strerror(errno));
+				err("epoll_wait : %m");
 		for (int c_ev = 0; c_ev < num_of_fds; c_ev++) {
 			if (ep_events[c_ev].data.fd == sigfd) {
 				/* signalfd */
 				rbytes = read(sigfd, &sfd_siginfo, sizeof(sfd_siginfo));
 				if (rbytes != sizeof(sfd_siginfo))
-					g_error("read sigfd : %s", strerror(errno));
+					err("read sigfd : %m");
 				if (sfd_siginfo.ssi_signo == SIGTERM || sfd_siginfo.ssi_signo == SIGINT) {
 					close(epoll_fd);
 					close(sockfd);
@@ -480,24 +554,24 @@ int main(int argc, char **argv) {
 					exit(EXIT_SUCCESS);
 				} else if (sfd_siginfo.ssi_signo == SIGCHLD) {
 					if ((cpid = waitpid(-1, &cstatus, WNOHANG)) == -1)
-						g_warning("waitpid : %s", g_strerror(errno));
+						warn("waitpid : %m");
 					if (WIFEXITED(cstatus)) 
-						g_message("pid %ld : exit status %d", (long)cpid, WEXITSTATUS(cstatus));
+						warn("pid %ld : exit status %d", (long)cpid, WEXITSTATUS(cstatus));
 					forked_srvs--;
-					g_message("forked_srvs : %d", forked_srvs);
+					info("forked_srvs : %d", forked_srvs);
 				}
 			} else if (ep_events[c_ev].data.fd == ux_sockfd) {
 				/* unix socket */
 				if (pthread_create(&thread, NULL, start_filemgr_thread, (void *)&ux_sockfd))
-					g_warning("pthread_create : %s", g_strerror(errno));
+					warn("pthread_create : %m");
 				if (pthread_detach(thread))
-					g_warning("pthread_detach : %s", g_strerror(errno));
+					warn("pthread_detach : %m");
 				pthread_detach(thread);
 			} else if (ep_events[c_ev].data.fd == sockfd) {
 				/* tcp socket */
 				conn_sockfd = accept(sockfd, NULL, NULL);
 				if (conn_sockfd == -1) {
-					perror("accept");
+					warn("accept : %m");
 					break;
 				}
 
@@ -505,11 +579,11 @@ int main(int argc, char **argv) {
 				if (asprintf(&fd_num, "%d", conn_sockfd) == -1) {
 					break;
 				}
-				printf("conn_sockfd: %d\n", conn_sockfd);
+				info("conn_sockfd: %d", conn_sockfd);
 
 				if (forked_srvs == MAX_NSRVS) {
 					close(conn_sockfd);
-					g_warning("fork : reached the limit");
+					warn("fork : reached the limit");
 					break;
 				}
 
@@ -518,45 +592,47 @@ int main(int argc, char **argv) {
 				if (pid == 0) {
 					/* child */
 
-					if (sigprocmask(SIG_UNBLOCK, &sigset, NULL) == -1)
-						g_error("sigprocmask() : %s", g_strerror(errno));  /* exit */
+					if (sigprocmask(SIG_UNBLOCK, &sigset, NULL) == -1) {
+						warn("sigprocmask() : %m");
+						_exit(EXIT_FAILURE);
+					}
 
 					close(sockfd);
 					close(epoll_fd);
 					close(ux_sockfd);
 					close(sigfd);
 
-					requested_img = nbd_negotiate_with_client_new_phase_0(conn_sockfd);
-					printf("requested_img: %s\n", requested_img);
+					if ((requested_img = nbd_negotiate_with_client_new_phase_0(conn_sockfd)) == NULL) {
+						warn("requested_img: NULL");
+						close(conn_sockfd);
+						_exit(EXIT_FAILURE);
+					}
+					info("requested_img: %s\n", requested_img);
 
 					if (has_diskimg(&dsklist, requested_img) < 0) {
 						if(close(conn_sockfd))
-							perror("close(p0)");
+							warn("close(p0)");
 						_exit(EXIT_FAILURE);
 					}
 
 					stat(requested_img, &sb);
 					if (nbd_negotiate_with_client_new_phase_1(conn_sockfd, sb.st_size, 0)) {
 						if(close(conn_sockfd))
-							perror("close(p1)");
+							warn("close(p1)");
 						_exit(EXIT_FAILURE);
 					}
 
-					if (readonly)
-						(void)execl(child_prog, child_prog, server_target, "--readonly", "--connected-fd", fd_num, requested_img, (char *)NULL);
-					else
-						(void)execl(child_prog, child_prog, server_target, "--connected-fd", fd_num, requested_img, (char *)NULL);
-					perror("exec");
-					_exit(EXIT_FAILURE);
+					exec_xnbd_server(&exec_srv_params, fd_num, requested_img);
+
 				} else if (pid > 0) {
 					/* parent */
 					free(fd_num);
 					forked_srvs++;
-					g_message("forked_srvs : %d", forked_srvs);
-					printf("fork: pid %ld\n", (long)pid);
+					info("forked_srvs : %d", forked_srvs);
+					info("fork: pid %ld", (long)pid);
 					close(conn_sockfd);
 				} else {
-					perror("fork");
+					err("fork: %m");
 					break;
 				}
 			}
