@@ -280,7 +280,7 @@ static void exec_xnbd_server(struct exec_params *params, char *fd_num, char *req
 {
 	char *args[8];
 	int i = 0;
-	args[i] = (char *)"forked_xnbd_wrapper";
+	args[i] = params->binpath;
 	args[++i] = (char *)params->target_mode;
 	if (params->readonly)
 		args[++i] = (char *)"--readonly";
@@ -462,8 +462,7 @@ int main(int argc, char **argv) {
 	}
 
 	if (access(child_prog, X_OK) != 0) {
-		perror("check xnbd-binary");
-		return EXIT_FAILURE;
+		err("check xnbd-binary: %m");
 	}
 
 	info("xnbd-binary: %s", child_prog);
