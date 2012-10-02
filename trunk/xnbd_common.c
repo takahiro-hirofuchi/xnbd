@@ -209,6 +209,15 @@ void redirect_stderr(const char *logfile)
         close(logfd);
 }
 
+int get_log_fd(const char *path)
+{
+        int fd = open(path, O_WRONLY | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR);
+        if (fd < 0)
+                err("open %s, %m", path);
+
+        return fd;
+}
+
 void detach(const char *logpath)
 {
         close(STDIN_FILENO);
