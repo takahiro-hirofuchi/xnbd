@@ -313,6 +313,8 @@ void show_help_and_exit(const char *msg)
 
 int main(int argc, char **argv)
 {
+	g_thread_init(NULL);
+
 	enum xnbd_bgctl_cmd_type {
 		xnbd_bgctl_cmd_unknown,
 		xnbd_bgctl_cmd_query,
