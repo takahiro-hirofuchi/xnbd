@@ -113,7 +113,7 @@ manpage.1: manpage.sgml
 
 
       <varlistentry>
-	<term><option>--block-size <replaceable>SIZE</replaceable></option></term>
+	<term><option>--blocksize <replaceable>SIZE</replaceable></option></term>
 	<listitem>
 	  <para>Use the provided value as block size.
 	    Default is 1024; allowed values are either 512, 1024, 2048 or 4096.
