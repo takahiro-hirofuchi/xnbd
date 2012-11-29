@@ -26,6 +26,8 @@
 import socket
 import re
 import sys
+import os
+import errno
 from optparse import OptionParser
 
 
@@ -116,7 +118,13 @@ if __name__ =='__main__':
         clparser.print_help()
         sys.exit(2)
 
-    ctl = XNBDWrapperCtl(opts.sockpath)
+    try:
+        ctl = XNBDWrapperCtl(opts.sockpath)
+    except socket.error as e:
+        print 'Cannot open socket file %s: Error "%s" (%s).' \
+                % (opts.sockpath, os.strerror(e.errno), errno.errorcode.get(e.errno, 'E???'))
+        sys.exit(1)
+
     res = ctl.send_cmd(opts.cmd)
     if not re.match("^ *(|\n)$", res):
         print res,
