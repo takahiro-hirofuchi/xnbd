@@ -25,6 +25,7 @@
 #include <sys/ioctl.h>
 #include <sys/reboot.h>
 #include <linux/fs.h>           /* for BLKRRPART */
+#include <assert.h>
 
 
 /* /usr/include/linux/nbd.h */
@@ -43,18 +44,88 @@
 #define BLKROSET   _IO(0x12,93) /* set device read-only (0 = read-write) */
 
 
+unsigned long determine_SYMLOOP_MAX()
+{
+	const long maximum_symlink_steps = sysconf(_SC_SYMLOOP_MAX);
+	if (maximum_symlink_steps < 1)  /* -1 means not supported, 0 would be quite odd */
+	{
+		return (unsigned long)-1;  /* for unlimited */
+	}
+	return (unsigned long)maximum_symlink_steps;
+}
+
+
+/*
+ * Follows symlink in file <devname> as longs as
+ *
+ *  1. the file is a symlink and
+ *  2. the maximum symlink loop limit has not been reached.
+ *
+ * The result is written to <p_devname_resolved>.  If <devname> is not a symlink
+ * to bgin with, <p_devname_resolved> will point to <devname> for convenience.
+ *
+ * The caller is responsible to free the memeory allocated for
+ * <p_devname_resolved> using g_free() when the variable is no longer used.
+ */
+void follow_symlink_chain(const char *devname, char ** p_devname_resolved)
+{
+	assert(devname);
+	assert(p_devname_resolved);
+
+	GError * error = NULL;
+	char *resolved = g_strdup(devname);
+	unsigned int steps_taken = 0;
+	const unsigned long MAX_FOLLOW_STEPS = determine_SYMLOOP_MAX();
+
+	for (;;)
+	{
+		gchar * const points_to = g_file_read_link(resolved, &error);
+		if (! points_to || error) {
+			*p_devname_resolved = resolved;
+			return;
+		}
+		error = NULL;
+
+		steps_taken += 1;
+		if (steps_taken > MAX_FOLLOW_STEPS)
+		{
+			err("%s (ELOOP)", strerror(ELOOP));
+		}
+
+		if (g_path_is_absolute(points_to))
+		{
+			g_free(resolved);
+			resolved = points_to;
+		}
+		else
+		{
+			gchar * const dirname = g_path_get_dirname(resolved);
+			g_free(resolved);
+			resolved = g_build_filename(dirname, points_to, NULL);
+			g_free(dirname);
+			g_free(points_to);
+		}
+	}
+}
+
+
 pid_t get_nbd_pid(const char *devname)
 {
 	pid_t pid;
 
-	if(strncmp(devname, "/dev/", 5) == 0) 
-		devname += 5;
+	gchar * devname_resolved = NULL;
+	follow_symlink_chain(devname, &devname_resolved);
+
+	const gchar * const device_name_only =
+			(strncmp(devname_resolved, "/dev/", 5) == 0)
+				? devname_resolved + 5
+				: devname_resolved;
+
+	char *pidpath = g_strdup_printf("/sys/block/%s/pid", device_name_only);
+	g_free(devname_resolved);
 
 
-	char *pidpath = g_strdup_printf("/sys/block/%s/pid", devname);
-
-
-	char *buf;
+	char *buf = NULL;
 	GError *error = NULL;
 	g_file_get_contents(pidpath, &buf, NULL, &error);
 	if (error != NULL) {
@@ -66,6 +137,7 @@ pid_t get_nbd_pid(const char *devname)
 		info("%s is ready for read/write, xnbd-server (pid %d)", devname, pid);
 	}
 
+	g_free(buf);
 	g_free(pidpath);
 
 	return pid;
