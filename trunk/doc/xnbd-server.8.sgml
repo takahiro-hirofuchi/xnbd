@@ -71,6 +71,7 @@ manpage.1: manpage.sgml
     <cmdsynopsis>
       <command>&dhpackage; --proxy</command>
       <arg><replaceable>options</replaceable></arg>
+      <arg>--target-exportname <replaceable>NAME</replaceable></arg>
       <arg choice=plain><option>
 		      <replaceable>REMOTE_HOST</replaceable>
 		      <replaceable>REMOTE_PORT</replaceable>
@@ -220,6 +221,13 @@ manpage.1: manpage.sgml
 		<para>Export the image file as read only. If a client sends a write request, it will receive an error, but
 			the connection will stay up.</para>
 	</listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><option>--target-exportname</option> <replaceable>NAME</replaceable></term>
+        <listitem>
+          <para>Set the export name to request from a xnbd-wrapper target.  This option is used in combination with <option>--proxy</option>, only.</para>
+        </listitem>
       </varlistentry>
 
     </variablelist>
