@@ -579,8 +579,10 @@ void xnbd_proxy_start(struct xnbd_info *xnbd)
 
 	dbg("proxy server back start");
 
-	info("proxymode mode %s %s cache %s cachebitmap %s",
+	info("proxymode mode %s %s (%s%s) cache %s cachebitmap %s",
 			xnbd->proxy_rhost, xnbd->proxy_rport,
+			xnbd->proxy_target_exportname ? "xnbd-wrapper:" : "xnbd-server",
+			xnbd->proxy_target_exportname ? xnbd->proxy_target_exportname : "",
 			xnbd->proxy_diskpath, xnbd->proxy_bmpath);
 
 	int remotefd = net_connect(xnbd->proxy_rhost, xnbd->proxy_rport, SOCK_STREAM, IPPROTO_TCP);
@@ -588,7 +590,16 @@ void xnbd_proxy_start(struct xnbd_info *xnbd)
 		err("connecting %s:%s failed", xnbd->proxy_rhost, xnbd->proxy_rport);
 
 	/* check the remote server and get a disksize */
-	xnbd->disksize = nbd_negotiate_with_server(remotefd);
+
+	if (xnbd->proxy_target_exportname)
+		ret = nbd_negotiate_with_server_new(remotefd, &(xnbd->disksize), NULL, strlen(xnbd->proxy_target_exportname), xnbd->proxy_target_exportname);
+	else
+		ret = nbd_negotiate_with_server2(remotefd, &(xnbd->disksize), NULL);
+
+	if (ret < 0) {
+		err("negotiation with %s:%s failed", xnbd->proxy_rhost, xnbd->proxy_rport);
+	}
+
 	xnbd->nblocks = get_disk_nblocks(xnbd->disksize);
 
 	make_sockpair(&xnbd->proxy_sockpair_master_fd, &xnbd->proxy_sockpair_proxy_fd);

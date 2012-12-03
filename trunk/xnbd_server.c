@@ -710,10 +710,11 @@ static struct option longopts[] = {
 	{"tos", no_argument, NULL, 'T'},
 	{"connected-fd", required_argument, NULL, 'F'},
 	{"inetd", no_argument, NULL, 'i'},
+	{"target-exportname", required_argument, NULL, 'n'},
 	{NULL, 0, NULL, 0},
 };
 
-static const char *opt_string = "tpchvl:G:drL:STF:i";
+static const char *opt_string = "tpchvl:G:drL:STF:in";
 
 
 static const char *help_string = "\
@@ -731,6 +732,8 @@ Options: \n\
   --logpath path use the given path for logging (default: stderr)\n\
   --syslog       use syslog for logging\n\
   --inetd        set the inetd mode (use fd 0 for TCP connection)\n\
+  --target-exportname\n\
+                 set the export name to request from a xnbd-wrapper target (used with --proxy)\n\
 ";
 
 
@@ -955,6 +958,10 @@ int main(int argc, char **argv) {
 			case 'S':
 			case 'i':
 				/* previously processed options */
+				break;
+
+			case 'n':
+				xnbd.proxy_target_exportname = optarg;
 				break;
 
 			case '?':

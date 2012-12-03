@@ -487,7 +487,8 @@ int nbd_negotiate_with_server_new(int sockfd, off_t *exportsize, uint32_t *expor
 		}
 
 		*exportsize  = (off_t) size;
-		*exportflags = flags;
+		if (exportflags)
+			*exportflags = flags;
 	}
 
 
@@ -591,7 +592,8 @@ int nbd_negotiate_with_server2(int sockfd, off_t *exportsize, uint32_t *exportfl
 
 
 	*exportsize  = (off_t) size;
-	*exportflags = flags;
+	if (exportflags)
+		*exportflags = flags;
 
 	return 0;
 }
@@ -599,9 +601,8 @@ int nbd_negotiate_with_server2(int sockfd, off_t *exportsize, uint32_t *exportfl
 off_t nbd_negotiate_with_server(int sockfd)
 {
 	off_t size;
-	uint32_t flags;
 
-	int ret = nbd_negotiate_with_server2(sockfd, &size, &flags);
+	int ret = nbd_negotiate_with_server2(sockfd, &size, NULL);
 	if (ret < 0)
 		err("negotiate with server");
 

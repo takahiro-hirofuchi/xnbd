@@ -164,6 +164,7 @@ struct xnbd_info {
 	char *proxy_rhost;  /* remote nbd sever */
 	char *proxy_rport;
 	char *proxy_unixpath;
+	char *proxy_target_exportname;  /* export name to request from a xnbd-wrapper target */
 
 	/* 
 	 * NOTE: when invoking a new thread, must close the master_fds of the
