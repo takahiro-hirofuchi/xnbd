@@ -489,7 +489,7 @@ int master_server(int port, void *data, int connect_fd)
 
 				if (xnbd->cmd == xnbd_cmd_proxy)
 					if (pid == xnbd->proxy_pid)
-						err("detect abnormal termination of proxy_server");
+						err("detected abnormal termination of proxy_server");
 
 
 
@@ -780,6 +780,12 @@ static void unset_nonblock(int fd)
 	}
 }
 
+static void deny_multiple_mode_changes(enum xnbd_cmd_type cmd)
+{
+	if (cmd != xnbd_cmd_unknown)
+		show_help_and_exit("specify one mode");
+}
+
 /* 
  * If the case of the --inetd/--daemon mode, xnbd-server uses syslog in the default. If
  * --logpath is specified, the given path, instead of syslog, is used for logging.
@@ -882,37 +888,27 @@ int main(int argc, char **argv) {
 		switch (c) {
 			/* commands */
 			case 't':
-				if (cmd != xnbd_cmd_unknown)
-					show_help_and_exit("specify one mode");
-			
+				deny_multiple_mode_changes(cmd);
 				cmd = xnbd_cmd_target;
 				break;
 
 			case 'p':
-				if (cmd != xnbd_cmd_unknown)
-					show_help_and_exit("specify one mode");
-
+				deny_multiple_mode_changes(cmd);
 				cmd = xnbd_cmd_proxy;
 				break;
 
 			case 'c':
-				if (cmd != xnbd_cmd_unknown)
-					show_help_and_exit("specify one mode");
-
+				deny_multiple_mode_changes(cmd);
 				cmd = xnbd_cmd_cow_target;
 				break;
 
 			case 'h':
-				if (cmd != xnbd_cmd_unknown)
-					show_help_and_exit("specify one mode");
-
+				deny_multiple_mode_changes(cmd);
 				cmd = xnbd_cmd_help;
 				break;
 
 			case 'v':
-				if (cmd != xnbd_cmd_unknown)
-					show_help_and_exit("specify one mode");
-
+				deny_multiple_mode_changes(cmd);
 				cmd = xnbd_cmd_version;
 				break;
 
