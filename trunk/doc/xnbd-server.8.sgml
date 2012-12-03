@@ -293,6 +293,7 @@ manpage.1: manpage.sgml
 
     <para>xnbd-client (1).</para>
     <para>xnbd-bgctl (1).</para>
+    <para>xnbd-wrapper (8).</para>
 
   </refsect1>
   <refsect1>
