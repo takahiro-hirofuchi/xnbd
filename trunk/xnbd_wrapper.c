@@ -26,12 +26,14 @@
 #include <libgen.h>
 #include <sys/signalfd.h>
 #include <sys/epoll.h>
+#include <assert.h>
 
 
 #define XNBD_IMAGE_ADDED  0
 #define XNBD_IMAGE_ACCESS_ERROR  (-1)
-#define XNBD_ENOMEN  (-3)
 #define XNBD_NOT_ADDING_TWICE  (-4)
+
+#define NOT_PROXIED  NULL
 
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -42,6 +44,16 @@ guint images_added_ever = 0;
 typedef struct _t_disk_data {
 	char * disk_file_name;  /* Used as key in the hash table, too. So no need to free keys. */
 	guint index;
+	struct {
+		char * target_host;
+		char * target_port;
+		/* for cache_image see disk_file_name above */
+		char * bitmap_image;
+		char * control_socket_path;
+		char * target_exportname;
+	} proxy;
+
+	/* NOTE: Upon extension update destroy_value, copy_disk_data and create_disk_data below, too! */
 } t_disk_data;
 
 typedef struct _t_listing_state {
@@ -53,50 +65,101 @@ typedef struct _t_listing_state {
 
 static void destroy_value(t_disk_data * p_disk_data) {
 	g_free(p_disk_data->disk_file_name);
+	g_free(p_disk_data->proxy.target_host);
+	g_free(p_disk_data->proxy.target_port);
+	g_free(p_disk_data->proxy.bitmap_image);
+	g_free(p_disk_data->proxy.control_socket_path);
+	g_free(p_disk_data->proxy.target_exportname);
 	g_free(p_disk_data);
 }
 
+#define COPY_STRING_MEMBER(FINE, MEMBER, SOURCE, TARGET)  \
+	do { \
+		if (FINE && SOURCE->MEMBER) { \
+			TARGET->MEMBER = g_strdup(SOURCE->MEMBER); \
+			if (! TARGET->MEMBER) \
+				FINE = 0; \
+		} \
+	} while (0)
+
+static t_disk_data * copy_disk_data(const t_disk_data * source) {
+	int fine = 1;
+	t_disk_data * const res = g_try_new(t_disk_data, 1);
+	if (! res)
+		fine = 0;
+
+	if (fine)
+	{
+		memset(res, 0, sizeof(t_disk_data));
+		res->index = source->index;
+	}
+
+	COPY_STRING_MEMBER(fine, disk_file_name, source, res);
+	COPY_STRING_MEMBER(fine, proxy.target_host, source, res);
+	COPY_STRING_MEMBER(fine, proxy.target_port, source, res);
+	COPY_STRING_MEMBER(fine, proxy.bitmap_image, source, res);
+	COPY_STRING_MEMBER(fine, proxy.control_socket_path, source, res);
+	COPY_STRING_MEMBER(fine, proxy.target_exportname, source, res);
+
+	if (fine)
+		return res;
+
+	g_free(res->disk_file_name);
+	g_free(res->proxy.target_host);
+	g_free(res->proxy.target_port);
+	g_free(res->proxy.bitmap_image);
+	g_free(res->proxy.control_socket_path);
+	g_free(res->proxy.target_exportname);
+	g_free(res);
+	return NULL;
+}
+
+static t_disk_data * create_disk_data(const char * target_host, const char * target_port,
+		const char * cache_image, const char * bitmap_image,
+		const char * control_socket_path, const char * target_exportname)
+{
+	assert(cache_image);
+
+	t_disk_data source;
+	memset(&source, 0, sizeof(source));
+
+	source.disk_file_name = (char *)cache_image;
+	/* .index set later */
+	source.proxy.target_host = (char *)target_host;
+	source.proxy.target_port = (char *)target_port;
+	source.proxy.bitmap_image = (char *)bitmap_image;
+	source.proxy.control_socket_path = (char *)control_socket_path;
+	source.proxy.target_exportname = (char *)target_exportname;
+
+	return copy_disk_data(&source);
+}
+
 static gboolean find_by_index(const char * key, const t_disk_data * p_disk_data, gconstpointer user_data) {
-	const int index_at_addition_time = GPOINTER_TO_INT(user_data);
+	(void)key;
+
+	const guint index_at_addition_time = GPOINTER_TO_UINT(user_data);
 	return p_disk_data->index == index_at_addition_time;
 }
 
-static int add_diskimg(char *dname)
+static int add_diskimg(t_disk_data * p_disk_data)
 {
 	/* Check image access */
 	int fd;
-	if ((fd = open(dname, O_RDONLY)) < 0)
+	if ((fd = open(p_disk_data->disk_file_name, O_RDONLY)) < 0)
 		return XNBD_IMAGE_ACCESS_ERROR;
 	close(fd);
 
 	/* Add to hash table */
 	pthread_mutex_lock(&mutex);
 	int res = XNBD_IMAGE_ADDED;
-	if (g_hash_table_contains(p_disk_dict, dname))
+	if (g_hash_table_contains(p_disk_dict, p_disk_data->disk_file_name))
 	{
 		res = XNBD_NOT_ADDING_TWICE;
 	}
 	else
 	{
-		t_disk_data * const p_disk_data = g_try_new(t_disk_data, 1);
-		if (p_disk_data)
-		{
-			p_disk_data->disk_file_name = g_strdup(dname);
-			if (p_disk_data->disk_file_name)
-			{
-				p_disk_data->index = images_added_ever++;
-				g_hash_table_insert(p_disk_dict, p_disk_data->disk_file_name, p_disk_data);
-			}
-			else
-			{
-				g_free(p_disk_data);
-				res = XNBD_ENOMEN;
-			}
-		}
-		else
-		{
-			res = XNBD_ENOMEN;
-		}
+		p_disk_data->index = images_added_ever++;
+		g_hash_table_insert(p_disk_dict, p_disk_data->disk_file_name, p_disk_data);
 	}
 	pthread_mutex_unlock(&mutex);
 	return res;
@@ -107,20 +170,28 @@ static void del_diskimg(int num)
 	num--;
 	if (num >= 0) {
 		pthread_mutex_lock(&mutex);
-		g_hash_table_foreach_remove(p_disk_dict, (GHRFunc)find_by_index, num);
+		g_hash_table_foreach_remove(p_disk_dict, (GHRFunc)find_by_index, GUINT_TO_POINTER((guint)num));
 		pthread_mutex_unlock(&mutex);
 	}
 }
 
-static int has_diskimg(char *dname)
+static t_disk_data * get_disk_data_for(char *dname)
 {
+	t_disk_data * res = NULL;
+
 	pthread_mutex_lock(&mutex);
-	const int res = g_hash_table_contains(p_disk_dict, dname) ? 0 : -1;
+	const t_disk_data * const source = (t_disk_data *)g_hash_table_lookup(p_disk_dict, dname);
+	if (source)
+		/* NOTE: We need a deep copy here so that we do not access data that another thread has freed */
+		res = copy_disk_data(source);
+
 	pthread_mutex_unlock(&mutex);
 	return res;
 }
 
 static void find_smallest_index_iterator(gpointer key, const t_disk_data * p_disk_data, t_listing_state * p_listing_state) {
+	(void)key;
+
 	if (p_disk_data->index < p_listing_state->index_to_print)
 	{
 		p_listing_state->index_to_print = p_disk_data->index;
@@ -128,9 +199,17 @@ static void find_smallest_index_iterator(gpointer key, const t_disk_data * p_dis
 }
 
 static void list_images_iterator(gpointer key, const t_disk_data * p_disk_data, t_listing_state * p_listing_state) {
+	(void)key;
+
 	if (p_disk_data->index == p_listing_state->index_to_print)
 	{
-		fprintf(p_listing_state->fp, "%d : %s\n", p_disk_data->index + 1, p_disk_data->disk_file_name);
+		guint one_based_index = p_disk_data->index + 1;
+		if (p_disk_data->proxy.target_host)
+			fprintf(p_listing_state->fp, "%d : %s  (%s:%s, %s, %s)\n", one_based_index, p_disk_data->disk_file_name,
+					p_disk_data->proxy.target_host, p_disk_data->proxy.target_port,
+					p_disk_data->proxy.bitmap_image, p_disk_data->proxy.control_socket_path);
+		else
+			fprintf(p_listing_state->fp, "%d : %s\n", one_based_index, p_disk_data->disk_file_name);
 	}
 	else if ((p_disk_data->index > p_listing_state->index_to_print) && (p_disk_data->index < p_listing_state->index_up_next))
 	{
@@ -210,7 +289,7 @@ static int count_mgr_threads(int val)
 
 static void *start_filemgr_thread(void *uxsock)
 {
-	const int rbufsize = 128;
+	const int rbufsize = 128 * 6;
 	
 	char buf[rbufsize];
 	char cmd[rbufsize];
@@ -241,13 +320,67 @@ static void *start_filemgr_thread(void *uxsock)
 			if (strcmp(cmd, "list") == 0)
 				list_diskimg(fp);
 			else if (strcmp(cmd, "add") == 0) {
-				ret = add_diskimg(arg);
-				if (ret == XNBD_IMAGE_ACCESS_ERROR)
-					fprintf(fp, "cannot open %s\n", arg);
-				else if (ret == XNBD_ENOMEN)
+				t_disk_data * const p_disk_data = create_disk_data(NOT_PROXIED, NOT_PROXIED, arg, NOT_PROXIED, NOT_PROXIED, NOT_PROXIED);
+				if (p_disk_data)
+				{
+					ret = add_diskimg(p_disk_data);
+					if (ret == XNBD_IMAGE_ACCESS_ERROR)
+						fprintf(fp, "cannot open %s\n", arg);
+					else if (ret == XNBD_NOT_ADDING_TWICE)
+						fprintf(fp, "image cannot be added twice\n");
+				}
+				else
+				{
 					fprintf(fp, "out of memory\n");
-				else if (ret == XNBD_NOT_ADDING_TWICE)
-					fprintf(fp, "image cannot be added twice\n");
+				}
+			}
+			else if (strcmp(cmd, "add-proxy") == 0) {
+				/* Remove trailing newline so it does not end up in the last argument */
+				const size_t buf_len = strlen(buf);
+				if ((buf_len > 0) && (buf[buf_len - 1] == '\n'))
+					buf[buf_len - 1] = '\0';
+
+				const unsigned int EXPECTED_ARGC_MIN = 1 + 5;
+				const unsigned int EXPECTED_ARGC_MAX = 1 + 5 + 1;
+				const unsigned int MAX_ARGC = EXPECTED_ARGC_MAX + 1;  /* +1 or we do not notice g_strsplit's internal merging */
+				gchar ** argv = g_strsplit(buf, " ", MAX_ARGC);
+				if (argv)
+				{
+					/* Calculate argc from argv */
+					unsigned int argc = 0;
+					while (argv[argc])
+						argc++;
+
+					if ((argc < EXPECTED_ARGC_MIN) || (argc > EXPECTED_ARGC_MAX)) {
+						fprintf(fp, "usage: add-proxy <TARGET_HOST> <TARGET_PORT> <CACHE_IMAGE> <BITMAP_IMAGE> <CONTROL_SOCKET_PATH> [<TARGET_EXPORTNAME>]\n");
+					} else {
+						const char * const target_host = argv[1];
+						const char * const target_port = argv[2];
+						const char * const cache_image = argv[3];
+						const char * const bitmap_image = argv[4];
+						const char * const control_socket_path = argv[5];
+						const char * const target_exportname = (argc > 6) ? argv[6] : NULL;
+
+						t_disk_data * const p_disk_data = create_disk_data(target_host, target_port, cache_image, bitmap_image, control_socket_path, target_exportname);
+						if (! p_disk_data)
+						{
+							fprintf(fp, "out of memory\n");
+						}
+						else
+						{
+							ret = add_diskimg(p_disk_data);
+							if (ret == -1)
+								fprintf(fp, "cannot open %s\n", arg);
+							else if (ret == -2)
+								fprintf(fp, "list is full\n");
+						}
+					}
+					g_strfreev(argv);
+				}
+				else
+				{
+					fprintf(fp, "out of memory\n");
+				}
 			}
 			else if (strcmp(cmd, "del") == 0)
 				del_diskimg(atoi(arg));
@@ -333,19 +466,42 @@ struct exec_params {
 	int syslog;
 };
 
-static void exec_xnbd_server(struct exec_params *params, char *fd_num, char *requested_img)
+static void exec_xnbd_server(struct exec_params *params, char *fd_num, const t_disk_data * disk_data)
 {
-	char *args[8];
+	char *args[8 + 4 + 2];
 	int i = 0;
 	args[i] = params->binpath;
-	args[++i] = (char *)params->target_mode;
+
+	if (disk_data->proxy.target_host) {
+		args[++i] = (char *)"--proxy";
+	} else {
+		args[++i] = (char *)params->target_mode;
+	}
+
 	if (params->readonly)
 		args[++i] = (char *)"--readonly";
 	if (params->syslog)
 		args[++i] = (char *)"--syslog";
 	args[++i] = (char *)"--connected-fd";
 	args[++i] = fd_num;
-	args[++i] = requested_img;
+
+	if (disk_data->proxy.target_host)
+	{
+		if (disk_data->proxy.target_exportname) {
+			args[++i] = (char *)"--target-exportname";
+			args[++i] = disk_data->proxy.target_exportname;
+		}
+		args[++i] = disk_data->proxy.target_host;
+		args[++i] = disk_data->proxy.target_port;
+		args[++i] = disk_data->disk_file_name;
+		args[++i] = disk_data->proxy.bitmap_image;
+		args[++i] = disk_data->proxy.control_socket_path;
+	}
+	else
+	{
+		args[++i] = disk_data->disk_file_name;
+	}
+
 	args[++i] = NULL;
 
 #ifdef XNBD_DEBUG
@@ -482,15 +638,23 @@ int main(int argc, char **argv) {
 				port = optarg;
 				break;
 			case 'f':
-				if ((ret = add_diskimg(optarg)) < 0) {
-					if (ret == XNBD_IMAGE_ACCESS_ERROR)
-						warn("cannot open %s", optarg);
-					else if (ret == XNBD_ENOMEN)
-						warn("out of memory");
-					else if (ret == XNBD_NOT_ADDING_TWICE)
-						warn("image cannot be added twice");
+			{
+				t_disk_data * const p_disk_data = create_disk_data(NOT_PROXIED, NOT_PROXIED, optarg, NOT_PROXIED, NOT_PROXIED, NOT_PROXIED);
+				if (p_disk_data)
+				{
+					if ((ret = add_diskimg(p_disk_data)) < 0) {
+						if (ret == XNBD_IMAGE_ACCESS_ERROR)
+							warn("cannot open %s", optarg);
+						else if (ret == XNBD_NOT_ADDING_TWICE)
+							warn("image cannot be added twice");
+					}
+				}
+				else
+				{
+					warn("out of memory");
 				}
 				break;
+			}
 			case 'b':
 				child_prog = optarg;
 				break;
@@ -680,7 +844,8 @@ int main(int argc, char **argv) {
 					}
 					info("requested_img: %s\n", requested_img);
 
-					if (has_diskimg(requested_img) < 0) {
+					const t_disk_data * const disk_data = get_disk_data_for(requested_img);
+					if (! disk_data) {
 						if(close(conn_sockfd))
 							warn("close(p0)");
 						_exit(EXIT_FAILURE);
@@ -693,7 +858,7 @@ int main(int argc, char **argv) {
 						_exit(EXIT_FAILURE);
 					}
 
-					exec_xnbd_server(&exec_srv_params, fd_num, requested_img);
+					exec_xnbd_server(&exec_srv_params, fd_num, disk_data);
 
 				} else if (pid > 0) {
 					/* parent */

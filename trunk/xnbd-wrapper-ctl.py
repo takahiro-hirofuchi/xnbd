@@ -28,7 +28,17 @@ import re
 import sys
 import os
 import errno
-from optparse import OptionParser
+import copy
+
+try:
+    import argparse
+except ImportError:
+    print >> sys.stderr, 'ERROR: Python >=2.7 or python-argparse needed to run'
+    sys.exit(1)
+
+
+def prog(argv_zero):
+    return os.path.basename(argv_zero)
 
 
 class XNBDWrapperCtl:
@@ -71,52 +81,93 @@ class XNBDWrapperCtl:
 		pass
 
 
-def setup(option, opt_str, value, parser):
-    if parser.values.cmd != None:
-        parser.print_help()
-        sys.exit(2)
+class FixedHelpFormatter(argparse.HelpFormatter):
+    def _format_args(self, action, default_metavar):
+        if action.nargs > 1:
+            return ' '.join(action.metavar[:action.nargs])
+        return super(FixedHelpFormatter, self)._format_args(action, default_metavar)
 
-    if opt_str == "-l" or opt_str == "--list":
-        parser.values.cmd = "list"
 
-    elif opt_str == "-d" or opt_str == "--shutdown":
-        parser.values.cmd = "shutdown"
+def parse_command_line(argv):
+    parser = argparse.ArgumentParser(formatter_class=FixedHelpFormatter, usage="""
+  %(prog)s [-s SOCKPATH] --list
+  %(prog)s [-s SOCKPATH] --add FILE
+  %(prog)s [-s SOCKPATH] [--target-exportname NAME] --add-proxy TARGET_HOST TARGET_PORT CACHE_IMAGE BITMAP_IMAGE CONTROL_SOCKET_PATH
+  %(prog)s [-s SOCKPATH] --remove INDEX
+  %(prog)s [-s SOCKPATH] --shutdown
+""")
 
-    elif opt_str == "-a" or opt_str == "--add":
-        parser.values.cmd = "add " + value
+    operations = parser.add_mutually_exclusive_group(required=True)
 
-    elif opt_str == "-r" or opt_str == "--remove":
-        if re.match("^[1-9][0-9]+$|^[0-9]$", value) == None:
-            parser.print_help()
-            sys.exit(2)
-        parser.values.cmd = "del " + value
+    parser.add_argument("-s", "--socket",
+                        dest="sockpath", default="/tmp/xnbd_wrapper.ctl",
+                        help="specify the socket file path of xnbd-wrapper.")
+
+    operations.add_argument("--list", "-l", action='store_true',
+                        help="list registered disk images.")
+    operations.add_argument("--add", "-a", metavar='FILE',
+                        help="add a disk image file to the export list.")
+    operations.add_argument("--add-proxy", metavar=['TARGET_HOST', 'TARGET_PORT', 'CACHE_IMAGE', 'BITMAP_IMAGE', 'CONTROL_SOCKET_PATH'], nargs=5,
+                        help="add a disk image file to the export list.")
+    operations.add_argument("--remove", "-r", metavar='INDEX', type=int,
+                        help="remove a disk image file from the list.")
+    operations.add_argument("--shutdown", "-d", action='store_true',
+                        help="remove all disk images from the xnbd-wrapper instance and stop it afterwards.")
+
+    parser.add_argument("--target-exportname", metavar='NAME',
+                        help="set the export name to request from a xnbd-wrapper target (used with --add-proxy).")
+
+    options = parser.parse_args(argv[1:])
+
+    if options.target_exportname and not options.add_proxy:
+        print >>sys.stderr, '%s: error: Argument --target-exportname is only supported in combination with --add-proxy.' % prog(argv[0])
+        sys.exit(1)
+
+    return options
+
+
+def compose_command(options, argv):
+    # Zero argument commands
+    zero_arg_commands = (
+        (options.list, 'list'),
+        (options.shutdown, 'shutdown'),
+    )
+    for dest, line in zero_arg_commands:
+        if dest:
+            return line
+
+    # Single argument commands
+    single_arg_commands = (
+        (options.add, 'add'),
+        (options.remove, 'del'),
+    )
+    for dest, command_name, in single_arg_commands:
+        if dest:
+            return '%s %s' % (command_name, dest)
+
+    # More complex commands
+    if options.add_proxy:
+        args = copy.copy(options.add_proxy)
+        if options.target_exportname:
+            args.append(options.target_exportname)
+
+        # Make sure that spaces do not cause trouble without notice
+        args_with_spaces = [v for v in args if ' ' in v]
+        if args_with_spaces:
+            if len(args_with_spaces) == 1:
+                details = '"%s"' % args_with_spaces[0]
+            else:
+                details = ', '.join([('"%s"' % v) for v in args_with_spaces])
+            print >>sys.stderr, '%s: error: Arguments containing spaces (%s) are not supported, sorry.' % (prog(argv[0]), details)
+            sys.exit(1)
+
+        return 'add-proxy %s' % ' '.join(args)
+
+    assert False, 'Internal error, no command used'
 
 
 if __name__ =='__main__':
-
-    clparser = OptionParser(usage="\n  %prog [-s SOCKPATH] --list\n"
-                                   +"  %prog [-s SOCKPATH] --add FILE\n"
-                                   +"  %prog [-s SOCKPATH] --remove N\n"
-                                   +"  %prog [-s SOCKPATH] --shutdown")
-    clparser.set_defaults(cmd=None)
-    clparser.add_option("-l", "--list", action="callback", callback=setup, nargs=0, 
-                        help="list registered disk images.")
-    clparser.add_option("-a", "--add", action="callback", callback=setup, nargs=1, 
-                        help="add a disk image file to the export list.", 
-                        type="string", metavar="FILE")
-    clparser.add_option("-r", "--remove", action="callback", callback=setup, nargs=1, 
-                        help="remove a disk image file from the list. N is the index number on the list.", 
-                        type="string", metavar="N")
-    clparser.add_option("-s", "--socket",
-                        help="specify the socket file path of xnbd-wrapper.", 
-                        dest="sockpath", default="/tmp/xnbd_wrapper.ctl")
-    clparser.add_option("-d", "--shutdown", action="callback", callback=setup, nargs=0, 
-                        help="remove all disk images from the xnbd-wrapper instance and stop it afterwards.")
-    (opts, args) = clparser.parse_args()
-
-    if opts.cmd == None:
-        clparser.print_help()
-        sys.exit(2)
+    opts = parse_command_line(sys.argv)
 
     try:
         ctl = XNBDWrapperCtl(opts.sockpath)
@@ -125,7 +176,7 @@ if __name__ =='__main__':
                 % (opts.sockpath, os.strerror(e.errno), errno.errorcode.get(e.errno, 'E???'))
         sys.exit(1)
 
-    res = ctl.send_cmd(opts.cmd)
+    res = ctl.send_cmd(compose_command(opts, sys.argv))
     if not re.match("^ *(|\n)$", res):
         print res,
 
