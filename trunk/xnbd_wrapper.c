@@ -348,6 +348,18 @@ static void exec_xnbd_server(struct exec_params *params, char *fd_num, char *req
 	args[++i] = requested_img;
 	args[++i] = NULL;
 
+#ifdef XNBD_DEBUG
+	{
+		info("About to execute...");
+		char ** walker = args;
+		while (*walker)
+		{
+			info("[%d] \"%s\"", walker - args, *walker);
+			walker++;
+		}
+	}
+#endif
+
 	(void)execv(params->binpath, args);
 
 	warn("exec failed");
