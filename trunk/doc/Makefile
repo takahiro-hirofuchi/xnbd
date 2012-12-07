@@ -6,11 +6,11 @@ MANUAL_PACKAGE = xNBD
 MANUAL_TITLE = xNBD Manual
 MANUAL_VERSION = 0.1.0
 
-MANPAGE_SECTIONS = 1 8
 MANPAGE_SOURCES = $(wildcard *.?.txt)
 RAW_MANPAGES = $(patsubst %.txt, %, $(MANPAGE_SOURCES))
 COMPRESSED_MANPAGES := $(patsubst %, %.gz, $(RAW_MANPAGES))
 HTML_FILES = $(patsubst %.txt, %.html, $(MANPAGE_SOURCES))
+MANPAGE_SECTIONS = $(shell for i in $(RAW_MANPAGES); do echo $$i ; done | sed 's|.*\.||')
 
 .PHONY: all
 all: $(COMPRESSED_MANPAGES) $(RAW_MANPAGES) $(HTML_FILES)
