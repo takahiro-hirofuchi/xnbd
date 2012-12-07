@@ -1,0 +1,131 @@
+XNBD-SERVER(8)
+==============
+:man source:   {manual_package}
+:man version:  {manual_version}
+:man manual:   {manual_title}
+
+
+NAME
+----
+xnbd-server - serve a file as a block device to other computers via the NBD protocol
+
+
+SYNOPSIS
+--------
+*xnbd-server* --target [options] 'DISK_IMAGE'
+
+*xnbd-server* --cow-target [options] 'BASE_DISK_IMAGE'
+
+*xnbd-server* --proxy [options] [--target-exportname 'NAME']
+'REMOTE_HOST' 'REMOTE_PORT' 'CACHE_IMAGE'
+'CACHE_BITMAP_IMAGE' 'CONTROL_SOCKET_PATH'
+
+*xnbd-server* --help
+
+*xnbd-server* --version
+
+
+DESCRIPTION
+-----------
+*xnbd-server* is a server program of the Network Block Device (NBD) protocol.
+It exports an image file to the clients of the NBD protocol over network. A
+client node can access to the exported file through a block-level I/O interface;
+it is possible to create swap areas on it or create file systems on it.
+
+The xNBD (i.e., extended NBD) programs offer several advantages over the original
+NBD implementation. In addition to the original features, xNBD is
+intended to achieve better performance. It supports (distributed) copy-on-write,
+(basic) snapshot support, live storage migration for virtual machines,
+and IPv6 networking.
+
+*xnbd-server* can operate in three modes (i.e., the target mode, the copy-on-write
+target mode, and the proxy mode).
+
+*xnbd-server* *--target* exports 'DISK_IMAGE' to clients.
+
+*xnbd-server* *--cow-target* exports 'BASE_DISK_IMAGE' to clients. Write-operations
+are not committed to the exported disk image, but to a separate
+file. This separate file is removed when the server instance is shutdown, and
+all changes are lost.
+
+*xnbd-server* *--proxy* provides the image server of the NBD protocol,
+but it actually works as a proxy to a remote *xnbd-server* specified with
+'REMOTE_HOST' and 'REMOTE_PORT'. All I/O requests from clients are intercepted,
+and redirected to the remote target server if needed. All updated blocks are
+cached at the proxy server, and read blocks are also cached. No write operation
+does not happen at the remote server. Cached blocks are saved in
+'CACHE_DISK_IMAGE'. The block numbers of cached blocks are saved in 'CACHE_BITMAP_IMAGE'.
+The proxy server is controlled by xnbd-bgctl(1) through
+'CONTROL_SOCKET_PATH'. The proxy server can be used for distributed copy-on-write
+NBD disks; one read-only disk image is shared among multiple clients. It is
+also useful for live storage migration of virtual machines.
+
+WARNING: Multiple clients can concurrently access to a single server instance.
+Yet *xnbd-server* does not offer any locking or synchronization mechanism among
+concurrent clients. In most cases you WILL need a cluster file system on the
+exported image to avoid damage on your data.
+
+
+OPTIONS
+-------
+The following options are supported:
+
+*--daemonize*::
+    Run *xnbd-server* in the background
+
+*--inetd*::
+    Run *xnbd-server* for an Internet super-server daemon (e.g., inetd).
+    All network I/O is redirected to the stdin descriptor.
+
+*--logpath* 'FILE'::
+    Log informational messages to the given FILE.
+
+*--syslog*::
+    Log informational messages to syslog.
+
+*--lport* 'PORT'::
+    Listen incoming connections on the given PORT. If this argument is
+    not given, *xnbd-server* will listen on port 8520 by default.
+
+*--readonly*::
+    Export the image file as read only. If a client sends a write
+    request, it will receive an error, but the connection will stay up.
+
+*--target-exportname* 'NAME'::
+    Set the export name to request from a xnbd-wrapper target. This
+    option is used in combination with *--proxy*, only.
+
+
+SIGNALS
+-------
+*SIGUSR*::
+    Take a snapshot of the image file. Currently, this feature works
+    only in the target mode.
+
+*SIGHUP*::
+    Change the proxy mode to the target mode. Use xnbd-bgctl --shutdown
+    instead of sending this signal.
+
+
+SEE ALSO
+--------
+xnbd-client (1).
+xnbd-bgctl (1).
+xnbd-wrapper (8).
+
+
+AUTHOR
+------
+The NBD kernel module and the NBD tools have been written by Pavel Macheck
+(pavel@ucw.cz) and is now maintained by Paul Clements.
+(Paul.Clements@steeleye.com).
+
+The xNBD userland programs have been written by
+Takahiro Hirofuchi (t.hirofuchi@aist.go.jp)
+
+This manual page was firstly written by Arno Toell (debian@toell.net) for the
+Debian GNU/Linux system (but may be used by others). Large parts are verbatim
+copies of the original nbd-server and nbd-client manual pages written by
+Wouter Verhelst (wouter@debian.org). Permission is granted to copy, distribute
+and/or modify this document under the terms of the GNU General Public License,
+version 2, as published by the Free Software Foundation.

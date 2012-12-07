@@ -1,0 +1,77 @@
+XNBD-WRAPPER(8)
+===============
+:man source:   {manual_package}
+:man version:  {manual_version}
+:man manual:   {manual_title}
+
+
+'NAME'
+----
+xnbd-wrapper-ctl - manage a xnbd-wrapper(8) super-server.
+
+
+SYNOPSIS
+--------
+xnbd-wrapper-ctl [--socket 'SOCKETPATH'] [--add 'FILE']
+    [ [--target-exportname 'NAME']
+    --add-proxy 'TARGET_HOST' 'TARGET_PORT' 'CACHE_IMAGE' 'BITMAP_IMAGE' 'CONTROL_SOCKET_PATH' ]
+    [--remove 'FILE'] [--list]
+
+
+DESCRIPTION
+-----------
+With the *xnbd-wrapper-ctl* command you can connect to a xnbd-wrapper control
+channel and instruct it to act as directed. You may pass certain commands as
+argument to the control program which are then forwarded, on your behalf, to
+the server instance.
+
+
+OPTIONS
+-------
+The following options are supported:
+
+*--add*|*-a* 'FILE'::
+    Instruct the xnbd-wrapper to add the given 'FILE' as exported xNBD
+    device.
+
+*--add-proxy* 'TARGET_HOST' 'TARGET_PORT' 'CACHE_IMAGE' 'BITMAP_IMAGE' 'CONTROL_SOCKET_PATH'::
+    Instruct the xnbd-wrapper to add a proxy to the given target server.
+
+*--help*|*-h*::
+    Display a short usage overview and exit
+
+*--list*|*-l*::
+    Connects to the xNBD wrapper and retrieves a list exported file
+    names
+
+*--remove*|*-r* 'INDEX'::
+    Instruct the xnbd-wrapper to remove the volume exported on 'INDEX'
+    from the list of exported xNBD devices.
+
+*--socket*|*-s* 'SOCKETPATH'::
+    Connect to 'SOCKETPATH' as xnbd-wrapper control sokcet. Default is
+    /tmp/xnbd_wrapper.ctl.
+
+*--target-exportname* 'NAME'::
+    Set the export name to request from the proxed xnbd-wrapper target.
+    This option is used in combination with *--add-proxy*, only.
+
+
+SEE ALSO
+--------
+xnbd-wrapper (1), xnbd-server (8).
+
+
+AUTHOR
+------
+The NBD kernel module and the NBD tools have been written by Pavel Macheck
+(pavel@ucw.cz) and is now maintained by Paul Clements.
+(Paul.Clements@steeleye.com).
+
+The xNBD userland (client and server) have been written by Takahiro Hirofuchi
+(t.hirofuchi@aist.go.jp)
+
+This manual page was written by Arno Toell (debian@toell.net) for the Debian
+GNU/Linux system (but may be used by others). Permission is granted to copy,
+distribute and/or modify this document under the terms of the GNU General
+Public License, version 2, as published by the Free Software Foundation.
