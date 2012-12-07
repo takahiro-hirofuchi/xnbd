@@ -638,7 +638,7 @@ int main(int argc, char *argv[]) {
 		info("bs=%lu timeout=%d %s %s %s", blocksize, timeout, host, port, devpath);
 		dst_add(&dst_list, host, port);
 
-		xnbd_connect(devpath, blocksize, timeout, dst_list, 1, recovery_command, exportname);
+		xnbd_connect(devpath, blocksize, timeout, dst_list, max_retry, recovery_command, exportname);
 
 		exit(EXIT_SUCCESS);
 	}
@@ -696,7 +696,7 @@ int main(int argc, char *argv[]) {
 		info("bs=%lu timeout=%d %s %s %s", blocksize, timeout, host, port, devpath);
 	}
 
-	xnbd_connect(devpath, blocksize, timeout, dst_list, 1, recovery_command, exportname);
+	xnbd_connect(devpath, blocksize, timeout, dst_list, max_retry, recovery_command, exportname);
 
 
 	return 0;
