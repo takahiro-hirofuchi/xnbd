@@ -18,4 +18,5 @@ install:
 
 $(COMPRESSED_MANPAGES): $(MANPAGE_SOURCES)
 	docbook-to-man $(patsubst %.gz, %.sgml, $@) > $(patsubst %.gz, %, $@)
+	$(RM) $@
 	$(GZIP) $(patsubst %.gz, %, $@)
