@@ -27,88 +27,151 @@
 #include <sys/signalfd.h>
 #include <sys/epoll.h>
 
-/* static const int MAX_DISKIMG_NUM = 32; */
-#define MAX_DISKIMG_NUM 32
+
+#define XNBD_IMAGE_ADDED  0
+#define XNBD_IMAGE_ACCESS_ERROR  (-1)
+#define XNBD_ENOMEN  (-3)
+#define XNBD_NOT_ADDING_TWICE  (-4)
+
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+GHashTable * p_disk_dict = NULL;
+guint images_added_ever = 0;
 
-struct diskimg_list {
-	int num_of_diskimgs;
-	char *diskimgs[MAX_DISKIMG_NUM];
-};
 
-static struct diskimg_list dsklist = { .num_of_diskimgs = 0 };
+typedef struct _t_disk_data {
+	char * disk_file_name;  /* Used as key in the hash table, too. So no need to free keys. */
+	guint index;
+} t_disk_data;
 
-static int add_diskimg(struct diskimg_list *list, char *dname)
+typedef struct _t_listing_state {
+	guint index_to_print;
+	guint index_up_next;
+	FILE * fp;
+} t_listing_state;
+
+
+static void destroy_value(t_disk_data * p_disk_data) {
+	g_free(p_disk_data->disk_file_name);
+	g_free(p_disk_data);
+}
+
+static gboolean find_by_index(const char * key, const t_disk_data * p_disk_data, gconstpointer user_data) {
+	const int index_at_addition_time = GPOINTER_TO_INT(user_data);
+	return p_disk_data->index == index_at_addition_time;
+}
+
+static int add_diskimg(char *dname)
 {
+	/* Check image access */
 	int fd;
 	if ((fd = open(dname, O_RDONLY)) < 0)
-		return -1;
+		return XNBD_IMAGE_ACCESS_ERROR;
 	close(fd);
-	if (list->num_of_diskimgs < MAX_DISKIMG_NUM) {
-		pthread_mutex_lock(&mutex);
-		for (int i = 0; i < list->num_of_diskimgs; i++) {
-			if (list->diskimgs[i] == NULL) {
-	 			if (asprintf(&list->diskimgs[i], "%s", dname) < 0) {
-					pthread_mutex_unlock(&mutex);
-					return -3;
-				}
-				list->num_of_diskimgs++;
-				pthread_mutex_unlock(&mutex);
-				return 0;
+
+	/* Add to hash table */
+	pthread_mutex_lock(&mutex);
+	int res = XNBD_IMAGE_ADDED;
+	if (g_hash_table_contains(p_disk_dict, dname))
+	{
+		res = XNBD_NOT_ADDING_TWICE;
+	}
+	else
+	{
+		t_disk_data * const p_disk_data = g_try_new(t_disk_data, 1);
+		if (p_disk_data)
+		{
+			p_disk_data->disk_file_name = g_strdup(dname);
+			if (p_disk_data->disk_file_name)
+			{
+				p_disk_data->index = images_added_ever++;
+				g_hash_table_insert(p_disk_dict, p_disk_data->disk_file_name, p_disk_data);
+			}
+			else
+			{
+				g_free(p_disk_data);
+				res = XNBD_ENOMEN;
 			}
 		}
-		if (asprintf(&list->diskimgs[list->num_of_diskimgs], "%s", dname) < 0) {
-			pthread_mutex_unlock(&mutex);
-			return -3;
+		else
+		{
+			res = XNBD_ENOMEN;
 		}
-		list->num_of_diskimgs++;
-		pthread_mutex_unlock(&mutex);
-		/* return list->num_of_diskimgs; */
-		return 0;
 	}
-	return -2;
+	pthread_mutex_unlock(&mutex);
+	return res;
 }
 
-static int del_diskimg(struct diskimg_list *list, int num)
+static void del_diskimg(int num)
 {
 	num--;
-	if (num < MAX_DISKIMG_NUM && num >= 0) {
+	if (num >= 0) {
 		pthread_mutex_lock(&mutex);
-		free(list->diskimgs[num]);
-		list->diskimgs[num] = NULL;
-		list->num_of_diskimgs--;
+		g_hash_table_foreach_remove(p_disk_dict, (GHRFunc)find_by_index, num);
 		pthread_mutex_unlock(&mutex);
-		return 0;
 	}
-	return -1;
 }
 
-static int has_diskimg(struct diskimg_list *list, char *dname)
+static int has_diskimg(char *dname)
 {
-	int range = list->num_of_diskimgs;
-	for (int i = 0; i < range; i++) {
-		if (list->diskimgs[i] == NULL)
-			range++;
-		else
-			if (strcmp(list->diskimgs[i], dname) == 0)
-				return 0;
-	}
-	return -1;
+	pthread_mutex_lock(&mutex);
+	const int res = g_hash_table_contains(p_disk_dict, dname) ? 0 : -1;
+	pthread_mutex_unlock(&mutex);
+	return res;
 }
 
-static void list_diskimg(struct diskimg_list *list, FILE *fp)
-{
-	int range = list->num_of_diskimgs;
-	for (int i = 0; i < range; i++) {
-		if (list->diskimgs[i] == NULL)
-			range++;
-		else
-			fprintf(fp, "%d : %s\n", i+1, list->diskimgs[i]);
+static void find_smallest_index_iterator(gpointer key, const t_disk_data * p_disk_data, t_listing_state * p_listing_state) {
+	if (p_disk_data->index < p_listing_state->index_to_print)
+	{
+		p_listing_state->index_to_print = p_disk_data->index;
 	}
-	if (range == 0)
+}
+
+static void list_images_iterator(gpointer key, const t_disk_data * p_disk_data, t_listing_state * p_listing_state) {
+	if (p_disk_data->index == p_listing_state->index_to_print)
+	{
+		fprintf(p_listing_state->fp, "%d : %s\n", p_disk_data->index + 1, p_disk_data->disk_file_name);
+	}
+	else if ((p_disk_data->index > p_listing_state->index_to_print) && (p_disk_data->index < p_listing_state->index_up_next))
+	{
+		p_listing_state->index_up_next = p_disk_data->index;
+	}
+}
+
+static void list_diskimg(FILE *fp)
+{
+	pthread_mutex_lock(&mutex);
+	if (g_hash_table_size(p_disk_dict) > 0)
+	{
+		t_listing_state listing_state;
+		listing_state.index_to_print = (guint)-1;
+		listing_state.index_up_next = (guint)-1;
+		listing_state.fp = fp;
+
+		/* Produce output sorted by index without actually sorting the data, O(n^2) approach */
+		g_hash_table_foreach(p_disk_dict, (GHFunc)find_smallest_index_iterator, &listing_state);
+		while (listing_state.index_to_print < (guint)-1) {
+			listing_state.index_up_next = (guint)-1;
+			g_hash_table_foreach(p_disk_dict, (GHFunc)list_images_iterator, &listing_state);
+			listing_state.index_to_print = listing_state.index_up_next;
+		}
+	}
+	else
+	{
 		fprintf(fp, "no item\n");
+	}
+	pthread_mutex_unlock(&mutex);
 	fflush(fp);
+}
+
+static void perform_shutdown(FILE * fp)
+{
+	pthread_mutex_lock(&mutex);
+	g_hash_table_destroy(p_disk_dict);
+	pthread_mutex_unlock(&mutex);
+
+	fprintf(fp, "All images terminated\n");
+	kill(0, SIGTERM);
 }
 
 static int make_unix_sock(const char *uxsock_path)
@@ -176,26 +239,20 @@ static void *start_filemgr_thread(void *uxsock)
 			}
 	
 			if (strcmp(cmd, "list") == 0)
-				list_diskimg(&dsklist, fp);
+				list_diskimg(fp);
 			else if (strcmp(cmd, "add") == 0) {
-				ret = add_diskimg(&dsklist, arg);
-				if (ret == -1)
+				ret = add_diskimg(arg);
+				if (ret == XNBD_IMAGE_ACCESS_ERROR)
 					fprintf(fp, "cannot open %s\n", arg);
-				else if (ret == -2)
-					fprintf(fp, "list is full\n");
+				else if (ret == XNBD_ENOMEN)
+					fprintf(fp, "out of memory\n");
+				else if (ret == XNBD_NOT_ADDING_TWICE)
+					fprintf(fp, "image cannot be added twice\n");
 			}
 			else if (strcmp(cmd, "del") == 0)
-				del_diskimg(&dsklist, atoi(arg));
+				del_diskimg(atoi(arg));
 			else if (strcmp(cmd, "shutdown") == 0) {
-				int range = dsklist.num_of_diskimgs;
-				for (int i = 0; i < range; i++) {
-					if (dsklist.diskimgs[i] == NULL)
-                        			range++;
-                			else
-						del_diskimg(&dsklist, i);
-        			}
-				fprintf(fp, "All images terminated\n");
-				kill(0, SIGTERM);
+				perform_shutdown(fp);
 			}
 			else if (strcmp(cmd, "help") == 0)
 				fprintf(fp,
@@ -344,6 +401,7 @@ int main(int argc, char **argv) {
 	const char *logpath = NULL;
 	struct exec_params exec_srv_params = { .readonly = 0 };
 
+	p_disk_dict = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, (GDestroyNotify)destroy_value);
 
 	sigset_t sigset;
 	int sigfd;
@@ -412,11 +470,13 @@ int main(int argc, char **argv) {
 				port = optarg;
 				break;
 			case 'f':
-				if ((ret = add_diskimg(&dsklist, optarg)) < 0) {
-					if (ret == -1)
+				if ((ret = add_diskimg(optarg)) < 0) {
+					if (ret == XNBD_IMAGE_ACCESS_ERROR)
 						warn("cannot open %s", optarg);
-					else if (ret == -2)
-						warn("list is full");
+					else if (ret == XNBD_ENOMEN)
+						warn("out of memory");
+					else if (ret == XNBD_NOT_ADDING_TWICE)
+						warn("image cannot be added twice");
 				}
 				break;
 			case 'b':
@@ -608,7 +668,7 @@ int main(int argc, char **argv) {
 					}
 					info("requested_img: %s\n", requested_img);
 
-					if (has_diskimg(&dsklist, requested_img) < 0) {
+					if (has_diskimg(requested_img) < 0) {
 						if(close(conn_sockfd))
 							warn("close(p0)");
 						_exit(EXIT_FAILURE);
