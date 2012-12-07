@@ -22,6 +22,7 @@
 # this program; if not, write to the Free Software Foundation, Inc., 59 Temple
 # Place - Suite 330, Boston, MA 02111-1307, USA.
 
+from __future__ import print_function
 
 import socket
 import re
@@ -33,7 +34,7 @@ import copy
 try:
     import argparse
 except ImportError:
-    print >> sys.stderr, 'ERROR: Python >=2.7 or python-argparse needed to run'
+    print('ERROR: Python >=2.7 or python-argparse needed to run', file=sys.stderr)
     sys.exit(1)
 
 
@@ -120,7 +121,7 @@ def parse_command_line(argv):
     options = parser.parse_args(argv[1:])
 
     if options.target_exportname and not options.add_proxy:
-        print >>sys.stderr, '%s: error: Argument --target-exportname is only supported in combination with --add-proxy.' % prog(argv[0])
+        print('%s: error: Argument --target-exportname is only supported in combination with --add-proxy.' % prog(argv[0]), file=sys.stderr)
         sys.exit(1)
 
     return options
@@ -158,7 +159,7 @@ def compose_command(options, argv):
                 details = '"%s"' % args_with_spaces[0]
             else:
                 details = ', '.join([('"%s"' % v) for v in args_with_spaces])
-            print >>sys.stderr, '%s: error: Arguments containing spaces (%s) are not supported, sorry.' % (prog(argv[0]), details)
+            print('%s: error: Arguments containing spaces (%s) are not supported, sorry.' % (prog(argv[0]), details), file=sys.stderr)
             sys.exit(1)
 
         return 'add-proxy %s' % ' '.join(args)
@@ -172,11 +173,10 @@ if __name__ =='__main__':
     try:
         ctl = XNBDWrapperCtl(opts.sockpath)
     except socket.error as e:
-        print 'Cannot open socket file %s: Error "%s" (%s).' \
-                % (opts.sockpath, os.strerror(e.errno), errno.errorcode.get(e.errno, 'E???'))
+        print('Cannot open socket file %s: Error "%s" (%s).' \
+                % (opts.sockpath, os.strerror(e.errno), errno.errorcode.get(e.errno, 'E???')), file=sys.stderr)
         sys.exit(1)
 
     res = ctl.send_cmd(compose_command(opts, sys.argv))
     if not re.match("^ *(|\n)$", res):
-        print res,
-
+        print(res, end='')
