@@ -152,7 +152,8 @@ static int add_diskimg(t_disk_data * p_disk_data)
 	/* Add to hash table */
 	pthread_mutex_lock(&mutex);
 	int res = XNBD_IMAGE_ADDED;
-	if (g_hash_table_contains(p_disk_dict, p_disk_data->disk_file_name))
+	/* NOTE: Avoiding g_hash_table_contains since that is glib 2.32+ */
+	if (g_hash_table_lookup(p_disk_dict, p_disk_data->disk_file_name))
 	{
 		res = XNBD_NOT_ADDING_TWICE;
 	}
