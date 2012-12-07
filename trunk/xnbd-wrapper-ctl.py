@@ -49,7 +49,7 @@ class XNBDWrapperCtl:
     def __init__(self, sockpath):
         self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.sock.connect(sockpath)
-        self.sock.recv(54)
+        self.sock.recv(4096)
         self.sock.settimeout(0.2)
         #self.file_obj = self.sock.makefile()
 
