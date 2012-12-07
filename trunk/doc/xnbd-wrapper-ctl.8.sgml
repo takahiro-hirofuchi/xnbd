@@ -56,6 +56,10 @@ manpage.1: manpage.sgml
       <command>&dhpackage;</command>
       <arg>--socket  <replaceable>SOCKETPATH</replaceable></arg>
       <arg>--add  <replaceable>FILE</replaceable></arg>
+      <arg>
+        <arg>--target-exportname  <replaceable>NAME</replaceable></arg>
+        --add-proxy  <replaceable>TARGET_HOST</replaceable> <replaceable>TARGET_PORT</replaceable> <replaceable>CACHE_IMAGE</replaceable> <replaceable>BITMAP_IMAGE</replaceable> <replaceable>CONTROL_SOCKET_PATH</replaceable>
+      </arg>
       <arg>--remove  <replaceable>FILE</replaceable></arg>
       <arg>--list</arg>
     </cmdsynopsis>
@@ -83,6 +87,14 @@ manpage.1: manpage.sgml
 	<para>Instruct the <command>xnbd-wrapper</command> to add the given
 	<replaceable>FILE</replaceable> as exported xNBD device.</para>
 	</listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><option>--add-proxy  <replaceable>TARGET_HOST</replaceable> <replaceable>TARGET_PORT</replaceable> <replaceable>CACHE_IMAGE</replaceable> <replaceable>BITMAP_IMAGE</replaceable> <replaceable>CONTROL_SOCKET_PATH</replaceable></option>
+        </term>
+        <listitem>
+          <para>Instruct the <command>xnbd-wrapper</command> to add a proxy to the given target server.</para>
+        </listitem>
       </varlistentry>
 
       <varlistentry>
@@ -118,6 +130,14 @@ manpage.1: manpage.sgml
 	<command>xnbd-wrapper</command> control sokcet. Default is
 	<emphasis>/tmp/xnbd_wrapper.ctl</emphasis>.</para>
 	</listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><option>--target-exportname  <replaceable>NAME</replaceable></option>
+        </term>
+        <listitem>
+          <para>Set the export name to request from the proxed xnbd-wrapper target.  This option is used in combination with <option>--add-proxy</option>, only.</para>
+        </listitem>
       </varlistentry>
 
     </variablelist>
