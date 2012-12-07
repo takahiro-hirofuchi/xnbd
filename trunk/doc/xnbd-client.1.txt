@@ -1,0 +1,146 @@
+XNBD-CLIENT(1)
+==============
+:man source:   {manual_package}
+:man version:  {manual_version}
+:man manual:   {manual_title}
+
+
+NAME
+----
+xnbd-client - connect to a server running xnbd-server(8), to use its exported block device
+
+
+SYNOPSIS
+--------
+*xnbd-client* [--blocksize 'SIZE'] [--connect] [--exportname 'NAME']
+    [--recovery-command 'COMMAND'] [--recovery-command-reboot 'COMMAND']
+    [--retry 'COUNT'] [--timeout 'SECONDS'] 'NBD-DEVICE' [ 'HOST' 'PORT' ...]
+
+*xnbd-client* [bs='SIZE'] [timeout='SECONDS'] 'HOST' 'PORT' 'NBD-DEVICE'
+
+*xnbd-client* --disconnect 'NBD-DEVICE'
+
+*xnbd-client* --check 'NBD-DEVICE'
+
+
+DESCRIPTION
+-----------
+With *xnbd-client*, you can connect to a server running xnbd-server or xnbd-wrapper,
+thus using raw diskspace from that server as a blockdevice on the
+local client.
+
+To do this, support from the Linux Kernel is necessary, in the form of the
+Network Block Device (NBD). When you have that, either in the kernel, or as a
+module, you can connect to an NBD server and use its exported file through a
+block special file with major mode 43.
+
+Long options can also be specified with two leading dashes. Some options are
+call compatible to nbd-client(1) as are most behavioural switches. This makes
+*xnbd-client* a plug-in replacement for nbd-client.
+
+
+OPTIONS
+-------
+The following options are supported:
+
+*--blocksize* 'SIZE'::
+    Use the provided value as block size. Default is 1024; allowed
+    values are either 512, 1024, 2048 or 4096. For best results use a
+    block size value of 4096
+    +
+    For compatibility to nbd-client(1) you can also use bs='SIZE'
+
+*--check*|*-c*::
+    Check whether the specified nbd device is connected.
+    +
+    If the device is connected, *xnbd-client* will exit with an exit state
+    of 0 and print the PID of the *xnbd-client* instance that connected it
+    to stdout.
+    +
+    If the device is not connected or does not exist (for example
+    because the nbd module was not loaded), *xnbd-client* will exit with
+    an exit state of 1 and not print anything on stdout.
+    +
+    If an error occurred, *xnbd-client* will exit with an exit state of 2,
+    and not print anything on stdout either.
+
+*--connect*|*-C*::
+    Connect to the nbd-server
+
+*--disconnect*|*-d*::
+    Disconnect the specified nbd device from the server. Terminates
+    execution with an exit state of 0 on success.
+
+*--exportname* 'NAME'::
+    If the server supports to access devices by an identifier, use 'NAME'
+    to request access to a particular volume. This command is useful in
+    combination with a xnbd-wrapper and only succeeds, if the remote
+    host is exporting the requested device.
+
+*--retry* 'COUNT'::
+    Try up to "COUNT" times to connect to the associated nbd-server.
+    Default is 1, that is nbd-client will stop after the first
+    unsuccessful try.
+
+*--recovery-command*::
+    invoke a specified command 'COMMAND' on unexpected disconnection
+
+*--recovery-command-reboot*::
+    Invoke the reboot(8) command on unexpected disconnection
+
+*--timeout* 'SECONDS'::
+    Use a timeout period (default is 0 which means not to use a
+    timeout). Please do not use this option for now, as it seems not to
+    work due to a bug in the kernel module.
+    +
+    For compatibility to nbd-client(1) you can also use timeout='SECONDS'
+
+
+POSITIONAL ARGUMENTS
+--------------------
+The following positional options are supported:
+
+'HOST'::
+    The site to connect to a remote xnbd-server. You can specify any
+    resolvable hostname, IPv4 or IPv6 address.
+
+'PORT'::
+    The port number to connect to on remote side
+
+'NBD-DEVICE'::
+    The local nbd-device to be associated with the remote xnbd-server.
+
+You can specify multiple host port tuples. *xnbd-client* will try to connect
+to each of them in order until it succeeds to establish a connection to a
+server.
+
+
+BUGS
+----
+The NBD device is known to deadlock when not being used altogether with the
+deadline scheduler. Make sure to do:
+
+-----------------
+echo deadline > /sys/block/nbd0/queue/scheduler
+-----------------
+
+SEE ALSO
+--------
+xnbd-server (8), xnbd-wrapper (8).
+
+
+AUTHOR
+------
+The NBD kernel module and the NBD tools have been written by Pavel Macheck
+(pavel@ucw.cz) and is now maintained by Paul Clements.
+(Paul.Clements@steeleye.com).
+
+The xNBD userland (client and server) have been written by Takahiro Hirofuchi
+(t.hirofuchi@aist.go.jp)
+
+This manual page was written by Arno Toell (debian@toell.net) for the Debian
+GNU/Linux system (but may be used by others). Large parts are verbatim copies
+of the original nbd-server and nbd-client manual pages written by
+Wouter Verhelst (wouter@debian.org). Permission is granted to copy, distribute and/or
+modify this document under the terms of the GNU General Public License,
+version 2, as published by the Free Software Foundation.

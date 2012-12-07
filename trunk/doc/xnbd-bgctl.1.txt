@@ -1,0 +1,81 @@
+XNBD-BGCTL(1)
+=============
+:man source:   {manual_package}
+:man version:  {manual_version}
+:man manual:   {manual_title}
+
+
+NAME
+----
+xnbd-bgctl - Control a server running xnbd-server(8) through its control socket
+
+
+SYNOPSIS
+--------
+*xnbd-bgctl* [--cache-all] [--cache-all2] [--query] [--reconnect 'REMOTE_HOST' 'REMOTE_PORT'] [--shutdown] ['control_socket']
+
+
+DESCRIPTION
+-----------
+With the xmbd-bgctl command you can connect to a xnbd-server control channel
+and instruct it to act as directed. You may pass an argument to the control
+program which is then forwarded, on your behalf, to the server instance.
+
+
+OPTIONS
+-------
+The following options are supported:
+
+*--cache-all*::
+    If the remote xnbd-server acts as proxy server, this command
+    intstructs the controlling xnbd-server instance to cache all blocks
+    on its associated block disk. Upon completion the controlled xnbd
+    instance holds all data from the origin instance and it is no longer
+    necessary to act as proxy.
+
+*--cache-all2*::
+    This command is identical to cache-all but detaches the process from
+    the terminal and is hence using a dedicated connection for data
+    transfer.
+
+*--query*::
+    This command retrieves completion statistics from the proxy server
+    instance. It returns the number of cached blocks on the server.
+
+*--reconnect*::
+    This command recovers from a lost connection by re-establishing
+    connectivity with the origin server. This command expects two
+    additional arguments, the 'REMOTE_HOST', and the 'REMOTE_PORT' you want
+    to connect to, to recover from a disconnected session.
+
+*--shutdown*::
+    This command stops the proxy server and restarts the target server.
+    All client sessions are preserved.
+
+
+POSITIONAL ARGUMENTS
+--------------------
+The following positional options are supported:
+
+'CONTROL_SOCKET'::
+    The Unix domain socket, the xnbd-server(8) program is listening on.
+
+
+SEE ALSO
+--------
+xnbd-server (8).
+
+
+AUTHOR
+------
+The NBD kernel module and the NBD tools have been written by
+Pavel Macheck (pavel@ucw.cz) and is now maintained by
+Paul Clements. (Paul.Clements@steeleye.com).
+
+The xNBD userland (client and server) have been written by Takahiro Hirofuchi
+(t.hirofuchi@aist.go.jp)
+
+This manual page was written by Arno Toell (debian@toell.net) for the Debian
+GNU/Linux system (but may be used by others). Permission is granted to copy,
+distribute and/or modify this document under the terms of the GNU General
+Public License, version 2, as published by the Free Software Foundation.
