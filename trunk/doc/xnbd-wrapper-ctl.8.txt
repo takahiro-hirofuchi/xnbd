@@ -1,18 +1,18 @@
-XNBD-WRAPPER(8)
-===============
+XNBD-WRAPPER-CTL(8)
+===================
 :man source:   {manual_package}
 :man version:  {manual_version}
 :man manual:   {manual_title}
 
 
-'NAME'
+NAME
 ----
 xnbd-wrapper-ctl - Manage an xnbd-wrapper(8) super-server.
 
 
 SYNOPSIS
 --------
-xnbd-wrapper-ctl [--socket 'SOCKETPATH'] [--add 'FILE']
+*xnbd-wrapper-ctl* [--socket 'SOCKETPATH'] [--add 'FILE']
     [ [--target-exportname 'NAME']
     --add-proxy 'TARGET_HOST' 'TARGET_PORT' 'CACHE_IMAGE' 'BITMAP_IMAGE' 'CONTROL_SOCKET_PATH' ]
     [--remove 'INDEX'] [--list]
