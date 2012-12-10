@@ -29,7 +29,6 @@ import re
 import sys
 import os
 import errno
-import copy
 import urllib
 
 try:
@@ -93,9 +92,11 @@ class FixedHelpFormatter(argparse.HelpFormatter):
 def parse_command_line(argv):
     parser = argparse.ArgumentParser(formatter_class=FixedHelpFormatter, usage="""
   %(prog)s [-s SOCKPATH] --list
-  %(prog)s [-s SOCKPATH] --add FILE
-  %(prog)s [-s SOCKPATH] [--target-exportname NAME] --add-proxy TARGET_HOST TARGET_PORT CACHE_IMAGE BITMAP_IMAGE CONTROL_SOCKET_PATH
+  %(prog)s [-s SOCKPATH] [--local-exportname NAME] --add FILE
+  %(prog)s [-s SOCKPATH] [--local-exportname NAME] [--target-exportname NAME] --add-proxy TARGET_HOST TARGET_PORT CACHE_IMAGE BITMAP_IMAGE CONTROL_SOCKET_PATH
   %(prog)s [-s SOCKPATH] --remove INDEX
+  %(prog)s [-s SOCKPATH] --remove-by-file FILE
+  %(prog)s [-s SOCKPATH] --remove-by-exportname NAME
   %(prog)s [-s SOCKPATH] --shutdown
 """)
 
@@ -113,9 +114,15 @@ def parse_command_line(argv):
                         help="add a disk image file to the export list.")
     operations.add_argument("--remove", "-r", metavar='INDEX', type=int,
                         help="remove a disk image file from the list.")
+    operations.add_argument("--remove-by-file", metavar='FILE',
+                        help="remove a disk image file from the list.")
+    operations.add_argument("--remove-by-exportname", metavar='NAME',
+                        help="remove a disk image file from the list.")
     operations.add_argument("--shutdown", "-d", action='store_true',
                         help="remove all disk images from the xnbd-wrapper instance and stop it afterwards.")
 
+    parser.add_argument("--local-exportname", metavar='NAME',
+                        help="set the export name to export the image as.")
     parser.add_argument("--target-exportname", metavar='NAME',
                         help="set the export name to request from a xnbd-wrapper target (used with --add-proxy).")
 
@@ -140,8 +147,9 @@ def compose_command(options, argv):
 
     # Single argument commands
     single_arg_commands = (
-        (options.add, 'add'),
         (options.remove, 'del'),
+        (options.remove_by_file, 'del-file'),
+        (options.remove_by_exportname, 'del-exportname'),
     )
     for dest, command_name, in single_arg_commands:
         if dest:
@@ -150,12 +158,29 @@ def compose_command(options, argv):
 
     # More complex commands
     if options.add_proxy:
-        args = copy.copy(options.add_proxy)
+        args = []
+        if options.local_exportname:
+            # export name != file name  (possibly)
+            args.append(options.local_exportname)
+        else:
+            # export name == file name
+            target_host, target_port, cache_image, bitmap_image, control_socket_path = options.add_proxy
+            args.append(cache_image)
+        args.extend(options.add_proxy)
         if options.target_exportname:
             args.append(options.target_exportname)
 
         encoded_args = [urllib.quote(e) for e in args]
         return 'add-proxy %s' % ' '.join(encoded_args)
+    elif options.add:
+        args = []
+        if options.local_exportname:
+            # export name != file name  (possibly)
+            args.append(options.local_exportname)
+        args.append(options.add)
+
+        encoded_args = [urllib.quote(e) for e in args]
+        return 'add %s' % ' '.join(encoded_args)
 
     assert False, 'Internal error, no command used'
 
