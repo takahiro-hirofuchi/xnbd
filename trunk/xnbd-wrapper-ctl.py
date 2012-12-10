@@ -30,6 +30,7 @@ import sys
 import os
 import errno
 import copy
+import urllib
 
 try:
     import argparse
@@ -144,7 +145,8 @@ def compose_command(options, argv):
     )
     for dest, command_name, in single_arg_commands:
         if dest:
-            return '%s %s' % (command_name, dest)
+            encoded_arg = urllib.quote(str(dest))
+            return '%s %s' % (command_name, encoded_arg)
 
     # More complex commands
     if options.add_proxy:
@@ -152,17 +154,8 @@ def compose_command(options, argv):
         if options.target_exportname:
             args.append(options.target_exportname)
 
-        # Make sure that spaces do not cause trouble without notice
-        args_with_spaces = [v for v in args if ' ' in v]
-        if args_with_spaces:
-            if len(args_with_spaces) == 1:
-                details = '"%s"' % args_with_spaces[0]
-            else:
-                details = ', '.join([('"%s"' % v) for v in args_with_spaces])
-            print('%s: error: Arguments containing spaces (%s) are not supported, sorry.' % (prog(argv[0]), details), file=sys.stderr)
-            sys.exit(1)
-
-        return 'add-proxy %s' % ' '.join(args)
+        encoded_args = [urllib.quote(e) for e in args]
+        return 'add-proxy %s' % ' '.join(encoded_args)
 
     assert False, 'Internal error, no command used'
 
