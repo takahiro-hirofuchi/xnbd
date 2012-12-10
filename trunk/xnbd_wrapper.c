@@ -485,10 +485,10 @@ static void *start_filemgr_thread(void *uxsock)
 						else
 						{
 							ret = add_diskimg(p_disk_data);
-							if (ret == -1)
-								fprintf(fp, "cannot open %s\n", arg);
-							else if (ret == -2)
-								fprintf(fp, "list is full\n");
+							if (ret == XNBD_IMAGE_ACCESS_ERROR)
+								fprintf(fp, "cannot open %s\n", cache_image);
+							else if (ret == XNBD_NOT_ADDING_TWICE)
+								fprintf(fp, "image cannot be added twice\n");
 						}
 					}
 					g_strfreev(argv);
