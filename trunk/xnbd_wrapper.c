@@ -254,6 +254,116 @@ static void perform_shutdown(FILE * fp)
 	kill(0, SIGTERM);
 }
 
+static int hexdig_char_to_int(char c)
+{
+	switch (c) {
+		case '0': return 0;
+		case '1': return 1;
+		case '2': return 2;
+		case '3': return 3;
+		case '4': return 4;
+		case '5': return 5;
+		case '6': return 6;
+		case '7': return 7;
+		case '8': return 8;
+		case '9': return 9;
+		case 'a': case 'A': return 10;
+		case 'b': case 'B': return 11;
+		case 'c': case 'C': return 12;
+		case 'd': case 'D': return 13;
+		case 'e': case 'E': return 14;
+		case 'f': case 'F': return 15;
+		default: return -1;
+	}
+}
+
+#define ADVANCE_COPY_ONE_CHAR(READ_HEAD, WRITE_HEAD)  \
+	do { \
+		if (READ_HEAD > WRITE_HEAD) { \
+			WRITE_HEAD[0] = READ_HEAD[0]; \
+		} \
+		READ_HEAD += 1; \
+		WRITE_HEAD += 1; \
+	} while(0)
+
+#define ADVANCE_COPY_TWO_CHARS(READ_HEAD, WRITE_HEAD)  \
+	do { \
+		if (READ_HEAD > WRITE_HEAD) { \
+			WRITE_HEAD[0] = READ_HEAD[0]; \
+			WRITE_HEAD[1] = READ_HEAD[1]; \
+		} \
+		READ_HEAD += 2; \
+		WRITE_HEAD += 2; \
+	} while(0)
+
+/*
+ * Decodes percent-encoded text in-place.
+ *
+ * We avoid g_uri_unescape_segment because:
+ * - it returns NULL on the malformed cases below (rather than skipping the troublemakers)
+ * - it does not work in-place which means
+ *   - it requires more memory and
+ *   - requires out-of-memory handling
+ *
+ * Handling of well-formed data:
+ * "%5a"    -> "Z"
+ * "%5A"    -> "Z"
+ *
+ * Handling of malformed data:
+ * "%%5A"   -> "%Z"
+ * "%3%5A"  -> "%3Z"
+ * "%3g%5A" -> "%3gZ"
+ * "%"      -> "%"
+ *  "%%"    -> "%%"
+ * (similar to Python's urllib.unquote)
+ */
+static void decode_percent_encoding(char * text)
+{
+	if (! text)
+		return;
+
+	const char * read_head = text;
+	char * write_head = text;
+	while (read_head[0]) {
+		if ((read_head[0] != '%') || ! read_head[1]) {
+			ADVANCE_COPY_ONE_CHAR(read_head, write_head);
+			continue;
+		}
+
+		const int higher = hexdig_char_to_int(read_head[1]);
+		if (higher == -1) {
+			/* Could still be a new '%', so re-inspect it next round */
+			ADVANCE_COPY_ONE_CHAR(read_head, write_head);
+			continue;
+		}
+
+		if (! read_head[2]) {
+			/* Copy two character unmodified */
+			ADVANCE_COPY_TWO_CHARS(read_head, write_head);
+			continue;
+		}
+
+		const int lower = hexdig_char_to_int(read_head[2]);
+		if (lower == -1) {
+			/* Could still be a new '%', so re-inspect it next round */
+			ADVANCE_COPY_TWO_CHARS(read_head, write_head);
+			continue;
+		}
+
+		assert((0 <= higher) && (higher < 16));
+		assert((0 <= lower) && (lower < 16));
+
+		/* Copy "%.." in decoded form */
+		write_head[0] = 16 * higher + lower;
+		read_head += 3;
+		write_head += 1;
+	}
+
+	if (read_head > write_head) {
+		write_head[0] = '\0';
+	}
+}
+
 static int make_unix_sock(const char *uxsock_path)
 {
 	int uxsock = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -321,6 +431,7 @@ static void *start_filemgr_thread(void *uxsock)
 			if (strcmp(cmd, "list") == 0)
 				list_diskimg(fp);
 			else if (strcmp(cmd, "add") == 0) {
+				decode_percent_encoding(arg);
 				t_disk_data * const p_disk_data = create_disk_data(NOT_PROXIED, NOT_PROXIED, arg, NOT_PROXIED, NOT_PROXIED, NOT_PROXIED);
 				if (p_disk_data)
 				{
@@ -355,6 +466,10 @@ static void *start_filemgr_thread(void *uxsock)
 					if ((argc < EXPECTED_ARGC_MIN) || (argc > EXPECTED_ARGC_MAX)) {
 						fprintf(fp, "usage: add-proxy <TARGET_HOST> <TARGET_PORT> <CACHE_IMAGE> <BITMAP_IMAGE> <CONTROL_SOCKET_PATH> [<TARGET_EXPORTNAME>]\n");
 					} else {
+						int i = 1;
+						for (; i < argc; i++)
+							decode_percent_encoding(argv[i]);
+
 						const char * const target_host = argv[1];
 						const char * const target_port = argv[2];
 						const char * const cache_image = argv[3];
