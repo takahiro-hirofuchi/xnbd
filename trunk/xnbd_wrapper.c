@@ -626,7 +626,7 @@ static void exec_xnbd_server(struct exec_params *params, char *fd_num, const t_d
 		char ** walker = args;
 		while (*walker)
 		{
-			info("[%d] \"%s\"", walker - args, *walker);
+			info("[%ld] \"%s\"", walker - args, *walker);
 			walker++;
 		}
 	}
