@@ -1044,10 +1044,16 @@ int main(int argc, char **argv) {
 						_exit(EXIT_FAILURE);
 					}
 
-					stat(disk_data->disk_file_name, &sb);
-					if (nbd_negotiate_with_client_new_phase_1(conn_sockfd, sb.st_size, 0)) {
+					if (stat(disk_data->disk_file_name, &sb) == -1) {
+						warn("stat failed: %s", disk_data->disk_file_name);
 						if(close(conn_sockfd))
 							warn("close(p1)");
+						_exit(EXIT_FAILURE);
+					}
+
+					if (nbd_negotiate_with_client_new_phase_1(conn_sockfd, sb.st_size, 0)) {
+						if(close(conn_sockfd))
+							warn("close(p2)");
 						_exit(EXIT_FAILURE);
 					}
 
