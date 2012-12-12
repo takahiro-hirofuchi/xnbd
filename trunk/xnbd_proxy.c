@@ -631,11 +631,11 @@ void xnbd_proxy_start(struct xnbd_info *xnbd)
 
 		ret = bind(unix_listen_fd, &srvaddr, sizeof(srvaddr));
 		if (ret < 0)
-			err("bind %m");
+			err("binding to %s: %m", xnbd->proxy_unixpath);
 
 		ret = listen(unix_listen_fd, 10);
 		if (ret < 0)
-			err("listen %m");
+			err("listening to %s: %m", xnbd->proxy_unixpath);
 
 		info("xnbd_proxy (pid %d) remote %s:%s, cache %s (%s), ctl %s",
 				getpid(), xnbd->proxy_rhost, xnbd->proxy_rport,

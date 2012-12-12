@@ -282,23 +282,24 @@ static struct option longopts[] = {
 	{"cache-all",  no_argument, NULL, 'c'},
 	{"cache-all2", no_argument, NULL, 'C'},
 	{"reconnect",  no_argument, NULL, 'r'},
+	{"help",       no_argument, NULL, 'h'},
 	{NULL, 0, NULL, 0},
 };
 
 static const char *help_string = "\
-Usage: \n\
-  xnbd-bgctl --query       control_unix_socket \n\
-  xnbd-bgctl --shutdown    control_unix_socket \n\
-  xnbd-bgctl --cache-all   control_unix_socket \n\
-  xnbd-bgctl --cache-all2  control_unix_socket \n\
-  xnbd-bgctl --reconnect   control_unix_socket remote_host remote_port \n\
+Usage:\n\
+  xnbd-bgctl --query       CONTROL_UNIX_SOCKET\n\
+  xnbd-bgctl --shutdown    CONTROL_UNIX_SOCKET\n\
+  xnbd-bgctl --cache-all   CONTROL_UNIX_SOCKET\n\
+  xnbd-bgctl --cache-all2  CONTROL_UNIX_SOCKET\n\
+  xnbd-bgctl --reconnect   CONTROL_UNIX_SOCKET REMOTE_HOST REMOTE_PORT\n\
 \n\
-Commands: \n\
-  --query       query current status of the proxy mode \n\
-  --cache-all   cache all blocks \n\
-  --cache-all2  cache all blocks with the background connection \n\
-  --shutdown    shutdown the proxy mode and start the target mode \n\
-  --reconnect   reconnect the forwarding session \n\
+Commands:\n\
+  --query       query current status of the proxy mode\n\
+  --cache-all   cache all blocks\n\
+  --cache-all2  cache all blocks with the background connection\n\
+  --shutdown    shutdown the proxy mode and start the target mode\n\
+  --reconnect   reconnect the forwarding session\n\
 ";
 
 
@@ -308,7 +309,7 @@ void show_help_and_exit(const char *msg)
 		info("%s\n", msg);
 
 	fprintf(stderr, "%s\n", help_string);
-	exit(EXIT_FAILURE);
+	exit(msg ? EXIT_FAILURE : EXIT_SUCCESS);
 }
 
 int main(int argc, char **argv)
@@ -368,6 +369,10 @@ int main(int argc, char **argv)
 				cmd = xnbd_bgctl_cmd_reconnect;
 				break;
 
+			case 'h':
+				show_help_and_exit(NULL);
+				break;
+
 			case '?':
 				show_help_and_exit("unknown option");
 				break;
@@ -415,8 +420,8 @@ int main(int argc, char **argv)
 	unsigned long cached = get_cached(bm, nblocks);
 
 	info("%s (%s): disksize %ju", query->diskpath, query->bmpath, query->disksize);
-	info("forwaded to %s:%s", query->rhost, query->rport);
-	info("cached blocks %lu / %lu", cached, nblocks);
+	info("forwarded to %s:%s", query->rhost, query->rport);
+	info("cached blocks %lu / %lu (%.1f%%)", cached, nblocks, nblocks ? (cached * 100.0 / nblocks) : 0.0);
 
 	switch (cmd) {
 		case xnbd_bgctl_cmd_unknown:
