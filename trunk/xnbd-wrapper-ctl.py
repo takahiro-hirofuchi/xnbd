@@ -49,24 +49,21 @@ class XNBDWrapperCtl:
     def __init__(self, sockpath):
         self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.sock.connect(sockpath)
-        self.sock.recv(4096)
-        self.sock.settimeout(0.2)
-        #self.file_obj = self.sock.makefile()
+        self.sock.recv(4096)  # drop unnecessary message
 
     def _read_response(self):
-        #buf = []
         buf = ""
-        limit = 10
-        for i in range(limit):
-            #line = self.file_obj.readline()
+        while True:
             try:
                 buf += self.sock.recv(4096)
             except:
-                continue
+                sys.stderr.write(sys.exc_info()[1])
+                break
+
             if re.search(self.pattern, buf, re.S):
-                return re.sub("\(xnbd\) ", "", buf)
-        sys.stderr.write("timeout or too many data\n")
-        return buf
+                break
+
+        return re.sub("\(xnbd\) ", "", buf)
 
     def send_cmd(self, cmd):
         self.sock.send(cmd + "\n")
