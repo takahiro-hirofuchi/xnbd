@@ -13,7 +13,7 @@ xnbd-wrapper - Manage multiple files to be exported as a block device to other
 SYNOPSIS
 --------
 *xnbd-wrapper* [ --imgfile 'IMAGE' [--imgfile 'IMAGE' ...] ]
-    [--laddr 'ADDRESS'] [--port 'PORT'] [--socket 'PATH'] [--xnbd-binary 'PATH']
+    [--laddr 'ADDRESS'] [--lport 'PORT'] [--socket 'PATH'] [--xnbd-binary 'PATH']
     [--daemonize] [--logpath 'PATH']
 
 
@@ -59,11 +59,15 @@ The following options are supported:
     Log informational messages to the given 'FILE' if given. Defaults to
     /tmp/xnbd.log
 
-*--port* 'PORT'::
+*--lport* 'PORT'::
     Accept incoming connections on the given 'PORT'. A valid port is any
     number between 1 and 65536. You may not use the same listeing port
     more than once per system. If this argument is not given, xNBD will
     listen on port 8520 by default.
+
+(*--port* 'PORT')::
+    Deprecated, please use *--lport* instead.
+    This option might be removed in future releases.
 
 *--socket* 'PATH'::
     The xNBD wrapper can be controlled through a control socket. When

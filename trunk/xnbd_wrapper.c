@@ -716,13 +716,14 @@ static void exec_xnbd_server(struct exec_params *params, char *fd_num, const t_d
 static const char help_string[] =
 	"\n\n"
 	"Usage: \n"
-	"  %s [--port port] [--xnbd-binary path-to-xnbdserver] [--imgfile disk-image-file] [--laddr listen-addr] [--socket socket-path]\n"
+	"  %s [--lport port] [--xnbd-binary path-to-xnbdserver] [--imgfile disk-image-file] [--laddr listen-addr] [--socket socket-path]\n"
 	"\n"
 	"Options: \n"
 	"  --daemonize   run wrapper as a daemon process\n"
 	"  --cow         run server instances as a cow target\n"
 	"  --readonly    run server instances as a readonly target.\n"
-	"  --port        Listen port (default: 8520).\n"
+	"  --lport       Listen port (default: 8520).\n"
+	" (--port)       Deprecated, please use --lport instead.\n"
 	"  --xnbd-binary Path to xnbd-server.\n"
 	"  --imgfile     Path to disk image file. This options can be used multiple times.\n"
 	"                You can also use xnbd-wrapper-ctl to (de)register disk images dynamically.\n"
@@ -733,7 +734,7 @@ static const char help_string[] =
 	"\n"
 	"Examples: \n"
 	"  xnbd-wrapper --imgfile /data/disk1\n"
-	"  xnbd-wrapper --imgfile /data/disk1 --imgfile /data/disk2 --xnbd-binary /usr/local/bin/xnbd-server --laddr 127.0.0.1 --port 18520 --socket /tmp/xnbd_wrapper_1.ctl\n";
+	"  xnbd-wrapper --imgfile /data/disk1 --imgfile /data/disk2 --xnbd-binary /usr/local/bin/xnbd-server --laddr 127.0.0.1 --lport 18520 --socket /tmp/xnbd_wrapper_1.ctl\n";
 
 
 int main(int argc, char **argv) {
@@ -775,7 +776,8 @@ int main(int argc, char **argv) {
 	struct option longopts[] = {
 		{"imgfile",     required_argument, NULL, 'f'},
 		{"laddr",       required_argument, NULL, 'l'},
-		{"port",        required_argument, NULL, 'p'},
+		{"lport",       required_argument, NULL, 'p'},
+		{"port",        required_argument, NULL, 'p'}, /* DEPRECATED */
 		{"socket",      required_argument, NULL, 's'},
 		{"xnbd-binary", required_argument, NULL, 'b'},
 		{"cow",         no_argument,       NULL, 'c'},
