@@ -57,12 +57,12 @@ The following options are supported:
     of 0 and print the PID of the *xnbd-client* instance that connected it
     to stdout.
     +
-    If the device is not connected or does not exist (for example
-    because the nbd module was not loaded), *xnbd-client* will exit with
-    an exit state of 1 and not print anything on stdout.
+    If the device exists but is not connected (i.e. is free for use),
+    *xnbd-client* will exit with code 2 and not print anything on stdout.
     +
-    If an error occurred, *xnbd-client* will exit with an exit state of 2,
-    and not print anything on stdout either.
+    If the device does not exist (for example because the nbd module was not loaded)
+    or if an error occurred, *xnbd-client* will exit with a positive return code
+    other than 2 and not print anything on stdout, either.
 
 *--connect*|*-C*::
     Connect to the nbd-server
