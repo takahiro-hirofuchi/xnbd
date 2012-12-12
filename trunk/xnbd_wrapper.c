@@ -580,11 +580,17 @@ static void *start_filemgr_thread(void *uxsock)
 			}
 			else if (strcmp(cmd, "help") == 0)
 				fprintf(fp,
-					"list     : show diskimage list\n"
-					"add PATH : add diskimage\n"
-					"del N    : delete diskimage (N = diskimage number on list)\n"
-					"shutdown : terminate all images and shutdown xnbd-wrapper instance\n"
-					"quit     : quit(disconnect)\n");
+					"  list                 : show list of disk images\n"
+					"\n"
+					"  add PATH             : add disk image in target mode\n"
+					"  add-proxy ...        : add disk image in proxy mode\n"
+					"\n"
+					"  del INDEX            : delete disk image by index\n"
+					"  del-file FILE        : delete disk image by file name\n"
+					"  del-exportname NAME  : delete disk image by export name\n"
+					"\n"
+					"  shutdown             : terminate all images and shutdown xnbd-wrapper instance\n"
+					"  quit                 : quit (disconnect)\n");
 			else if (strcmp(cmd, "quit") == 0)
 				break;
 			else

@@ -12,7 +12,15 @@ xnbd-bgctl - Control a server running xnbd-server(8) through its control socket
 
 SYNOPSIS
 --------
-*xnbd-bgctl* [--cache-all] [--cache-all2] [--query] [--reconnect 'REMOTE_HOST' 'REMOTE_PORT'] [--shutdown] ['CONTROL_SOCKET']
+*xnbd-bgctl* --query 'CONTROL_SOCKET'
+
+*xnbd-bgctl* --shutdown 'CONTROL_SOCKET'
+
+*xnbd-bgctl* --cache-all 'CONTROL_SOCKET'
+
+*xnbd-bgctl* --cache-all2 'CONTROL_SOCKET'
+
+*xnbd-bgctl* --reconnect 'CONTROL_SOCKET' 'REMOTE_HOST' 'REMOTE_PORT'
 
 
 DESCRIPTION
