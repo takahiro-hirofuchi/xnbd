@@ -43,6 +43,19 @@
 /* /usr/include/linux/fs.h: */
 #define BLKROSET   _IO(0x12,93) /* set device read-only (0 = read-write) */
 
+#define XNBD_PID_FOUND  0
+#define XNBD_PID_ERROR  1
+#define XNBD_PID_DEVICE_UNUSED  2
+
+
+#define EXIT_XNBD_DEVICE_UNUSED  2
+
+#if (EXIT_XNBD_DEVICE_UNUSED == EXIT_SUCCESS)
+# error "Exit code EXIT_XNBD_DEVICE_UNUSED collides with EXIT_SUCCESS on this platform"
+#elif (EXIT_XNBD_DEVICE_UNUSED == EXIT_FAILURE)
+# error "Exit code EXIT_XNBD_DEVICE_UNUSED collides with EXIT_FAILURE on this platform"
+#endif
+
 
 unsigned long determine_SYMLOOP_MAX()
 {
@@ -109,21 +122,39 @@ void follow_symlink_chain(const char *devname, char ** p_devname_resolved)
 }
 
 
-pid_t get_nbd_pid(const char *devname)
+int get_nbd_pid(const char *devname, pid_t * p_pid)
 {
-	pid_t pid;
+	pid_t pid = -1;
+	int res = XNBD_PID_FOUND;
 
 	gchar * devname_resolved = NULL;
 	follow_symlink_chain(devname, &devname_resolved);
 
-	const gchar * const device_name_only =
-			(strncmp(devname_resolved, "/dev/", 5) == 0)
-				? devname_resolved + 5
-				: devname_resolved;
+	const char * const PREFIX_REQUIRED = "/dev/nbd";
+	const char * const PREFIX_TO_SKIP = "/dev/";
+	if (strncmp(devname_resolved, PREFIX_REQUIRED, strlen(PREFIX_REQUIRED))) {
+		/* Not an NBD device */
+		g_free(devname_resolved);
+		return XNBD_PID_ERROR;
+	}
+
+	const gchar * const device_name_only = devname_resolved + strlen(PREFIX_TO_SKIP);
+
+	char * const sys_block_device = g_strdup_printf("/sys/block/%s", device_name_only);
+	const gboolean sys_block_device_exists = g_file_test(sys_block_device, G_FILE_TEST_IS_DIR);
+	g_free(sys_block_device);
+	if (! sys_block_device_exists) {
+		g_free(devname_resolved);
+		return XNBD_PID_ERROR;
+	}
 
 	char *pidpath = g_strdup_printf("/sys/block/%s/pid", device_name_only);
 	g_free(devname_resolved);
 
+	if (! g_file_test(pidpath, G_FILE_TEST_EXISTS)) {
+		g_free(pidpath);
+		return XNBD_PID_DEVICE_UNUSED;
+	}
 
 	char *buf = NULL;
 	GError *error = NULL;
@@ -140,7 +171,12 @@ pid_t get_nbd_pid(const char *devname)
 	g_free(buf);
 	g_free(pidpath);
 
-	return pid;
+	assert(p_pid);
+	*p_pid = pid;
+
+	if (pid < 1)  /* atoi returns 0 on error, PID 0 is not valid in user space */
+		res = XNBD_PID_ERROR;
+	return res;
 }
 
 static const uint64_t NBD_MAX_NBLOCKS = (~0UL >> 1);
@@ -207,8 +243,8 @@ static void xnbd_disconnect(const char *devpath)
 {
 	int ret;
 
-	pid_t nbd_pid = get_nbd_pid(devpath);
-	if (nbd_pid < 0)
+	pid_t nbd_pid = -1;
+	if (get_nbd_pid(devpath, &nbd_pid) != XNBD_PID_FOUND)
 		err("%s is not connected", devpath);
 
 
@@ -367,8 +403,8 @@ static int xnbd_connect(const char *devpath, unsigned long blocksize, unsigned i
 			if (sigismember(&sigs, SIGCHLD))
 				err("xnbd-client (child) was terminated due to an internal error");
 
-			pid_t nbd_pid = get_nbd_pid(devpath);
-			if (nbd_pid < 0) {
+			pid_t nbd_pid = -1;
+			if (get_nbd_pid(devpath, &nbd_pid) != XNBD_PID_FOUND) {
 				info("wait for a moment ...");
 				sleep(1);
 			} else
@@ -654,12 +690,18 @@ int main(int argc, char *argv[]) {
 			if (argc - optind != 0)
 				show_help_and_exit("command line error");
 
-			pid_t nbd_pid = get_nbd_pid(devpath); /* exit */
-			if (nbd_pid != -1) {
-				printf("%d\n", nbd_pid);
-				exit(EXIT_SUCCESS);
-			} else
-				exit(EXIT_FAILURE);
+			pid_t nbd_pid = -1;
+			const int device_status = get_nbd_pid(devpath, &nbd_pid);
+			switch (device_status) {
+				case XNBD_PID_FOUND:
+					printf("%d\n", nbd_pid);
+					exit(EXIT_SUCCESS);
+				case XNBD_PID_DEVICE_UNUSED:
+					info("%s is not used", devpath);
+					exit(EXIT_XNBD_DEVICE_UNUSED);
+				default:
+					exit(EXIT_FAILURE);
+			}
 			break;
 
 		case cmd_disconnect:
