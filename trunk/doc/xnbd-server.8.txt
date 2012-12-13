@@ -98,11 +98,11 @@ The following options are supported:
 
 SIGNALS
 -------
-*SIGUSR*::
+*SIGUSR1*::
     Take a snapshot of the image file. Currently, this feature works
     only in the target mode.
 
-*SIGHUP*::
+*SIGUSR2*::
     Change the proxy mode to the target mode. Use xnbd-bgctl --shutdown
     instead of sending this signal.
 
