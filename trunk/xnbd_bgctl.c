@@ -430,9 +430,9 @@ int main(int argc, char **argv)
 
 		case xnbd_bgctl_cmd_shutdown:
 			{
-				int ret = kill(query->master_pid, SIGHUP);
+				int ret = kill(query->master_pid, SIGUSR2);
 				if (ret < 0)
-					err("send SIGHUP to %d", query->master_pid);
+					err("send SIGUSR2 to %d", query->master_pid);
 			}
 			info("set xnbd (pid %d) to target mode", query->master_pid);
 			break;
