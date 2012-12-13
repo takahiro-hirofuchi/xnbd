@@ -176,8 +176,8 @@ void free_session(struct xnbd_session *ses)
 
 
 static volatile sig_atomic_t got_sigchld = 0;
-static volatile sig_atomic_t got_sighup = 0;
 static volatile sig_atomic_t got_sigusr1 = 0;
+static volatile sig_atomic_t got_sigusr2 = 0;
 static volatile sig_atomic_t need_exit = 0;
 
 
@@ -188,10 +188,10 @@ static void signal_handler(int signum)
 
 	if (signum == SIGCHLD)
 		got_sigchld = 1;
-	else if (signum == SIGHUP)
-		got_sighup = 1;
 	else if (signum == SIGUSR1)
 		got_sigusr1 = 1;
+	else if (signum == SIGUSR2)
+		got_sigusr2 = 1;
 	else
 		need_exit = 1;
 }
@@ -207,8 +207,8 @@ static void set_sigactions()
 	sigaction(SIGTERM, &act, NULL);
 	sigaction(SIGINT, &act, NULL);
 	sigaction(SIGCHLD, &act, NULL);
-	sigaction(SIGHUP, &act, NULL);
 	sigaction(SIGUSR1, &act, NULL);
+	sigaction(SIGUSR2, &act, NULL);
 
 	act.sa_handler = SIG_IGN;
 	sigaction(SIGPIPE, &act, NULL);
@@ -421,8 +421,8 @@ int master_server(int port, void *data, int connect_fd)
 	sigaddset(&sigs_blocked, SIGCHLD);
 	sigaddset(&sigs_blocked, SIGINT);
 	sigaddset(&sigs_blocked, SIGTERM);
-	sigaddset(&sigs_blocked, SIGHUP);
 	sigaddset(&sigs_blocked, SIGUSR1);
+	sigaddset(&sigs_blocked, SIGUSR2);
 	pthread_sigmask(SIG_BLOCK, &sigs_blocked, &orig_sigmask);
 
 	GList *socklist = NULL;
@@ -555,16 +555,16 @@ int master_server(int port, void *data, int connect_fd)
 		}
 
 
-		if (got_sighup || got_sigusr1) {
-			if (got_sighup) {
-				got_sighup = 0;
+		if (got_sigusr1 || got_sigusr2) {
+			if (got_sigusr2) {
+				got_sigusr2 = 0;
 
 				if (xnbd->cmd != xnbd_cmd_proxy) {
-					warn("ignoring SIGHUP (mode change) not in proxy mode");
+					warn("ignoring SIGUSR2 (mode change) not in proxy mode");
 					goto skip_restarting;
 				}
 
-				info("got SIGHUP, restart %d process(es)", g_list_length(xnbd->sessions));
+				info("got SIGUSR2, restart %d process(es)", g_list_length(xnbd->sessions));
 				restarting_for_mode_change = 1;
 			}
 
@@ -598,7 +598,7 @@ int master_server(int port, void *data, int connect_fd)
 				dbg("%p\n", s);
 				/*
 				 * If a new connection is accepted during
-				 * restarting, send SIGHUP to the master server
+				 * restarting, send SIGUSR2 to the master server
 				 * again.
 				 *
 				 * NOTE: Another design option is to defer
