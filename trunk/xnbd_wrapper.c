@@ -35,6 +35,14 @@
 
 #define NOT_PROXIED  NULL
 
+#define ARGC_RANGE(min, max)  (min), (max)
+
+#define ARGV_SUCCESS  0
+#define ARGV_ENOMEN  1
+#define ARGV_ERROR_USAGE  2
+
+#define MESSAGE_ENOMEN  "out of memory"
+
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 GHashTable * p_disk_dict = NULL;
@@ -116,6 +124,26 @@ static t_disk_data * copy_disk_data(const t_disk_data * source) {
 	g_free(res->proxy.target_exportname);
 	g_free(res);
 	return NULL;
+}
+
+static void execv_or_abort(const char * const * argv)
+{
+#ifdef XNBD_DEBUG
+	{
+		info("About to execute...");
+		const char * const * walker = argv;
+		while (*walker)
+		{
+			info("[%ld] \"%s\"", walker - argv, *walker);
+			walker++;
+		}
+	}
+#endif
+
+	(void)execv(argv[0], (char **)argv);
+
+	warn("exec failed");
+	_exit(EXIT_FAILURE);
 }
 
 static t_disk_data * create_disk_data(const char * local_exportname,
@@ -290,6 +318,19 @@ static void perform_shutdown(FILE * fp)
 	kill(0, SIGTERM);
 }
 
+static char * copy_replace_basename(const char * argv_zero, const char * new_basename)
+{
+	assert(argv_zero);
+	assert(new_basename);
+	char * res = NULL;
+	char * const wrapper_abspath = realpath(argv_zero, NULL);
+	if (asprintf(&res, "%s/%s", dirname(wrapper_abspath), new_basename) == -1) {
+		return NULL;
+	}
+	free(wrapper_abspath);
+	return res;
+}
+
 static int hexdig_char_to_int(char c)
 {
 	switch (c) {
@@ -400,6 +441,45 @@ static void decode_percent_encoding(char * text)
 	}
 }
 
+static int extract_decode_check_usage(char * buf, gchar *** p_argv, guint * p_argc, guint argc_min, guint argc_max)
+{
+	/* Remove trailing newline so it does not end up in the last argument */
+	const size_t buf_len = strlen(buf);
+	if ((buf_len > 0) && (buf[buf_len - 1] == '\n'))
+		buf[buf_len - 1] = '\0';
+
+	gchar ** const argv = g_strsplit(buf, " ", argc_max + 1);  /* +1 or we do not notice g_strsplit's internal merging */
+	if (! argv)
+	{
+		*p_argv = NULL;
+		*p_argc = 0;
+		return ARGV_ENOMEN;
+	}
+
+	/* Calculate argc from argv */
+	guint argc = 0;
+	while (argv[argc])
+		argc++;
+
+	/* Check usage */
+	if ((argc < argc_min) || (argc > argc_max)) {
+		g_strfreev(argv);
+
+		*p_argv = NULL;
+		*p_argc = 0;
+		return ARGV_ERROR_USAGE;
+	}
+
+	/* Decode percent encoded arguments */
+	guint i = 1;
+	for (; i < argc; i++)
+		decode_percent_encoding(argv[i]);
+
+	*p_argv = argv;
+	*p_argc = argc;
+	return ARGV_SUCCESS;
+}
+
 static int make_unix_sock(const char *uxsock_path)
 {
 	int uxsock = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -467,104 +547,64 @@ static void *start_filemgr_thread(void *uxsock)
 			if (strcmp(cmd, "list") == 0)
 				list_diskimg(fp);
 			else if (strcmp(cmd, "add") == 0) {
-				/* Remove trailing newline so it does not end up in the last argument */
-				const size_t buf_len = strlen(buf);
-				if ((buf_len > 0) && (buf[buf_len - 1] == '\n'))
-					buf[buf_len - 1] = '\0';
+				gchar ** argv = NULL;
+				guint argc = 0;
+				const int res = extract_decode_check_usage(buf, &argv, &argc, ARGC_RANGE(2, 3));
+				if (res == ARGV_ENOMEN) {
+					fprintf(fp, "%s\n", MESSAGE_ENOMEN);
+				} else if (res == ARGV_ERROR_USAGE) {
+					fprintf(fp, "usage: %s\n", "add [<EXPORTNAME>] FILE");
+				} else if (res == ARGV_SUCCESS) {
+					const char * const file = (argc == 3) ? argv[2] : argv[1];
+					const char * const exportname = (argc == 3) ? argv[1] : file;
 
-				const unsigned int EXPECTED_ARGC_MIN = 1 + 1;
-				const unsigned int EXPECTED_ARGC_MAX = 1 + 1 + 1;
-				const unsigned int MAX_ARGC = EXPECTED_ARGC_MAX + 1;  /* +1 or we do not notice g_strsplit's internal merging */
-				gchar ** argv = g_strsplit(buf, " ", MAX_ARGC);
-				if (argv)
-				{
-					/* Calculate argc from argv */
-					unsigned int argc = 0;
-					while (argv[argc])
-						argc++;
-
-					if ((argc < EXPECTED_ARGC_MIN) || (argc > EXPECTED_ARGC_MAX)) {
-						fprintf(fp, "usage: add [<EXPORTNAME>] FILE\n");
-					} else {
-						int i = 1;
-						for (; i < argc; i++)
-							decode_percent_encoding(argv[i]);
-
-						const char * const file = (argc == 3) ? argv[2] : argv[1];
-						const char * const exportname = (argc == 3) ? argv[1] : file;
-
-						t_disk_data * const p_disk_data = create_disk_data(exportname, NOT_PROXIED, NOT_PROXIED, file, NOT_PROXIED, NOT_PROXIED, NOT_PROXIED);
-						if (p_disk_data)
-						{
-							ret = add_diskimg(p_disk_data);
-							if (ret == XNBD_IMAGE_ACCESS_ERROR)
-								fprintf(fp, "cannot open %s\n", file);
-							else if (ret == XNBD_NOT_ADDING_TWICE)
-								fprintf(fp, "image cannot be added twice\n");
-						}
-						else
-						{
-							fprintf(fp, "out of memory\n");
-						}
+					t_disk_data * const p_disk_data = create_disk_data(exportname, NOT_PROXIED, NOT_PROXIED, file, NOT_PROXIED, NOT_PROXIED, NOT_PROXIED);
+					if (p_disk_data)
+					{
+						ret = add_diskimg(p_disk_data);
+						if (ret == XNBD_IMAGE_ACCESS_ERROR)
+							fprintf(fp, "cannot open %s\n", file);
+						else if (ret == XNBD_NOT_ADDING_TWICE)
+							fprintf(fp, "image cannot be added twice\n");
+					}
+					else
+					{
+						fprintf(fp, "%s\n", MESSAGE_ENOMEN);
 					}
 					g_strfreev(argv);
-				}
-				else
-				{
-					fprintf(fp, "out of memory\n");
 				}
 			}
 			else if (strcmp(cmd, "add-proxy") == 0) {
-				/* Remove trailing newline so it does not end up in the last argument */
-				const size_t buf_len = strlen(buf);
-				if ((buf_len > 0) && (buf[buf_len - 1] == '\n'))
-					buf[buf_len - 1] = '\0';
+				gchar ** argv = NULL;
+				guint argc = 0;
+				const int res = extract_decode_check_usage(buf, &argv, &argc, ARGC_RANGE(7, 8));
+				if (res == ARGV_ENOMEN) {
+					fprintf(fp, "%s\n", MESSAGE_ENOMEN);
+				} else if (res == ARGV_ERROR_USAGE) {
+					fprintf(fp, "usage: %s\n", "add-proxy <LOCAL_EXPORTNAME> <TARGET_HOST> <TARGET_PORT> <CACHE_IMAGE> <BITMAP_IMAGE> <CONTROL_SOCKET_PATH> [<TARGET_EXPORTNAME>]");
+				} else if (res == ARGV_SUCCESS) {
+					const char * const local_exportname = argv[1];
+					const char * const target_host = argv[2];
+					const char * const target_port = argv[3];
+					const char * const cache_image = argv[4];
+					const char * const bitmap_image = argv[5];
+					const char * const control_socket_path = argv[6];
+					const char * const target_exportname = (argc > 7) ? argv[7] : NULL;
 
-				const unsigned int EXPECTED_ARGC_MIN = 1 + 6;
-				const unsigned int EXPECTED_ARGC_MAX = 1 + 6 + 1;
-				const unsigned int MAX_ARGC = EXPECTED_ARGC_MAX + 1;  /* +1 or we do not notice g_strsplit's internal merging */
-				gchar ** argv = g_strsplit(buf, " ", MAX_ARGC);
-				if (argv)
-				{
-					/* Calculate argc from argv */
-					unsigned int argc = 0;
-					while (argv[argc])
-						argc++;
-
-					if ((argc < EXPECTED_ARGC_MIN) || (argc > EXPECTED_ARGC_MAX)) {
-						fprintf(fp, "usage: add-proxy <LOCAL_EXPORTNAME> <TARGET_HOST> <TARGET_PORT> <CACHE_IMAGE> <BITMAP_IMAGE> <CONTROL_SOCKET_PATH> [<TARGET_EXPORTNAME>]\n");
-					} else {
-						int i = 1;
-						for (; i < argc; i++)
-							decode_percent_encoding(argv[i]);
-
-						const char * const local_exportname = argv[1];
-						const char * const target_host = argv[2];
-						const char * const target_port = argv[3];
-						const char * const cache_image = argv[4];
-						const char * const bitmap_image = argv[5];
-						const char * const control_socket_path = argv[6];
-						const char * const target_exportname = (argc > 7) ? argv[7] : NULL;
-
-						t_disk_data * const p_disk_data = create_disk_data(local_exportname, target_host, target_port, cache_image, bitmap_image, control_socket_path, target_exportname);
-						if (! p_disk_data)
-						{
-							fprintf(fp, "out of memory\n");
-						}
-						else
-						{
-							ret = add_diskimg(p_disk_data);
-							if (ret == XNBD_IMAGE_ACCESS_ERROR)
-								fprintf(fp, "cannot open %s\n", cache_image);
-							else if (ret == XNBD_NOT_ADDING_TWICE)
-								fprintf(fp, "image cannot be added twice\n");
-						}
+					t_disk_data * const p_disk_data = create_disk_data(local_exportname, target_host, target_port, cache_image, bitmap_image, control_socket_path, target_exportname);
+					if (! p_disk_data)
+					{
+						fprintf(fp, "%s\n", MESSAGE_ENOMEN);
+					}
+					else
+					{
+						ret = add_diskimg(p_disk_data);
+						if (ret == XNBD_IMAGE_ACCESS_ERROR)
+							fprintf(fp, "cannot open %s\n", cache_image);
+						else if (ret == XNBD_NOT_ADDING_TWICE)
+							fprintf(fp, "image cannot be added twice\n");
 					}
 					g_strfreev(argv);
-				}
-				else
-				{
-					fprintf(fp, "out of memory\n");
 				}
 			}
 			else if (strcmp(cmd, "del") == 0)
@@ -701,22 +741,7 @@ static void exec_xnbd_server(struct exec_params *params, char *fd_num, const t_d
 
 	args[++i] = NULL;
 
-#ifdef XNBD_DEBUG
-	{
-		info("About to execute...");
-		char ** walker = args;
-		while (*walker)
-		{
-			info("[%ld] \"%s\"", walker - args, *walker);
-			walker++;
-		}
-	}
-#endif
-
-	(void)execv(params->binpath, args);
-
-	warn("exec failed");
-	_exit(EXIT_FAILURE);
+	execv_or_abort((const char * const *)args);
 }
 
 static const char help_string[] =
@@ -852,7 +877,7 @@ int main(int argc, char **argv) {
 				}
 				else
 				{
-					warn("out of memory");
+					warn(MESSAGE_ENOMEN);
 				}
 				break;
 			}
@@ -889,13 +914,11 @@ int main(int argc, char **argv) {
 		exec_srv_params.syslog = 0;
 	}
 
-
 	if (child_prog == NULL) {
-		char *wrapper_abspath = realpath(argv[0], NULL);
-		if (asprintf(&child_prog, "%s/xnbd-server", dirname(wrapper_abspath)) == -1) {
-			return EXIT_FAILURE;
+		child_prog = copy_replace_basename(argv[0], "xnbd-server");
+		if (! child_prog) {
+			err(MESSAGE_ENOMEN);
 		}
-		free(wrapper_abspath);
 	}
 
 	if (access(child_prog, X_OK) != 0) {
