@@ -208,7 +208,7 @@ static void del_diskimg_by_exportname(const char * local_exportname)
 	pthread_mutex_unlock(&mutex);
 }
 
-static t_disk_data * get_disk_data_for(char *local_exportname)
+static t_disk_data * get_disk_data_for(const char *local_exportname)
 {
 	t_disk_data * res = NULL;
 
@@ -582,7 +582,7 @@ static void *start_filemgr_thread(void *uxsock)
 				fprintf(fp,
 					"  list                 : show list of disk images\n"
 					"\n"
-					"  add PATH             : add disk image in target mode\n"
+					"  add [NAME] PATH      : add disk image in target mode\n"
 					"  add-proxy ...        : add disk image in proxy mode\n"
 					"\n"
 					"  del INDEX            : delete disk image by index\n"
@@ -1002,7 +1002,6 @@ int main(int argc, char **argv) {
 					warn("pthread_create : %m");
 				if (pthread_detach(thread))
 					warn("pthread_detach : %m");
-				pthread_detach(thread);
 			} else if (ep_events[c_ev].data.fd == sockfd) {
 				/* tcp socket */
 				conn_sockfd = accept(sockfd, NULL, NULL);
