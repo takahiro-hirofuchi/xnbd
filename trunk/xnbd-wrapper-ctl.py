@@ -30,6 +30,7 @@ import sys
 import os
 import errno
 import urllib
+import types
 
 try:
     import argparse
@@ -40,6 +41,12 @@ except ImportError:
 
 def prog(argv_zero):
     return os.path.basename(argv_zero)
+
+
+def percent_encode(thing):
+    if isinstance(thing, (types.TupleType, types.ListType)):
+        return [percent_encode(e) for e in thing]
+    return urllib.quote(str(thing))
 
 
 class XNBDWrapperCtl:
@@ -150,8 +157,7 @@ def compose_command(options, argv):
     )
     for dest, command_name, in single_arg_commands:
         if dest:
-            encoded_arg = urllib.quote(str(dest))
-            return '%s %s' % (command_name, encoded_arg)
+            return '%s %s' % (command_name, percent_encode(dest))
 
     # More complex commands
     if options.add_proxy:
@@ -167,8 +173,7 @@ def compose_command(options, argv):
         if options.target_exportname:
             args.append(options.target_exportname)
 
-        encoded_args = [urllib.quote(e) for e in args]
-        return 'add-proxy %s' % ' '.join(encoded_args)
+        return 'add-proxy %s' % ' '.join(percent_encode(args))
     elif options.add:
         args = []
         if options.local_exportname:
@@ -176,8 +181,7 @@ def compose_command(options, argv):
             args.append(options.local_exportname)
         args.append(options.add)
 
-        encoded_args = [urllib.quote(e) for e in args]
-        return 'add %s' % ' '.join(encoded_args)
+        return 'add %s' % ' '.join(percent_encode(args))
 
     assert False, 'Internal error, no command used'
 
