@@ -788,7 +788,7 @@ int main(int argc, char **argv) {
 	pthread_t thread;
 	const char default_ctl_path[] = "/tmp/xnbd_wrapper.ctl";
 	char *ctl_path = NULL;
-	int forked_srvs = 0;
+	int child_process_count = 0;
 	const int MAX_NSRVS = 512;
 	int cstatus;
 	pid_t cpid;
@@ -1023,8 +1023,8 @@ int main(int argc, char **argv) {
 						warn("waitpid : %m");
 					if (WIFEXITED(cstatus)) 
 						warn("pid %ld : exit status %d", (long)cpid, WEXITSTATUS(cstatus));
-					forked_srvs--;
-					info("forked_srvs : %d", forked_srvs);
+					child_process_count--;
+					info("child_process_count : %d", child_process_count);
 				}
 			} else if (ep_events[c_ev].data.fd == ux_sockfd) {
 				/* unix socket */
@@ -1052,7 +1052,7 @@ int main(int argc, char **argv) {
 				}
 				info("conn_sockfd: %d", conn_sockfd);
 
-				if (forked_srvs == MAX_NSRVS) {
+				if (child_process_count == MAX_NSRVS) {
 					close(conn_sockfd);
 					warn("fork : reached the limit");
 					break;
@@ -1105,8 +1105,8 @@ int main(int argc, char **argv) {
 				} else if (pid > 0) {
 					/* parent */
 					free(fd_num);
-					forked_srvs++;
-					info("forked_srvs : %d", forked_srvs);
+					child_process_count++;
+					info("child_process_count : %d", child_process_count);
 					info("fork: pid %ld", (long)pid);
 					close(conn_sockfd);
 				} else {
