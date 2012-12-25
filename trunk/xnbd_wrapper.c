@@ -65,6 +65,10 @@ typedef struct _t_disk_data {
 	/* NOTE: Upon extension update destroy_value, copy_disk_data and create_disk_data below, too! */
 } t_disk_data;
 
+typedef struct _t_thread_data {
+	int unix_sock_fd;
+} t_thread_data;
+
 typedef struct _t_listing_state {
 	guint index_to_print;
 	guint index_up_next;
@@ -514,8 +518,9 @@ static int count_mgr_threads(int val)
 	return ret;
 }
 
-static void *start_filemgr_thread(void *uxsock)
+static void *start_filemgr_thread(void * pointer)
 {
+	t_thread_data * const p_thread_data = (t_thread_data *)pointer;
 	const int rbufsize = 128 * 8;
 	
 	char buf[rbufsize];
@@ -523,7 +528,7 @@ static void *start_filemgr_thread(void *uxsock)
 	char arg[rbufsize];
 	int ret;
 
-	int conn_uxsock = accept(*(int *)uxsock, NULL, NULL);
+	int conn_uxsock = accept(p_thread_data->unix_sock_fd, NULL, NULL);
 	if (conn_uxsock == -1) {
 		warn("accept(AF_UNIX): %m");
 		pthread_exit(NULL);
@@ -643,6 +648,8 @@ static void *start_filemgr_thread(void *uxsock)
 	fclose(fp);
 	close(conn_uxsock);
 	count_mgr_threads(-1);
+
+	g_free(p_thread_data);
 
 	/* just to avoid warning */
 	return NULL;
@@ -1021,10 +1028,16 @@ int main(int argc, char **argv) {
 				}
 			} else if (ep_events[c_ev].data.fd == ux_sockfd) {
 				/* unix socket */
-				if (pthread_create(&thread, NULL, start_filemgr_thread, (void *)&ux_sockfd))
-					warn("pthread_create : %m");
-				if (pthread_detach(thread))
-					warn("pthread_detach : %m");
+				t_thread_data * const p_thread_data = g_try_new(t_thread_data, 1);
+				if (! p_thread_data) {
+					warn("Could start thread: %s", MESSAGE_ENOMEN);
+				} else {
+					p_thread_data->unix_sock_fd = ux_sockfd;
+					if (pthread_create(&thread, NULL, start_filemgr_thread, (void *)p_thread_data))
+						warn("pthread_create : %m");
+					if (pthread_detach(thread))
+						warn("pthread_detach : %m");
+				}
 			} else if (ep_events[c_ev].data.fd == sockfd) {
 				/* tcp socket */
 				conn_sockfd = accept(sockfd, NULL, NULL);
