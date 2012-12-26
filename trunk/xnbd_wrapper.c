@@ -1078,7 +1078,7 @@ int main(int argc, char **argv) {
 						close(conn_sockfd);
 						_exit(EXIT_FAILURE);
 					}
-					info("requested_img: %s\n", requested_img);
+					info("requested_img: %s", requested_img);
 
 					const t_disk_data * const disk_data = get_disk_data_for(requested_img);
 					if (! disk_data) {
