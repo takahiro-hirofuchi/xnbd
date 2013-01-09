@@ -62,11 +62,13 @@ typedef struct _t_disk_data {
 		char * target_exportname;
 	} proxy;
 
-	/* NOTE: Upon extension update destroy_value, copy_disk_data and create_disk_data below, too! */
+	/* NOTE: Upon extension update destroy_value, copy_disk_data, mark_proxy_mode_ended and create_disk_data below, too! */
 } t_disk_data;
 
 typedef struct _t_thread_data {
 	int unix_sock_fd;
+	const char * xnbd_bgctl_path;
+	int * p_child_process_count;
 } t_thread_data;
 
 typedef struct _t_listing_state {
@@ -518,6 +520,106 @@ static int count_mgr_threads(int val)
 	return ret;
 }
 
+static pid_t invoke_bgctl(int * p_child_process_count, const char * xnbd_bgctl_path, FILE * fp,
+		const char * control_socket_path, const char * mode, const char * p1, const char * p2)
+{
+	const pid_t pid = fork();
+	if (pid != 0) {
+		/* Inside parent process */
+		if (pid != -1) {
+			pthread_mutex_lock(&mutex);
+			(*p_child_process_count)++;
+			pthread_mutex_unlock(&mutex);
+		}
+		return pid;
+	}
+
+	/* Redirect stdout/stderr to <fp> */
+	close(0);
+	const int output_fd = fileno(fp);
+	if (output_fd != -1) {
+		dup2(output_fd, 1);
+		dup2(output_fd, 2);
+	}
+
+	const char * const argv[] = {xnbd_bgctl_path, mode, control_socket_path, p1, p2, NULL};
+	execv_or_abort(argv);
+
+	err("should never get here");
+	return 0;
+}
+
+static int handle_bgctl_command(const char * usage, const char * mode, unsigned int extra_count,
+		char * buf, FILE * fp, const char * xnbd_bgctl_path, char ** p_local_exportname, int * p_child_process_count)
+{
+	int return_code = -1;
+	const guint expected_argc = 1 + 1 + extra_count;  /* <command>, <local_exportname>, <arg>*extra_count */
+
+	gchar ** argv = NULL;
+	guint argc = 0;
+	const int res = extract_decode_check_usage(buf, &argv, &argc, ARGC_RANGE(expected_argc, expected_argc));
+	if (res == ARGV_ERROR_USAGE) {
+		fprintf(fp, "usage: %s\n", usage);
+	} else if (res == ARGV_ENOMEN) {
+		fprintf(fp, "%s\n", MESSAGE_ENOMEN);
+	} else if (res == ARGV_SUCCESS) {
+		const char * const local_exportname = argv[1];
+		gboolean have_memory = 1;
+		if (p_local_exportname) {
+			char * const duped = g_strdup(local_exportname);
+			if (duped) {
+				*p_local_exportname = duped;
+			} else {
+				have_memory = 0;
+			}
+		}
+
+		if (have_memory) {
+			t_disk_data * const p_disk_data = get_disk_data_for(local_exportname);
+			if (! p_disk_data) {
+				fprintf(fp, "There is no export named \"%s\".\n", local_exportname);
+			} else {
+				if (! p_disk_data->proxy.target_host) {
+					fprintf(fp, "Export \"%s\" not configured for proxy mode.\n", local_exportname);
+				} else if (access(p_disk_data->proxy.control_socket_path, R_OK) == -1) {
+					fprintf(fp, "Export \"%s\" not being served to any client at the moment.\n", local_exportname);
+				} else {
+					const char * const p1 = (argc > 2) ? argv[2] : NULL;
+					const char * const p2 = (argc > 3) ? argv[3] : NULL;
+
+					const pid_t bgctl_pid = invoke_bgctl(p_child_process_count, xnbd_bgctl_path, fp, p_disk_data->proxy.control_socket_path, mode, p1, p2);
+
+					/* Wait for child process termination */
+					if (bgctl_pid == -1) {
+						fprintf(fp, "xnbd-bgctl could not be executed.\n");
+					} else {
+						int status = -1;
+						do {
+							(void)waitpid(bgctl_pid, &status, 0);
+						} while (! (WIFEXITED(status) || WIFSIGNALED(status)));
+
+						if (WIFEXITED(status)) {
+							return_code = (unsigned char)(WEXITSTATUS(status));
+						} else {
+							assert(WIFSIGNALED(status));
+							return_code = (unsigned char)(128 + WTERMSIG(status));
+						}
+
+						if (return_code != 0) {
+							fprintf(fp, "Execution of xnbd-bgctl failed with code %d.\n", return_code);
+						}
+					}
+				}
+				destroy_value(p_disk_data);
+			}
+		} else {
+			fprintf(fp, "%s\n", MESSAGE_ENOMEN);
+		}
+	}
+	g_strfreev(argv);
+	return return_code;
+}
+
 static void *start_filemgr_thread(void * pointer)
 {
 	t_thread_data * const p_thread_data = (t_thread_data *)pointer;
@@ -622,6 +724,10 @@ static void *start_filemgr_thread(void * pointer)
 				del_diskimg_by_exportname(arg);
 			} else if (strcmp(cmd, "shutdown") == 0) {
 				perform_shutdown(fp);
+			} else if (strcmp(cmd, "bgctl-query") == 0) {
+				(void)handle_bgctl_command("bgctl-query EXPORTNAME", "--query", 0, buf, fp, p_thread_data->xnbd_bgctl_path, NULL, p_thread_data->p_child_process_count);
+			} else if (strcmp(cmd, "bgctl-cache-all") == 0) {
+				(void)handle_bgctl_command("bgctl-cache-all EXPORTNAME", "--cache-all", 0, buf, fp, p_thread_data->xnbd_bgctl_path, NULL, p_thread_data->p_child_process_count);
 			}
 			else if (strcmp(cmd, "help") == 0)
 				fprintf(fp,
@@ -633,6 +739,9 @@ static void *start_filemgr_thread(void * pointer)
 					"  del INDEX            : delete disk image by index\n"
 					"  del-file FILE        : delete disk image by file name\n"
 					"  del-exportname NAME  : delete disk image by export name\n"
+					"\n"
+					"  bgctl-query NAME     : Query status of proxy\n"
+					"  bgctl-cache-all NAME : Instruct proxy to cache all blocks\n"
 					"\n"
 					"  shutdown             : terminate all images and shutdown xnbd-wrapper instance\n"
 					"  quit                 : quit (disconnect)\n");
@@ -798,6 +907,7 @@ int main(int argc, char **argv) {
 	int syslog = 0;
 	const char *logpath = NULL;
 	struct exec_params exec_srv_params = { .readonly = 0 };
+	char * xnbd_bgctl_path = NULL;
 
 	p_disk_dict = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, (GDestroyNotify)destroy_value);
 
@@ -936,6 +1046,15 @@ int main(int argc, char **argv) {
 	exec_srv_params.binpath = child_prog;
 
 
+	xnbd_bgctl_path = copy_replace_basename(argv[0], "xnbd-bgctl");
+	if (! xnbd_bgctl_path) {
+		err(MESSAGE_ENOMEN);
+	}
+	if (access(xnbd_bgctl_path, X_OK) != 0) {
+		err("check xnbd-bgctl: %m");
+	}
+
+
 	if (port == NULL) {
 		if (asprintf(&port, "%d", XNBD_PORT) == -1) {
 			return EXIT_FAILURE;
@@ -1023,8 +1142,11 @@ int main(int argc, char **argv) {
 						warn("waitpid : %m");
 					if (WIFEXITED(cstatus)) 
 						warn("pid %ld : exit status %d", (long)cpid, WEXITSTATUS(cstatus));
+
+					pthread_mutex_lock(&mutex);
 					child_process_count--;
 					info("child_process_count : %d", child_process_count);
+					pthread_mutex_unlock(&mutex);
 				}
 			} else if (ep_events[c_ev].data.fd == ux_sockfd) {
 				/* unix socket */
@@ -1033,6 +1155,8 @@ int main(int argc, char **argv) {
 					warn("Could start thread: %s", MESSAGE_ENOMEN);
 				} else {
 					p_thread_data->unix_sock_fd = ux_sockfd;
+					p_thread_data->xnbd_bgctl_path = xnbd_bgctl_path;
+					p_thread_data->p_child_process_count = &child_process_count;
 					if (pthread_create(&thread, NULL, start_filemgr_thread, (void *)p_thread_data))
 						warn("pthread_create : %m");
 					if (pthread_detach(thread))
@@ -1052,7 +1176,11 @@ int main(int argc, char **argv) {
 				}
 				info("conn_sockfd: %d", conn_sockfd);
 
-				if (child_process_count == MAX_NSRVS) {
+				pthread_mutex_lock(&mutex);
+				const gboolean child_process_limit_reached = (child_process_count >= MAX_NSRVS);
+				pthread_mutex_unlock(&mutex);
+
+				if (child_process_limit_reached) {
 					close(conn_sockfd);
 					warn("fork : reached the limit");
 					break;
@@ -1105,8 +1233,12 @@ int main(int argc, char **argv) {
 				} else if (pid > 0) {
 					/* parent */
 					free(fd_num);
+
+					pthread_mutex_lock(&mutex);
 					child_process_count++;
 					info("child_process_count : %d", child_process_count);
+					pthread_mutex_unlock(&mutex);
+
 					info("fork: pid %ld", (long)pid);
 					close(conn_sockfd);
 				} else {
