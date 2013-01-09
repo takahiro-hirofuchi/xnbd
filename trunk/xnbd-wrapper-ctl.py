@@ -102,6 +102,9 @@ def parse_command_line(argv):
   %(prog)s [-s SOCKPATH] --remove-by-file FILE
   %(prog)s [-s SOCKPATH] --remove-by-exportname NAME
   %(prog)s [-s SOCKPATH] --shutdown
+
+  %(prog)s [-s SOCKPATH] --local-exportname NAME --bgctl-query
+  %(prog)s [-s SOCKPATH] --local-exportname NAME --bgctl-cache-all
 """)
 
     operations = parser.add_mutually_exclusive_group(required=True)
@@ -125,6 +128,11 @@ def parse_command_line(argv):
     operations.add_argument("--shutdown", "-d", action='store_true',
                         help="remove all disk images from the xnbd-wrapper instance and stop it afterwards.")
 
+    operations.add_argument("--bgctl-query", action='store_true',
+                        help="query current status of the proxy mode.")
+    operations.add_argument("--bgctl-cache-all", action='store_true',
+                        help="cache all blocks with the background connection.")
+
     parser.add_argument("--local-exportname", metavar='NAME',
                         help="set the export name to export the image as.")
     parser.add_argument("--target-exportname", metavar='NAME',
@@ -134,6 +142,11 @@ def parse_command_line(argv):
 
     if options.target_exportname and not options.add_proxy:
         print('%s: error: Argument --target-exportname is only supported in combination with --add-proxy.' % prog(argv[0]), file=sys.stderr)
+        sys.exit(1)
+
+    if any([options.bgctl_query, options.bgctl_cache_all]) \
+            and not options.local_exportname:
+        print('%s: error: Arguments --bgctl-* need to be used with --local_exportname NAME.' % prog(argv[0]), file=sys.stderr)
         sys.exit(1)
 
     return options
@@ -148,6 +161,15 @@ def compose_command(options, argv):
     for dest, line in zero_arg_commands:
         if dest:
             return line
+
+    zero_arg_exportname_commands = (
+        (options.bgctl_query, 'bgctl-query'),
+        (options.bgctl_cache_all, 'bgctl-cache-all'),
+    )
+    for dest, command in zero_arg_exportname_commands:
+        if dest:
+            encoded_arg = urllib.quote(str(options.local_exportname))
+            return '%s %s' % (command, encoded_arg)
 
     # Single argument commands
     single_arg_commands = (

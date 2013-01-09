@@ -25,6 +25,10 @@ SYNOPSIS
 
 *xnbd-wrapper-ctl* [options] --remove-by-exportname 'NAME'
 
+*xnbd-wrapper-ctl* [options] --local-exportname 'NAME' --bgctl-query
+
+*xnbd-wrapper-ctl* [options] --local-exportname 'NAME' --bgctl-cache-all
+
 
 DESCRIPTION
 -----------
@@ -75,10 +79,16 @@ The following options are supported:
     Set the export name to request from the proxied xnbd-wrapper target.
     This option is used in combination with *--add-proxy*, only.
 
+*--bgctl-cache-all*::
+    Please see xnbd-bgctl(1) for details.
+
+*--bgctl-query*::
+    Please see xnbd-bgctl(1) for details.
+
 
 SEE ALSO
 --------
-xnbd-wrapper(1), xnbd-server(8)
+xnbd-wrapper(1), xnbd-server(8), xnbd-bgctl(1)
 
 
 AUTHOR
