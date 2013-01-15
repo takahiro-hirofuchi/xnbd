@@ -256,6 +256,26 @@ static t_disk_data * get_disk_data_for(const char *local_exportname)
 	return res;
 }
 
+#define G_FREE_SET_NULL(p)  \
+	do { \
+		g_free(p); \
+		p = NULL; \
+	} while(0)
+
+static void mark_proxy_mode_ended(const char * local_exportname)
+{
+	pthread_mutex_lock(&mutex);
+	t_disk_data * const p_disk_data = (t_disk_data *)g_hash_table_lookup(p_disk_dict, local_exportname);
+	if (p_disk_data) {
+		G_FREE_SET_NULL(p_disk_data->proxy.target_host);
+		G_FREE_SET_NULL(p_disk_data->proxy.target_port);
+		G_FREE_SET_NULL(p_disk_data->proxy.bitmap_image);
+		G_FREE_SET_NULL(p_disk_data->proxy.control_socket_path);
+		G_FREE_SET_NULL(p_disk_data->proxy.target_exportname);
+	}
+	pthread_mutex_unlock(&mutex);
+}
+
 static void find_smallest_index_iterator(gpointer key, const t_disk_data * p_disk_data, t_listing_state * p_listing_state) {
 	(void)key;
 
@@ -726,8 +746,19 @@ static void *start_filemgr_thread(void * pointer)
 				perform_shutdown(fp);
 			} else if (strcmp(cmd, "bgctl-query") == 0) {
 				(void)handle_bgctl_command("bgctl-query EXPORTNAME", "--query", 0, buf, fp, p_thread_data->xnbd_bgctl_path, NULL, p_thread_data->p_child_process_count);
+			} else if (strcmp(cmd, "bgctl-shutdown") == 0) {
+				char * local_exportname = NULL;
+				const int return_code = handle_bgctl_command("bgctl-shutdown EXPORTNAME", "--shutdown", 0, buf, fp, p_thread_data->xnbd_bgctl_path, &local_exportname, p_thread_data->p_child_process_count);
+				if (return_code == 0) {
+					mark_proxy_mode_ended(local_exportname);
+				}
+				g_free(local_exportname);
 			} else if (strcmp(cmd, "bgctl-cache-all") == 0) {
 				(void)handle_bgctl_command("bgctl-cache-all EXPORTNAME", "--cache-all", 0, buf, fp, p_thread_data->xnbd_bgctl_path, NULL, p_thread_data->p_child_process_count);
+			} else if (strcmp(cmd, "bgctl-cache-all2") == 0) {
+				(void)handle_bgctl_command("bgctl-cache-all2 EXPORTNAME", "--cache-all2", 0, buf, fp, p_thread_data->xnbd_bgctl_path, NULL, p_thread_data->p_child_process_count);
+			} else if (strcmp(cmd, "bgctl-reconnect") == 0) {
+				(void)handle_bgctl_command("bgctl-reconnect EXPORTNAME HOST PORT", "--reconnect", 2, buf, fp, p_thread_data->xnbd_bgctl_path, NULL, p_thread_data->p_child_process_count);
 			}
 			else if (strcmp(cmd, "help") == 0)
 				fprintf(fp,
@@ -741,7 +772,10 @@ static void *start_filemgr_thread(void * pointer)
 					"  del-exportname NAME  : delete disk image by export name\n"
 					"\n"
 					"  bgctl-query NAME     : Query status of proxy\n"
+					"  bgctl-shutdown NAME  : Switch from proxy to target mode\n"
 					"  bgctl-cache-all NAME : Instruct proxy to cache all blocks\n"
+					"  bgctl-cache-all2 ... : Instruct proxy to cache all blocks through a dedicated connection\n"
+					"  bgctl-reconnect ...  : Reconnect proxy to a given location\n"
 					"\n"
 					"  shutdown             : terminate all images and shutdown xnbd-wrapper instance\n"
 					"  quit                 : quit (disconnect)\n");
