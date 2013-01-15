@@ -719,17 +719,17 @@ static const char *opt_string = "tpchvl:G:drL:STF:in";
 
 static const char *help_string = "\
 Usage: \n\
-  xnbd-server --target [options] disk_image\n\
-  xnbd-server --cow-target [options] base_disk_image\n\
-  xnbd-server --proxy [options] remote_host remort_port cache_disk_path cache_bitmap_path control_socket_path\n\
+  xnbd-server --target [options] DISK_IMAGE\n\
+  xnbd-server --cow-target [options] BASE_DISK_IMAGE\n\
+  xnbd-server --proxy [options] REMOTE_HOST REMORT_PORT CACHE_DISK_PATH CACHE_BITMAP_PATH CONTROL_SOCKET_PATH\n\
   xnbd-server --help\n\
   xnbd-server --version\n\
 \n\
 Options: \n\
-  --lport port   set the listen port (default: 8520)\n\
+  --lport PORT   set the listen port (default: 8520)\n\
   --daemonize    run as a daemon process\n\
   --readonly     export a disk as readonly\n\
-  --logpath path use the given path for logging (default: stderr)\n\
+  --logpath PATH use the given path for logging (default: stderr)\n\
   --syslog       use syslog for logging\n\
   --inetd        set the inetd mode (use fd 0 for TCP connection)\n\
   --target-exportname\n\
