@@ -164,7 +164,7 @@ int recv_request(struct proxy_session *ps)
 		;
 
 	} else {
-		warn("client bug: uknown iotype");
+		warn("client bug: unknown iotype");
 		goto err_handle;
 	}
 
@@ -503,7 +503,7 @@ int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
 
 			case XNBD_PROXY_CMD_UNKNOWN:
 			default:
-				warn("uknown proxy cmd %d (wrk_fd %d)", cmd, wrk_fd);
+				warn("unknown proxy cmd %d (wrk_fd %d)", cmd, wrk_fd);
 		}
 
 		if (close_wrk_fd)
