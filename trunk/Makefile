@@ -60,10 +60,10 @@ all: default
 
 
 $(XUTILSPATH)/libxutils_dbg.a:
-	$(MAKE_COMMAND) -C $(XUTILSPATH) libxutils_dbg.a
+	$(MAKE) -C $(XUTILSPATH) libxutils_dbg.a
 
 $(XUTILSPATH)/libxutils.a:
-	$(MAKE_COMMAND) -C $(XUTILSPATH) libxutils.a
+	$(MAKE) -C $(XUTILSPATH) libxutils.a
 
 
 $(BINARIES): $(OBJ) $(XUTILSPATH)/libxutils.a
@@ -82,11 +82,11 @@ debug: $(BINARIES_DBG)
 
 .PHONY: manpages
 manpages:
-	$(MAKE_COMMAND) -C $(DOCPATH)
+	$(MAKE) -C $(DOCPATH)
 
 .PHONY: clean install
 clean:
-	$(MAKE_COMMAND) -C $(XUTILSPATH) clean
+	$(MAKE) -C $(XUTILSPATH) clean
 	$(MAKE) -C $(DOCPATH) clean
 	$(RM) -r *.o *.d $(BINARIES) $(BINARIES_DBG)
 
