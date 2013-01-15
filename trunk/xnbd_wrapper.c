@@ -1047,7 +1047,10 @@ int main(int argc, char **argv) {
 				g_log_set_default_handler(custom_log_handler, (void *)&log_params);
 				// fall through
 			default:
-				info(help_string, argv[0]);
+				{
+					FILE * const target = (ch == 'h') ? stdout : stderr;
+					fprintf(target, help_string, argv[0]);
+				}
 
 				if (ch == 'h')
 					return EXIT_SUCCESS;
