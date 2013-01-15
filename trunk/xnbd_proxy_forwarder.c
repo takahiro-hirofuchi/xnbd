@@ -164,6 +164,8 @@ void prepare_write_priv(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 	}
 
 	if (get_start_block) {
+		g_assert(priv->nreq + 1 <= MAXNBLOCK);
+
 		int cur_nreq = priv->nreq;
 		priv->req[cur_nreq].bindex_iofrom = block_index_start;
 		priv->req[cur_nreq].bindex_iolen  = 1;
@@ -175,6 +177,8 @@ void prepare_write_priv(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 	}
 
 	if (get_end_block) {
+		g_assert(priv->nreq + 1 <= MAXNBLOCK);
+
 		int cur_nreq = priv->nreq;
 		priv->req[cur_nreq].bindex_iofrom = block_index_end;
 		priv->req[cur_nreq].bindex_iolen  = 1;
@@ -184,9 +188,6 @@ void prepare_write_priv(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 	} else {
 		cachestat_hit();
 	}
-
-
-	g_assert(priv->nreq < MAXNBLOCK);
 
 
 	/*
