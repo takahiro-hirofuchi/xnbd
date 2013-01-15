@@ -59,26 +59,23 @@ all: default
 	$(COMPILE.c) -MM $< -MQ $@ -MQ $(patsubst %.d, %.o, $@) -MF $@
 
 
-$(XUTILSPATH)/libxutils_dbg.a:
-	$(MAKE) -C $(XUTILSPATH) libxutils_dbg.a
-
-$(XUTILSPATH)/libxutils.a:
-	$(MAKE) -C $(XUTILSPATH) libxutils.a
-
-
-$(BINARIES): $(OBJ) $(XUTILSPATH)/libxutils.a
+$(BINARIES): $(OBJ)
 	$(LINK.c) $(subst -,_,$@).o $(filter-out $(BINARIES_OBJ), $^) $(DEFAULT_BUILD_FLAGS) -o $@
 
 
-$(BINARIES_DBG): $(OBJ_DBG) $(XUTILSPATH)/libxutils_dbg.a
+$(BINARIES_DBG): $(OBJ_DBG)
 	$(LINK.c) $(subst -,_,$(subst -debug,___dbg,$@).o) $(filter-out	$(BINARIES_OBJ_DBG), $^) $(DEBUG_BUILD_FLAGS) -o $@
 
 
 .PHONY: default
-default: $(BINARIES) manpages
+default:
+	$(MAKE) -C $(XUTILSPATH) libxutils.a
+	$(MAKE) $(BINARIES) manpages
 
 .PHONY: debug
-debug: $(BINARIES_DBG)
+debug:
+	$(MAKE) -C $(XUTILSPATH) libxutils_dbg.a
+	$(MAKE) $(BINARIES_DBG)
 
 .PHONY: manpages
 manpages:
