@@ -59,11 +59,11 @@ all: default
 	$(COMPILE.c) -MM $< -MQ $@ -MQ $(patsubst %.d, %.o, $@) -MF $@
 
 
-$(BINARIES): $(OBJ) $(XUTILSPATH)/libxutils.a
+$(BINARIES): $(OBJ)
 	$(LINK.c) $(subst -,_,$@).o $(filter-out $(BINARIES_OBJ), $^) $(DEFAULT_BUILD_FLAGS) -o $@
 
 
-$(BINARIES_DBG): $(OBJ_DBG) $(XUTILSPATH)/libxutils_dbg.a
+$(BINARIES_DBG): $(OBJ_DBG)
 	$(LINK.c) $(subst -,_,$(subst -debug,___dbg,$@).o) $(filter-out	$(BINARIES_OBJ_DBG), $^) $(DEBUG_BUILD_FLAGS) -o $@
 
 
