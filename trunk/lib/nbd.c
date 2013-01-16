@@ -559,8 +559,21 @@ int nbd_negotiate_with_server2(int sockfd, off_t *exportsize, uint32_t *exportfl
 {
 	struct nbd_negotiate_pdu_old pdu;
 
-
-	int ret = net_recv_all_or_error(sockfd, &pdu, sizeof(pdu));
+	/* Since both <nbd_negotiate_pdu_old> and <nbd_negotiate_pdu_new_0>
+	 * share these first 128 bits
+	 *
+	 * struct .... {
+	 *   uint64_t passwd;
+	 *   uint64_t magic;
+	 * } __attribute__((__packed__));
+	 *
+	 * we first read 128 bits only.  From the magic value, we know if
+	 * we're daeling with a wrapper (NBD_NEGOTIATE_MAGIC_NEW) or a
+	 * plain server (NBD_NEGOTIATE_MAGIC_OLD).  That way we can produce
+	 * a more helpful error and save waiting for more bytes without hope.
+	 */
+	const size_t passwd_plus_magic_len = sizeof(uint64_t) + sizeof(uint64_t);
+	int ret = net_recv_all_or_error(sockfd, &pdu, passwd_plus_magic_len);
 	if (ret < 0) {
 		warn("receiving negotiate header failed");
 		return -1;
@@ -571,6 +584,16 @@ int nbd_negotiate_with_server2(int sockfd, off_t *exportsize, uint32_t *exportfl
 		return -1;
 	}
 
+	if (ntohll(pdu.magic) == NBD_NEGOTIATE_MAGIC_NEW) {
+		warn("plain server expected, wrapped server found");
+		return -1;
+	}
+
+	ret = net_recv_all_or_error(sockfd, ((char *)&pdu) + passwd_plus_magic_len, sizeof(pdu) - passwd_plus_magic_len);
+	if (ret < 0) {
+		warn("receiving negotiate header failed");
+		return -1;
+	}
 
 	if (ntohll(pdu.magic) != NBD_NEGOTIATE_MAGIC_OLD) {
 		warn("negotiate magic mismatch");
