@@ -22,9 +22,9 @@
 
 
 
-COMMON_BUILD_FLAGS	?=  -g -O2 -Wall -fstack-protector -fstack-check -Wextra -std=gnu99 `pkg-config --cflags --libs glib-2.0 gthread-2.0`
-DEFAULT_BUILD_FLAGS	= $(COMMON_BUILD_FLAGS)
-DEBUG_BUILD_FLAGS	= $(COMMON_BUILD_FLAGS)
+COMMON_BUILD_FLAGS	?= -Wall -fstack-protector -fstack-check -Wextra -std=gnu99 `pkg-config --cflags --libs glib-2.0 gthread-2.0`
+DEFAULT_BUILD_FLAGS	= -O2 $(COMMON_BUILD_FLAGS)
+DEBUG_BUILD_FLAGS	= -g -O0 $(COMMON_BUILD_FLAGS)
 SRC			:= $(wildcard *.c)
 OBJ			:= $(SRC:%.c=%.o)
 OBJ_DBG			:= $(patsubst %.c, %___dbg.o, $(SRC))

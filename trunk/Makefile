@@ -28,10 +28,10 @@ DOCPATH = ./doc
 XUTILSPATH = ./lib
 
 # -O3 $(MAKE)s a broken binary.
-COMMON_BUILD_FLAGS	:= -g -O2 -Wall -Wextra -Wstrict-aliasing=2 -Wformat=2 -Wcast-align -Wwrite-strings -Wfloat-equal -Wpointer-arith -Wswitch-enum -fstack-protector -fstack-check -std=gnu99 `pkg-config --cflags --libs glib-2.0 gthread-2.0` -I$(XUTILSPATH) -L$(XUTILSPATH)
-DEFAULT_BUILD_FLAGS	:= $(COMMON_BUILD_FLAGS) -lxutils
+COMMON_BUILD_FLAGS	:= -Wall -Wextra -Wstrict-aliasing=2 -Wformat=2 -Wcast-align -Wwrite-strings -Wfloat-equal -Wpointer-arith -Wswitch-enum -fstack-protector -fstack-check -std=gnu99 `pkg-config --cflags --libs glib-2.0 gthread-2.0` -I$(XUTILSPATH) -L$(XUTILSPATH)
+DEFAULT_BUILD_FLAGS	:= -O2 $(COMMON_BUILD_FLAGS) -lxutils
 # -DCACHESTAT_ENABLED does not work.
-DEBUG_BUILD_FLAGS	:= $(COMMON_BUILD_FLAGS) -lxutils_dbg -DXNBD_DEBUG
+DEBUG_BUILD_FLAGS	:= -g -O0 $(COMMON_BUILD_FLAGS) -lxutils_dbg -DXNBD_DEBUG
 
 SRC			:= $(wildcard *.c)
 # xnbd-cachestatdump is out-of-date.
