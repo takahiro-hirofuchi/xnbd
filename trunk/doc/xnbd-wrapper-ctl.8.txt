@@ -27,13 +27,7 @@ SYNOPSIS
 
 *xnbd-wrapper-ctl* [options] --local-exportname 'NAME' --bgctl-query
 
-*xnbd-wrapper-ctl* [options] --local-exportname 'NAME' --bgctl-shutdown
-
 *xnbd-wrapper-ctl* [options] --local-exportname 'NAME' --bgctl-cache-all
-
-*xnbd-wrapper-ctl* [options] --local-exportname 'NAME' --bgctl-cache-all2
-
-*xnbd-wrapper-ctl* [options] --local-exportname 'NAME' --bgctl-reconnect 'REMOTE_HOST' 'REMOTE_PORT'
 
 
 DESCRIPTION
@@ -88,16 +82,7 @@ The following options are supported:
 *--bgctl-cache-all*::
     Please see xnbd-bgctl(1) for details.
 
-*--bgctl-cache-all2*::
-    Please see xnbd-bgctl(1) for details.
-
 *--bgctl-query*::
-    Please see xnbd-bgctl(1) for details.
-
-*--bgctl-reconnect* 'REMOTE_HOST' 'REMOTE_PORT'::
-    Please see xnbd-bgctl(1) for details.
-
-*--bgctl-shutdown*::
     Please see xnbd-bgctl(1) for details.
 
 

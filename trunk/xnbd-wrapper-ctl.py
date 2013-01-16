@@ -104,10 +104,7 @@ def parse_command_line(argv):
   %(prog)s [-s SOCKPATH] --shutdown
 
   %(prog)s [-s SOCKPATH] --local-exportname NAME --bgctl-query
-  %(prog)s [-s SOCKPATH]            ''           --bgctl-shutdown
-  %(prog)s [-s SOCKPATH]            ''           --bgctl-cache-all
-  %(prog)s [-s SOCKPATH]            ''           --bgctl-cache-all2
-  %(prog)s [-s SOCKPATH] --local-exportname NAME --bgctl-reconnect REMOTE_HOST REMOTE_PORT
+  %(prog)s [-s SOCKPATH] --local-exportname NAME --bgctl-cache-all
 """)
 
     operations = parser.add_mutually_exclusive_group(required=True)
@@ -133,14 +130,8 @@ def parse_command_line(argv):
 
     operations.add_argument("--bgctl-query", action='store_true',
                         help="query current status of the proxy mode.")
-    operations.add_argument("--bgctl-shutdown", action='store_true',
-                        help="cache all blocks.")
     operations.add_argument("--bgctl-cache-all", action='store_true',
                         help="cache all blocks with the background connection.")
-    operations.add_argument("--bgctl-cache-all2", action='store_true',
-                        help="shutdown the proxy mode and start the target mode.")
-    operations.add_argument("--bgctl-reconnect", metavar=['REMOTE_HOST', 'REMOTE_PORT'], nargs=2,
-                        help="reconnect the forwarding session.")
 
     parser.add_argument("--local-exportname", metavar='NAME',
                         help="set the export name to export the image as.")
@@ -153,7 +144,7 @@ def parse_command_line(argv):
         print('%s: error: Argument --target-exportname is only supported in combination with --add-proxy.' % prog(argv[0]), file=sys.stderr)
         sys.exit(1)
 
-    if any([options.bgctl_query, options.bgctl_shutdown, options.bgctl_cache_all, options.bgctl_cache_all2, options.bgctl_reconnect]) \
+    if any([options.bgctl_query, options.bgctl_cache_all]) \
             and not options.local_exportname:
         print('%s: error: Arguments --bgctl-* need to be used with --local_exportname NAME.' % prog(argv[0]), file=sys.stderr)
         sys.exit(1)
@@ -173,9 +164,7 @@ def compose_command(options, argv):
 
     zero_arg_exportname_commands = (
         (options.bgctl_query, 'bgctl-query'),
-        (options.bgctl_shutdown, 'bgctl-shutdown'),
         (options.bgctl_cache_all, 'bgctl-cache-all'),
-        (options.bgctl_cache_all2, 'bgctl-cache-all2'),
     )
     for dest, command in zero_arg_exportname_commands:
         if dest:
@@ -215,12 +204,6 @@ def compose_command(options, argv):
         args.append(options.add)
 
         return 'add %s' % ' '.join(percent_encode(args))
-    elif options.bgctl_reconnect:
-        args = []
-        args.append(options.local_exportname)
-        args.extend(options.bgctl_reconnect)
-
-        return 'bgctl-reconnect %s' % ' '.join(percent_encode(args))
 
     assert False, 'Internal error, no command used'
 
