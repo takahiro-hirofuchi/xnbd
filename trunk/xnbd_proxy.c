@@ -565,9 +565,7 @@ void xnbd_proxy_stop(struct xnbd_info *xnbd)
 	write_all(xnbd->proxy_sockpair_master_fd, "", 1);
 	close(xnbd->proxy_sockpair_master_fd);
 
-	int ret;
-	ret = waitpid(xnbd->proxy_pid, NULL, 0);
-	if (ret < 0)
+	if (wait_for_process_termination(xnbd->proxy_pid) < 0)
 		err("waitpid %d, %m", xnbd->proxy_pid);
 
 	info("xnbd_proxy (pid %d) exited", xnbd->proxy_pid);

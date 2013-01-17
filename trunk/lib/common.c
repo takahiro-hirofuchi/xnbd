@@ -208,3 +208,19 @@ void set_process_name(const char *name)
 	if (ret < 0)
 		warn("set_name %m");
 }
+
+#include <sys/types.h>
+#include <sys/wait.h>
+
+int wait_for_process_termination(int pid) {
+	int ret;
+	int status;
+	for (;;) {
+		ret = waitpid(pid, &status, 0);
+		if ((ret < 0)
+				|| WIFEXITED(status)
+				|| WIFSIGNALED(status)) {
+			return ret;
+		}
+	}
+}
