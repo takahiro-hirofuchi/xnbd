@@ -1125,8 +1125,11 @@ int main(int argc, char **argv) {
 
 	for (;;) {
 		int num_of_fds = epoll_wait(epoll_fd, ep_events, MAX_EVENTS, -1);
-			if (num_of_fds == -1)
-				err("epoll_wait : %m");
+		if (num_of_fds == -1) {
+			if (errno == EINTR)
+				continue;
+			err("epoll_wait : %m");
+		}
 		for (int c_ev = 0; c_ev < num_of_fds; c_ev++) {
 			if (ep_events[c_ev].data.fd == sigfd) {
 				/* signalfd */
