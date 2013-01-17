@@ -541,7 +541,7 @@ int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
 
 			ret = write(ps->wrk_fd, "", 1);
 			if (ret < 0)
-				err("notify the worker process, %m");
+				warn("notifying the worker process failed: %m");
 
 			close(ps->wrk_fd);
 			conn_list = g_list_remove(conn_list, ps);
