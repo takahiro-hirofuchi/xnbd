@@ -104,6 +104,7 @@ def parse_command_line(argv):
   %(prog)s [-s SOCKPATH] --shutdown
 
   %(prog)s [-s SOCKPATH] --local-exportname NAME --bgctl-query
+  %(prog)s [-s SOCKPATH]            ''           --bgctl-shutdown
   %(prog)s [-s SOCKPATH] --local-exportname NAME --bgctl-cache-all
 """)
 
@@ -130,6 +131,8 @@ def parse_command_line(argv):
 
     operations.add_argument("--bgctl-query", action='store_true',
                         help="query current status of the proxy mode.")
+    operations.add_argument("--bgctl-shutdown", action='store_true',
+                        help="cache all blocks.")
     operations.add_argument("--bgctl-cache-all", action='store_true',
                         help="cache all blocks with the background connection.")
 
@@ -144,7 +147,7 @@ def parse_command_line(argv):
         print('%s: error: Argument --target-exportname is only supported in combination with --add-proxy.' % prog(argv[0]), file=sys.stderr)
         sys.exit(1)
 
-    if any([options.bgctl_query, options.bgctl_cache_all]) \
+    if any([options.bgctl_query, options.bgctl_shutdown, options.bgctl_cache_all]) \
             and not options.local_exportname:
         print('%s: error: Arguments --bgctl-* need to be used with --local_exportname NAME.' % prog(argv[0]), file=sys.stderr)
         sys.exit(1)
@@ -164,6 +167,7 @@ def compose_command(options, argv):
 
     zero_arg_exportname_commands = (
         (options.bgctl_query, 'bgctl-query'),
+        (options.bgctl_shutdown, 'bgctl-shutdown'),
         (options.bgctl_cache_all, 'bgctl-cache-all'),
     )
     for dest, command in zero_arg_exportname_commands:
