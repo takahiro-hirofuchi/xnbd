@@ -311,7 +311,7 @@ void shutdown_all_sessions(struct xnbd_info *xnbd)
 			warn("notifiy failed");
 
 		/* if everything goes well, we do not need to send SIGKILL */
-		ret = wait_for_process_termination(s->pid);
+		ret = waitpid(s->pid, NULL, 0);
 		if (ret < 0)
 			err("waitpid %d, %m", s->pid);
 
@@ -486,11 +486,6 @@ int master_server(int port, void *data, int connect_fd)
 				 * remains one or more running process(es). */
 				if (pid == 0)
 					break;
-
-				if (! WIFEXITED(status) && ! WIFSIGNALED(status)) {
-					/* not a process termination */
-					continue;
-				}
 
 				if (xnbd->cmd == xnbd_cmd_proxy)
 					if (pid == xnbd->proxy_pid)
