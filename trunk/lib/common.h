@@ -93,7 +93,6 @@ void custom_log_handler(const gchar   *log_domain, GLogLevelFlags log_level,
 #endif
 
 void set_process_name(const char *name);
-int wait_for_process_termination(int pid);
 
 
 #if _FILE_OFFSET_BITS == 64
