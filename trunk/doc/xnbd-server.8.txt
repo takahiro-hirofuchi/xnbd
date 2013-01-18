@@ -91,9 +91,14 @@ The following options are supported:
     Export the image file as read-only. If a client sends a write
     request, it will receive an error, but the connection will stay up.
 
+
+OPTIONS (proxy mode only)
+-------------------------
 *--target-exportname* 'NAME'::
-    Set the export name to request from an xnbd-wrapper target. This
-    option is used in combination with *--proxy*, only.
+    Set the export name to request from an xnbd-wrapper target.
+
+*--clear-bitmap*::
+    Clear an existing bitmap file.  By default, previous state is re-used.
 
 
 SIGNALS

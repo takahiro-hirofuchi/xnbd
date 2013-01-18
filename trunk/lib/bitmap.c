@@ -96,6 +96,10 @@ unsigned long *bitmap_open_file(const char *bitmapfile, unsigned long bits, size
 			if (size != buflen)
 				err("bitmap size mismatch, %ju %zu", size, buflen);
 		} else {
+			if (get_disksize(fd) == 0) {
+				zeroclear = 1;  /* ensure proper initialization on initial creation */
+			}
+
 			int ret = ftruncate(fd, buflen);
 			if (ret < 0)
 				err("ftruncate %m");
@@ -116,6 +120,8 @@ unsigned long *bitmap_open_file(const char *bitmapfile, unsigned long bits, size
 		if (zeroclear) {
 			info("bitmap file %s zero-cleared", bitmapfile);
 			bzero(buf, buflen);
+		} else {
+			info("re-using previous state from bitmap file %s", bitmapfile);
 		}
 
 		/* get disk space for bitmap */

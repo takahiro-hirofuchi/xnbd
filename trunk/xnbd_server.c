@@ -711,6 +711,7 @@ static struct option longopts[] = {
 	{"connected-fd", required_argument, NULL, 'F'},
 	{"inetd", no_argument, NULL, 'i'},
 	{"target-exportname", required_argument, NULL, 'n'},
+	{"clear-bitmap", no_argument, NULL, 'z'},
 	{NULL, 0, NULL, 0},
 };
 
@@ -732,8 +733,11 @@ Options: \n\
   --logpath PATH use the given path for logging (default: stderr)\n\
   --syslog       use syslog for logging\n\
   --inetd        set the inetd mode (use fd 0 for TCP connection)\n\
+\n\
+Proxy mode only:\n\
   --target-exportname\n\
-                 set the export name to request from a xnbd-wrapper target (used with --proxy)\n\
+                 set the export name to request from a xnbd-wrapper target\n\
+  --clear-bitmap clear an existing bitmap file (default: re-use previous state)\n\
 ";
 
 
@@ -962,6 +966,10 @@ int main(int argc, char **argv) {
 
 			case 'n':
 				xnbd.proxy_target_exportname = optarg;
+				break;
+
+			case 'z':
+				xnbd.proxy_clear_bitmap = true;
 				break;
 
 			case '?':

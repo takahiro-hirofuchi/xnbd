@@ -236,7 +236,7 @@ void proxy_initialize(struct xnbd_info *xnbd, struct xnbd_proxy *proxy)
 
 
 	/* set up a bitmap and a cache disk */
-	proxy->cbitmap = bitmap_open_file(xnbd->proxy_bmpath, xnbd->nblocks, &proxy->cbitmaplen, 0, 1);
+	proxy->cbitmap = bitmap_open_file(xnbd->proxy_bmpath, xnbd->nblocks, &proxy->cbitmaplen, 0, xnbd->proxy_clear_bitmap ? 1 : 0);
 
 	int cachefd = open(xnbd->proxy_diskpath, O_RDWR | O_CREAT | O_NOATIME, S_IRUSR | S_IWUSR);
 	if (cachefd < 0)

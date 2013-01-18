@@ -38,6 +38,7 @@
 
 
 #include <inttypes.h>
+#include <stdbool.h>
 
 #include <unistd.h>
 #include <strings.h>
@@ -165,6 +166,7 @@ struct xnbd_info {
 	char *proxy_rport;
 	char *proxy_unixpath;
 	char *proxy_target_exportname;  /* export name to request from a xnbd-wrapper target */
+	bool proxy_clear_bitmap;
 
 	/* 
 	 * NOTE: when invoking a new thread, must close the master_fds of the
