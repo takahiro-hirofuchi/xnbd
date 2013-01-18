@@ -39,12 +39,23 @@ struct xnbd_proxy_query *create_proxy_query(char *unix_path)
 	return query;
 }
 
-void reconnect(char *unix_path, char *rhost, char *rport)
+void reconnect(char *unix_path, char *rhost, char *rport, const char *exportname)
 {
 	int fd = unix_connect(unix_path);
 
 	int fwd_fd = net_connect(rhost, rport, SOCK_STREAM, IPPROTO_TCP);
-	nbd_negotiate_with_server(fwd_fd);
+
+	int ret;
+	off_t size_dummy;
+	if (exportname) {
+		ret = nbd_negotiate_with_server_new(fwd_fd, &size_dummy, NULL, strlen(exportname), exportname);
+	} else {
+		ret = nbd_negotiate_with_server2(fwd_fd, &size_dummy, NULL);
+	}
+
+	if (ret) {
+		err("negotiation failed");
+	}
 
 	enum xnbd_proxy_cmd_type cmd = XNBD_PROXY_CMD_REGISTER_FORWARDER_FD;
 	net_send_all_or_abort(fd, &cmd, sizeof(cmd));
@@ -283,16 +294,17 @@ static struct option longopts[] = {
 	{"cache-all2", no_argument, NULL, 'C'},
 	{"reconnect",  no_argument, NULL, 'r'},
 	{"help",       no_argument, NULL, 'h'},
+	{"exportname", required_argument, NULL, 'n'},
 	{NULL, 0, NULL, 0},
 };
 
 static const char *help_string = "\
 Usage:\n\
-  xnbd-bgctl --query       CONTROL_UNIX_SOCKET\n\
-  xnbd-bgctl --shutdown    CONTROL_UNIX_SOCKET\n\
-  xnbd-bgctl --cache-all   CONTROL_UNIX_SOCKET\n\
-  xnbd-bgctl --cache-all2  CONTROL_UNIX_SOCKET\n\
-  xnbd-bgctl --reconnect   CONTROL_UNIX_SOCKET REMOTE_HOST REMOTE_PORT\n\
+  xnbd-bgctl                     --query       CONTROL_UNIX_SOCKET\n\
+  xnbd-bgctl                     --shutdown    CONTROL_UNIX_SOCKET\n\
+  xnbd-bgctl                     --cache-all   CONTROL_UNIX_SOCKET\n\
+  xnbd-bgctl                     --cache-all2  CONTROL_UNIX_SOCKET\n\
+  xnbd-bgctl [--exportname NAME] --reconnect   CONTROL_UNIX_SOCKET REMOTE_HOST REMOTE_PORT\n\
 \n\
 Commands:\n\
   --query       query current status of the proxy mode\n\
@@ -300,6 +312,9 @@ Commands:\n\
   --cache-all2  cache all blocks with the background connection\n\
   --shutdown    shutdown the proxy mode and start the target mode\n\
   --reconnect   reconnect the forwarding session\n\
+\n\
+Options:\n\
+  --exportname  image to request from a wrapped server\n\
 ";
 
 
@@ -324,6 +339,8 @@ int main(int argc, char **argv)
 		xnbd_bgctl_cmd_shutdown,
 		xnbd_bgctl_cmd_reconnect,
 	} cmd = xnbd_bgctl_cmd_unknown;
+
+	const char * exportname = NULL;
 
 	for (;;) {
 		int c;
@@ -371,6 +388,10 @@ int main(int argc, char **argv)
 
 			case 'h':
 				show_help_and_exit(NULL);
+				break;
+
+			case 'n':
+				exportname = optarg;
 				break;
 
 			case '?':
@@ -447,7 +468,7 @@ int main(int argc, char **argv)
 			break;
 
 		case xnbd_bgctl_cmd_reconnect:
-			reconnect(unix_path, rhost, rport);
+			reconnect(unix_path, rhost, rport, exportname);
 			break;
 
 		default:

@@ -20,7 +20,7 @@ SYNOPSIS
 
 *xnbd-bgctl* --cache-all2 'CONTROL_SOCKET'
 
-*xnbd-bgctl* --reconnect 'CONTROL_SOCKET' 'REMOTE_HOST' 'REMOTE_PORT'
+*xnbd-bgctl* [--exportname 'NAME'] --reconnect 'CONTROL_SOCKET' 'REMOTE_HOST' 'REMOTE_PORT'
 
 
 DESCRIPTION
@@ -60,6 +60,11 @@ The following options are supported:
     This command stops the proxy server and restarts the target server.
     All client sessions are preserved.
 
+*--exportname* 'NAME'::
+    If the server supports to access devices by an identifier, use 'NAME'
+    to request access to a particular volume. This command is useful in
+    combination with an xnbd-wrapper, not a plain xnbd-server.
+
 
 POSITIONAL ARGUMENTS
 --------------------
@@ -71,7 +76,7 @@ The following positional options are supported:
 
 SEE ALSO
 --------
-xnbd-server(8)
+xnbd-server(8), xnbd-wrapper(8), xnbd-wrapper-ctl(8)
 
 
 AUTHOR
