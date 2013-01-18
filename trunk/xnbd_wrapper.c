@@ -1146,7 +1146,7 @@ int main(int argc, char **argv) {
 				} else if (sfd_siginfo.ssi_signo == SIGCHLD) {
 					if ((cpid = waitpid(-1, &cstatus, WNOHANG)) == -1)
 						warn("waitpid : %m");
-					if (WIFEXITED(cstatus)) 
+					else if (WIFEXITED(cstatus)) 
 						warn("pid %ld : exit status %d", (long)cpid, WEXITSTATUS(cstatus));
 
 					pthread_mutex_lock(&mutex);
