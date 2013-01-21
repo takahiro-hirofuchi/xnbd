@@ -421,7 +421,7 @@ static int net_iov_all(int fd, struct iovec *iov, int count, int reading)
 				int rest_in_block = expected - sent;
 				// int sent_in_block = iov[i].iov_len - rest_in_block;
 				int sent_in_block = next_iov[i].iov_len - rest_in_block;
-				next_iov[i].iov_base += sent_in_block;
+				next_iov[i].iov_base = (char *)next_iov[i].iov_base + sent_in_block;
 				next_iov[i].iov_len  = rest_in_block;
 
 				/* next iovec */
