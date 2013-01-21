@@ -508,8 +508,11 @@ int master_server(int port, void *data, int connect_fd)
 					info("   killed by signal=%d(%s)", WTERMSIG(status), sys_siglist[WTERMSIG(status)]);
 			}
 
-			if (connect_fd != -1) {
-				info("Using connect_fd. No need to wait for the next event");
+			const bool single_client_at_most = (connect_fd != -1);
+			const bool restart_in_progress = (restarting_for_mode_change || restarting_for_snapshot);
+			const bool sessions_running = (g_list_length(xnbd->sessions) > 0);
+			if (single_client_at_most && ! restart_in_progress && ! sessions_running) {
+				info("Using connect_fd. The only client/worker is done, starting to terminate altogether");
 				break;
 			}
 		}
