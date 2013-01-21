@@ -132,6 +132,14 @@ static t_disk_data * copy_disk_data(const t_disk_data * source) {
 	return NULL;
 }
 
+static void inform_xnbd_server_termination(pid_t pid, int status) {
+	if (WIFEXITED(status)) {
+		warn("pid %ld : exit status %d", (long)pid, WEXITSTATUS(status));
+	} else if (WIFSIGNALED(status)) {
+		warn("pid %ld : terminated by signal %d", (long)pid, WTERMSIG(status));
+	}
+}
+
 static void execv_or_abort(const char * const * argv)
 {
 #ifdef XNBD_DEBUG
@@ -540,17 +548,12 @@ static int count_mgr_threads(int val)
 	return ret;
 }
 
-static pid_t invoke_bgctl(int * p_child_process_count, const char * xnbd_bgctl_path, FILE * fp,
+static pid_t invoke_bgctl(const char * xnbd_bgctl_path, FILE * fp,
 		const char * control_socket_path, const char * mode, const char * p1, const char * p2)
 {
 	const pid_t pid = fork();
 	if (pid != 0) {
 		/* Inside parent process */
-		if (pid != -1) {
-			pthread_mutex_lock(&mutex);
-			(*p_child_process_count)++;
-			pthread_mutex_unlock(&mutex);
-		}
 		return pid;
 	}
 
@@ -607,28 +610,56 @@ static int handle_bgctl_command(const char * usage, const char * mode, unsigned 
 					const char * const p1 = (argc > 2) ? argv[2] : NULL;
 					const char * const p2 = (argc > 3) ? argv[3] : NULL;
 
-					const pid_t bgctl_pid = invoke_bgctl(p_child_process_count, xnbd_bgctl_path, fp, p_disk_data->proxy.control_socket_path, mode, p1, p2);
+					/* Synchronize all of fork, exec, waitpid so that a catchall waitpid
+					 * in another thread does not steal our xnbd-bgctl exit code */
+					pthread_mutex_lock(&mutex);
+
+					const pid_t bgctl_pid = invoke_bgctl(xnbd_bgctl_path, fp, p_disk_data->proxy.control_socket_path, mode, p1, p2);
+					if (bgctl_pid != -1) {
+						(*p_child_process_count)++;
+						info("child_process_count++ : %d  (forked to execute xnbd-bgctl)", (*p_child_process_count));
+					}
 
 					/* Wait for child process termination */
 					if (bgctl_pid == -1) {
 						fprintf(fp, "xnbd-bgctl could not be executed.\n");
 					} else {
 						int status = -1;
-						do {
-							(void)waitpid(bgctl_pid, &status, 0);
-						} while (! (WIFEXITED(status) || WIFSIGNALED(status)));
+						for (;;) {
+							const pid_t waitpid_res = waitpid(-1, &status, 0);
+							if (waitpid_res == -1) {
+								warn("waiting for xnbd-bgctl(%d), waitpid : %m", bgctl_pid);
+								break;
+							}
 
-						if (WIFEXITED(status)) {
-							return_code = (unsigned char)(WEXITSTATUS(status));
-						} else {
-							assert(WIFSIGNALED(status));
-							return_code = (unsigned char)(128 + WTERMSIG(status));
-						}
+							(*p_child_process_count)--;
 
-						if (return_code != 0) {
-							fprintf(fp, "Execution of xnbd-bgctl failed with code %d.\n", return_code);
+							if (waitpid_res == bgctl_pid) {
+								info("child_process_count-- : %d  (xnbd-bgctl terminated)", (*p_child_process_count));
+
+								if (WIFEXITED(status)) {
+									return_code = (unsigned char)(WEXITSTATUS(status));
+								} else {
+									assert(WIFSIGNALED(status));
+									return_code = (unsigned char)(128 + WTERMSIG(status));
+								}
+
+								if (return_code != 0) {
+									fprintf(fp, "Execution of xnbd-bgctl failed with code %d.\n", return_code);
+								}
+
+								/* Leave anything else to the the SIGCHLD handler in the other thread */
+								raise(SIGCHLD);
+								break;
+							} else {
+								inform_xnbd_server_termination(waitpid_res, status);
+
+								info("child_process_count-- : %d  (xnbd-served terminated)", (*p_child_process_count));
+							}
 						}
 					}
+
+					pthread_mutex_unlock(&mutex);
 				}
 				destroy_value(p_disk_data);
 			}
@@ -1172,14 +1203,27 @@ int main(int argc, char **argv) {
 					unlink(ctl_path);
 					exit(EXIT_SUCCESS);
 				} else if (sfd_siginfo.ssi_signo == SIGCHLD) {
-					if ((cpid = waitpid(-1, &cstatus, WNOHANG)) == -1)
-						warn("waitpid : %m");
-					else if (WIFEXITED(cstatus)) 
-						warn("pid %ld : exit status %d", (long)cpid, WEXITSTATUS(cstatus));
-
+					/* Synchronize waitpid so that our catchall waitpid does
+					 * not steal the xnbd-bgctl exit code of another thread */
 					pthread_mutex_lock(&mutex);
-					child_process_count--;
-					info("child_process_count : %d", child_process_count);
+
+					for (;;) {
+						/* Loop since a single SIGCHLD may indicate multiple terminated children
+						* .. or we end up with zombie xnbd-server child processes */
+						cpid = waitpid(-1, &cstatus, WNOHANG);
+						if (cpid < 1) {
+							/* No problem
+							 * cpid ==  0: another thread's waitpid has handled this SIGCHLD for us, already
+							 * cpid == -1: no more child processes, caused by self-induced SIGCHLD */
+							break;
+						}
+
+						inform_xnbd_server_termination(cpid, cstatus);
+
+						child_process_count--;
+						info("child_process_count-- : %d  (xnbd-server terminated)", child_process_count);
+					}
+
 					pthread_mutex_unlock(&mutex);
 				}
 			} else if (ep_events[c_ev].data.fd == ux_sockfd) {
@@ -1270,7 +1314,7 @@ int main(int argc, char **argv) {
 
 					pthread_mutex_lock(&mutex);
 					child_process_count++;
-					info("child_process_count : %d", child_process_count);
+					info("child_process_count++ : %d  (forked to execute xnbd-server)", child_process_count);
 					pthread_mutex_unlock(&mutex);
 
 					info("fork: pid %ld", (long)pid);
