@@ -26,6 +26,7 @@ AC_CHECK_HEADERS([arpa/inet.h fcntl.h inttypes.h netdb.h netinet/in.h stdlib.h s
 
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_CHECK_HEADER_STDBOOL
+AC_HEADER_STDBOOL
 AC_C_INLINE
 AC_TYPE_OFF_T
 AC_TYPE_PID_T
