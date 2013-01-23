@@ -990,6 +990,7 @@ int main(int argc, char **argv) {
 	struct epoll_event sigfd_ev, uxfd_ev, tcpfd_ev, ep_events[MAX_EVENTS];
 	int epoll_fd;
 
+	set_process_name("xnbd-wrapper");
 
 	struct option longopts[] = {
 		{"imgfile",     required_argument, NULL, 'f'},
