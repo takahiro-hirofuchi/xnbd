@@ -828,6 +828,8 @@ int main(int argc, char **argv) {
 
 	bzero(&xnbd, sizeof(xnbd));
 
+	set_process_name("xnbd-server");
+
 
 	/* First, scan the options that effect the way of logging. */
 	for (;;) {
