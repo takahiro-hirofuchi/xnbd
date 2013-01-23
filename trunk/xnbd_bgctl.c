@@ -22,6 +22,19 @@
  */
 
 #include "xnbd_proxy.h"
+#include <assert.h>
+#include <sys/ioctl.h>
+
+
+struct progress_info {
+	unsigned long blocks_total;
+	unsigned long blocks_from_cache;
+	unsigned long blocks_from_remote;
+
+	unsigned int prev_cells_from_cache;
+	unsigned int prev_cells_from_remote;
+	unsigned int prev_int_percent;
+};
 
 
 struct xnbd_proxy_query *create_proxy_query(char *unix_path)
@@ -227,7 +240,94 @@ void *cache_all_blocks_receiver_main(void *arg)
 	return NULL;
 }
 
-void cache_all_blocks_async(char *unix_path, unsigned long *bm, unsigned long nblocks)
+
+void refresh_progress(struct progress_info * p_progress, unsigned int columns) {
+	const unsigned int overhead = 3 + 3 + 1; /* <percent> + "% [" + "]" */
+
+	if (columns < overhead + 1) {
+		/* Terminal too small */
+		return;
+	}
+
+	assert(p_progress);
+	assert(p_progress->blocks_from_remote <= p_progress->blocks_total);
+	assert(p_progress->blocks_from_cache <= p_progress->blocks_total);
+	const unsigned long blocks_processed = p_progress->blocks_from_cache + p_progress->blocks_from_remote;
+	assert(blocks_processed <= p_progress->blocks_total);
+
+	/* Handle int cast rounding trouble */
+	const double double_percent = blocks_processed / (double)p_progress->blocks_total * 100.0;
+	unsigned int int_percent = (unsigned int)double_percent;
+	if ((double_percent > 0.0) && (double_percent < 1.0)) {
+		int_percent = 1;
+	} else if ((double_percent > 99.0) && (double_percent < 100.0)) {
+		int_percent = 99;
+	}
+
+	const unsigned int cells_total = columns - overhead;
+	unsigned int cells_from_remote = (unsigned int)(p_progress->blocks_from_remote / (double)p_progress->blocks_total * cells_total);
+	unsigned int cells_from_cache = (unsigned int)(p_progress->blocks_from_cache / (double)p_progress->blocks_total * cells_total);
+	const unsigned int cells_from_anywhere = (unsigned int)(blocks_processed / (double)p_progress->blocks_total * cells_total);
+
+	/* Make sure that integer division does not make the bar appear too short */
+	if (cells_from_cache + cells_from_remote < cells_from_anywhere) {
+		cells_from_remote = cells_from_anywhere - cells_from_cache;
+	}
+	assert(cells_from_cache + cells_from_remote <= cells_total);
+
+	/* Steal space for moving arrow '>' */
+	if (cells_from_cache > 0) {
+		cells_from_cache--;
+	} else if (cells_from_remote > 0) {
+		cells_from_remote--;
+	}
+
+	if ((cells_from_cache == p_progress->prev_cells_from_cache)
+			&& (cells_from_remote == p_progress->prev_cells_from_remote)
+			&& (int_percent == p_progress->prev_int_percent)
+			&& (blocks_processed != 0)
+			&& (blocks_processed != p_progress->blocks_total)) {
+		/* Save printing same bar again, big speed up */
+		return;
+	}
+
+
+	/* Draw into buffer */
+	char progress_bar[cells_total + 1];
+	unsigned int array_u = 0;
+	unsigned int u;
+
+	for (u = 0; u < cells_from_cache; u++) {
+		progress_bar[array_u++] = '+';
+	}
+	for (u = 0; u < cells_from_remote; u++) {
+		progress_bar[array_u++] = '=';
+	}
+
+	progress_bar[array_u++] = '>';
+
+	const unsigned int cells_blank = cells_total - (cells_from_cache + cells_from_remote + 1);
+	for (u = 0; u < cells_blank; u++) {
+		progress_bar[array_u++] = ' ';
+	}
+
+	progress_bar[array_u++] = '\0';
+
+
+	/* Flush buffer to screen */
+	FILE * const target = stderr;
+	fprintf(target, "\r%3d%% [%s]%s", int_percent, progress_bar,
+		   (blocks_processed == p_progress->blocks_total) ? "\n" : "");
+	fflush(target);
+
+
+	p_progress->prev_cells_from_cache = cells_from_cache;
+	p_progress->prev_cells_from_remote = cells_from_remote;
+	p_progress->prev_int_percent = int_percent;
+}
+
+
+void cache_all_blocks_async(char *unix_path, unsigned long *bm, unsigned long nblocks, bool progress_enabled)
 {
 	int unix_fd, ctl_fd;
 	start_register_fd(unix_path, &unix_fd, &ctl_fd);
@@ -237,8 +337,25 @@ void cache_all_blocks_async(char *unix_path, unsigned long *bm, unsigned long nb
 	cache_rx.q      = g_async_queue_new();
 	pthread_t cache_rx_tid = pthread_create_or_abort(cache_all_blocks_receiver_main, &cache_rx);
 
+
+	struct progress_info progress;
+	bzero(&progress, sizeof(progress));
+	progress.blocks_total = nblocks;
+
+	struct winsize terminal_size;
+	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &terminal_size) != 0) {
+		terminal_size.ws_col = 0;
+	}
+
+
 	for (unsigned long index = 0; index < nblocks; index++) {
+		if (progress_enabled) {
+			refresh_progress(&progress, terminal_size.ws_col);
+		}
+
 		if (!bitmap_test(bm, index)) {
+			progress.blocks_from_remote++;
+
 			off_t iofrom = (off_t) index * CBLOCKSIZE;
 			// size_t iolen = nblocks * CBLOCKSIZE;
 			size_t iolen = CBLOCKSIZE;
@@ -248,7 +365,13 @@ void cache_all_blocks_async(char *unix_path, unsigned long *bm, unsigned long nb
 				err("send_read_request, %m");
 
 			g_async_queue_push(cache_rx.q, &cache_rx_req_data);
+		} else {
+			progress.blocks_from_cache++;
 		}
+	}
+
+	if (progress_enabled) {
+		refresh_progress(&progress, terminal_size.ws_col);
 	}
 
 	g_async_queue_push(cache_rx.q, &cache_rx_req_eof);
@@ -295,6 +418,7 @@ static struct option longopts[] = {
 	{"reconnect",  no_argument, NULL, 'r'},
 	{"help",       no_argument, NULL, 'h'},
 	{"exportname", required_argument, NULL, 'n'},
+	{"progress",   no_argument, NULL, 'p'},
 	{NULL, 0, NULL, 0},
 };
 
@@ -302,7 +426,7 @@ static const char *help_string = "\
 Usage:\n\
   xnbd-bgctl                     --query       CONTROL_UNIX_SOCKET\n\
   xnbd-bgctl                     --shutdown    CONTROL_UNIX_SOCKET\n\
-  xnbd-bgctl                     --cache-all   CONTROL_UNIX_SOCKET\n\
+  xnbd-bgctl [--progress]        --cache-all   CONTROL_UNIX_SOCKET\n\
   xnbd-bgctl                     --cache-all2  CONTROL_UNIX_SOCKET\n\
   xnbd-bgctl [--exportname NAME] --reconnect   CONTROL_UNIX_SOCKET REMOTE_HOST REMOTE_PORT\n\
 \n\
@@ -315,6 +439,7 @@ Commands:\n\
 \n\
 Options:\n\
   --exportname  image to request from a wrapped server\n\
+  --progress    show progress bar on stderr (default: disabled)\n\
 ";
 
 
@@ -341,6 +466,7 @@ int main(int argc, char **argv)
 	} cmd = xnbd_bgctl_cmd_unknown;
 
 	const char * exportname = NULL;
+	bool progress_enabled = false;
 
 	for (;;) {
 		int c;
@@ -396,6 +522,10 @@ int main(int argc, char **argv)
 
 			case '?':
 				show_help_and_exit("unknown option");
+				break;
+
+			case 'p':
+				progress_enabled = true;
 				break;
 
 			default:
@@ -460,7 +590,7 @@ int main(int argc, char **argv)
 
 		case xnbd_bgctl_cmd_cache_all:
 			// cache_all_blocks(unix_path, bm, nblocks);
-			cache_all_blocks_async(unix_path, bm, nblocks);
+			cache_all_blocks_async(unix_path, bm, nblocks, progress_enabled);
 			break;
 
 		case xnbd_bgctl_cmd_cache_all2:

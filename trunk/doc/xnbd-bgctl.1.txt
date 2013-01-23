@@ -16,7 +16,7 @@ SYNOPSIS
 
 *xnbd-bgctl* --shutdown 'CONTROL_SOCKET'
 
-*xnbd-bgctl* --cache-all 'CONTROL_SOCKET'
+*xnbd-bgctl* [--progress] --cache-all 'CONTROL_SOCKET'
 
 *xnbd-bgctl* --cache-all2 'CONTROL_SOCKET'
 
@@ -64,6 +64,9 @@ The following options are supported:
     If the server supports to access devices by an identifier, use 'NAME'
     to request access to a particular volume. This command is useful in
     combination with an xnbd-wrapper, not a plain xnbd-server.
+
+*--progress*::
+    Enables display of a progress bar on stderr.  Disabled by default.
 
 
 POSITIONAL ARGUMENTS
