@@ -1,4 +1,4 @@
-lib_LTLIBRARIES = libxutils.la
+noinst_LTLIBRARIES = libxutils.la
 
 libxutils_la_SOURCES = \
 	bitmap.c \
