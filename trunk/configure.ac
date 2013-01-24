@@ -20,7 +20,8 @@ AC_PROG_LN_S
 AC_PROG_MAKE_SET
 
 # Checks for libraries.
-PKG_CHECK_MODULES([GLIB], [glib-2.0 gthread-2.0])
+GLIB_MINIMUM_VERSION=2.24.2  # i.e. Debian stable as of 2013-01-23, i.e. squeeze
+PKG_CHECK_MODULES([GLIB], [glib-2.0 >= ${GLIB_MINIMUM_VERSION} gthread-2.0 >= ${GLIB_MINIMUM_VERSION}])
 AC_SUBST([GLIB_CFLAGS])
 AC_SUBST([GLIB_LIBS])
 
