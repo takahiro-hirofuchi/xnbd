@@ -1,7 +1,6 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-#AC_PREREQ([2.69])
 AC_PREREQ([2.67])
 AC_INIT([xNBD], [0.2.0], [t.hirofuchi@aist.go.jp], [xnbd], [https://bitbucket.org/hirofuchi/xnbd/])
 AM_INIT_AUTOMAKE([foreign dist-bzip2 no-dist-gzip])
@@ -14,7 +13,11 @@ LT_INIT([disable-static])
 
 # Checks for programs.
 AC_PROG_CC_C99
+AC_PROG_AWK
+AC_PROG_CPP
 AC_PROG_INSTALL
+AC_PROG_LN_S
+AC_PROG_MAKE_SET
 
 # Checks for libraries.
 PKG_CHECK_MODULES([GLIB], [glib-2.0 gthread-2.0])
@@ -25,7 +28,6 @@ AC_SUBST([GLIB_LIBS])
 AC_CHECK_HEADERS([arpa/inet.h fcntl.h inttypes.h netdb.h netinet/in.h stdlib.h string.h strings.h sys/file.h sys/ioctl.h sys/socket.h sys/time.h syslog.h unistd.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
-#AC_CHECK_HEADER_STDBOOL
 AC_HEADER_STDBOOL
 AC_C_INLINE
 AC_TYPE_OFF_T
