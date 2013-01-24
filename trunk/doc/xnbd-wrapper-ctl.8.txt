@@ -27,7 +27,7 @@ SYNOPSIS
 
 *xnbd-wrapper-ctl* [options] --local-exportname 'NAME' --bgctl-query
 
-*xnbd-wrapper-ctl* [options] --local-exportname 'NAME' --bgctl-shutdown
+*xnbd-wrapper-ctl* [options] --local-exportname 'NAME' --bgctl-switch
 
 *xnbd-wrapper-ctl* [options] --local-exportname 'NAME' --bgctl-cache-all
 
@@ -87,7 +87,7 @@ The following options are supported:
 *--bgctl-query*::
     Please see xnbd-bgctl(1) for details.
 
-*--bgctl-shutdown*::
+*--bgctl-switch*::
     Please see xnbd-bgctl(1) for details.
 
 

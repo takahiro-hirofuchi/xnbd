@@ -108,7 +108,7 @@ SIGNALS
     only in the target mode.
 
 *SIGUSR2*::
-    Change the proxy mode to the target mode. Use xnbd-bgctl --shutdown
+    Change the proxy mode to the target mode. Use xnbd-bgctl --switch
     instead of sending this signal.
 
 

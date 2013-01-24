@@ -14,7 +14,7 @@ SYNOPSIS
 --------
 *xnbd-bgctl* --query 'CONTROL_SOCKET'
 
-*xnbd-bgctl* --shutdown 'CONTROL_SOCKET'
+*xnbd-bgctl* --switch 'CONTROL_SOCKET'
 
 *xnbd-bgctl* [--progress] --cache-all 'CONTROL_SOCKET'
 
@@ -56,8 +56,8 @@ The following options are supported:
     additional arguments, the 'REMOTE_HOST', and the 'REMOTE_PORT' you want
     to connect to, to recover from a disconnected session.
 
-*--shutdown*::
-    This command stops the proxy server and restarts the target server.
+*--switch*::
+    This command stops the proxy server and restarts in target mode.
     All client sessions are preserved.
 
 *--exportname* 'NAME'::
@@ -67,6 +67,9 @@ The following options are supported:
 
 *--progress*::
     Enables display of a progress bar on stderr.  Disabled by default.
+
+(*--shutdown*)::
+    Deprecated alias to *--switch*, please do not use.
 
 
 POSITIONAL ARGUMENTS

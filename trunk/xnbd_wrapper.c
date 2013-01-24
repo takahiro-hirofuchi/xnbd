@@ -788,9 +788,9 @@ static void *start_filemgr_thread(void * pointer)
 				perform_shutdown(fp);
 			} else if (strcmp(cmd, "bgctl-query") == 0) {
 				(void)handle_bgctl_command("bgctl-query EXPORTNAME", "--query", 0, buf, fp, p_thread_data->xnbd_bgctl_path, NULL, p_thread_data->p_child_process_count);
-			} else if (strcmp(cmd, "bgctl-shutdown") == 0) {
+			} else if (strcmp(cmd, "bgctl-switch") == 0) {
 				char * local_exportname = NULL;
-				const int return_code = handle_bgctl_command("bgctl-shutdown EXPORTNAME", "--shutdown", 0, buf, fp, p_thread_data->xnbd_bgctl_path, &local_exportname, p_thread_data->p_child_process_count);
+				const int return_code = handle_bgctl_command("bgctl-switch EXPORTNAME", "--switch", 0, buf, fp, p_thread_data->xnbd_bgctl_path, &local_exportname, p_thread_data->p_child_process_count);
 				if (return_code == 0) {
 					mark_proxy_mode_ended(local_exportname);
 				}
@@ -810,7 +810,7 @@ static void *start_filemgr_thread(void * pointer)
 					"  del-exportname NAME  : delete disk image by export name\n"
 					"\n"
 					"  bgctl-query NAME     : Query status of proxy\n"
-					"  bgctl-shutdown NAME  : Switch from proxy to target mode\n"
+					"  bgctl-switch NAME    : Switch from proxy to target mode\n"
 					"  bgctl-cache-all NAME : Instruct proxy to cache all blocks\n"
 					"\n"
 					"  shutdown             : terminate all images and shutdown xnbd-wrapper instance\n"
