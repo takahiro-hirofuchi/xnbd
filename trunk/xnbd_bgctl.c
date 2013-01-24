@@ -412,7 +412,8 @@ unsigned long get_cached(unsigned long *bm, unsigned long nblocks)
 static struct option longopts[] = {
 	/* commands */
 	{"query",      no_argument, NULL, 'q'},
-	{"shutdown",   no_argument, NULL, 's'},
+	{"switch",     no_argument, NULL, 's'},
+	{"shutdown",   no_argument, NULL, 's'}, /* deprecated in favor of --switch */
 	{"cache-all",  no_argument, NULL, 'c'},
 	{"cache-all2", no_argument, NULL, 'C'},
 	{"reconnect",  no_argument, NULL, 'r'},
@@ -425,7 +426,7 @@ static struct option longopts[] = {
 static const char *help_string = "\
 Usage:\n\
   xnbd-bgctl                     --query       CONTROL_UNIX_SOCKET\n\
-  xnbd-bgctl                     --shutdown    CONTROL_UNIX_SOCKET\n\
+  xnbd-bgctl                     --switch      CONTROL_UNIX_SOCKET\n\
   xnbd-bgctl [--progress]        --cache-all   CONTROL_UNIX_SOCKET\n\
   xnbd-bgctl                     --cache-all2  CONTROL_UNIX_SOCKET\n\
   xnbd-bgctl [--exportname NAME] --reconnect   CONTROL_UNIX_SOCKET REMOTE_HOST REMOTE_PORT\n\
@@ -434,8 +435,9 @@ Commands:\n\
   --query       query current status of the proxy mode\n\
   --cache-all   cache all blocks\n\
   --cache-all2  cache all blocks with the background connection\n\
-  --shutdown    shutdown the proxy mode and start the target mode\n\
+  --switch      stops the proxy mode and restarts in target mode\n\
   --reconnect   reconnect the forwarding session\n\
+ (--shutdown)   alias to --switch, deprecated\n\
 \n\
 Options:\n\
   --exportname  image to request from a wrapped server\n\
