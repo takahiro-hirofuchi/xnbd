@@ -32,33 +32,33 @@ libxnbd_internal_la_SOURCES = \
 libxnbd_internal_la_LIBADD = lib/libxutils.la
 
 
-xnbd_server_LDADD = lib/libxutils.la libxnbd_internal.la
+xnbd_server_LDADD = libxnbd_internal.la
 xnbd_server_SOURCES = \
 	xnbd_server.c \
 	xnbd_target.c
 
 
-xnbd_bgctl_LDADD = lib/libxutils.la libxnbd_internal.la
+xnbd_bgctl_LDADD = libxnbd_internal.la
 xnbd_bgctl_SOURCES = xnbd_bgctl.c
 
 
-xnbd_client_LDADD = lib/libxutils.la
+xnbd_client_LDADD = libxnbd_internal.la
 xnbd_client_SOURCES = xnbd_client.c
 
 
-xnbd_watchdog_LDADD = lib/libxutils.la
+xnbd_watchdog_LDADD = libxnbd_internal.la
 xnbd_watchdog_SOURCES = xnbd_watchdog.c
 
 
-xnbd_wrapper_LDADD = lib/libxutils.la libxnbd_internal.la
+xnbd_wrapper_LDADD = libxnbd_internal.la
 xnbd_wrapper_SOURCES = xnbd_wrapper.c
 
 
-xnbd_cachestatdump_LDADD = lib/libxutils.la libxnbd_internal.la
+xnbd_cachestatdump_LDADD = libxnbd_internal.la
 xnbd_cachestatdump_SOURCES = xnbd_cachestatdump.c
 
 
-xnbd_tester_LDADD = lib/libxutils.la libxnbd_internal.la
+xnbd_tester_LDADD = libxnbd_internal.la
 xnbd_tester_SOURCES = xnbd_tester.c
 
 
