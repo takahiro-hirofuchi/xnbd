@@ -14,7 +14,7 @@ SYNOPSIS
 --------
 *xnbd-bgctl* --query 'CONTROL_SOCKET'
 
-*xnbd-bgctl* --switch 'CONTROL_SOCKET'
+*xnbd-bgctl* [--force] --switch 'CONTROL_SOCKET'
 
 *xnbd-bgctl* [--progress] --cache-all 'CONTROL_SOCKET'
 
@@ -67,6 +67,9 @@ The following options are supported:
 
 *--progress*::
     Enables display of a progress bar on stderr.  Disabled by default.
+
+*--force*::
+    Ignore risks, use with care.  Disabled by default.
 
 (*--shutdown*)::
     Deprecated alias to *--switch*, please do not use.
