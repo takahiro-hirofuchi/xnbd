@@ -420,13 +420,14 @@ static struct option longopts[] = {
 	{"help",       no_argument, NULL, 'h'},
 	{"exportname", required_argument, NULL, 'n'},
 	{"progress",   no_argument, NULL, 'p'},
+	{"force",      no_argument, NULL, 'f'},
 	{NULL, 0, NULL, 0},
 };
 
 static const char *help_string = "\
 Usage:\n\
   xnbd-bgctl                     --query       CONTROL_UNIX_SOCKET\n\
-  xnbd-bgctl                     --switch      CONTROL_UNIX_SOCKET\n\
+  xnbd-bgctl [--force]           --switch      CONTROL_UNIX_SOCKET\n\
   xnbd-bgctl [--progress]        --cache-all   CONTROL_UNIX_SOCKET\n\
   xnbd-bgctl                     --cache-all2  CONTROL_UNIX_SOCKET\n\
   xnbd-bgctl [--exportname NAME] --reconnect   CONTROL_UNIX_SOCKET REMOTE_HOST REMOTE_PORT\n\
@@ -442,6 +443,7 @@ Commands:\n\
 Options:\n\
   --exportname  image to request from a wrapped server\n\
   --progress    show progress bar on stderr (default: disabled)\n\
+  --force       ignore risks (default: disabled)\n\
 ";
 
 
@@ -469,6 +471,7 @@ int main(int argc, char **argv)
 
 	const char * exportname = NULL;
 	bool progress_enabled = false;
+	bool force_enabled = false;
 
 	for (;;) {
 		int c;
@@ -530,6 +533,10 @@ int main(int argc, char **argv)
 				progress_enabled = true;
 				break;
 
+			case 'f':
+				force_enabled = true;
+				break;
+
 			default:
 				err("getopt");
 		}
@@ -582,6 +589,14 @@ int main(int argc, char **argv)
 			break;
 
 		case xnbd_bgctl_cmd_switch:
+			if (cached != nblocks) {
+				if (force_enabled) {
+					info("switching to target mode despite incomplete cache, requested by --force");
+				} else {
+					err("refusing to switch to target mode with incomplete cache and no --force given");
+				}
+			}
+
 			{
 				int ret = kill(query->master_pid, SIGUSR2);
 				if (ret < 0)
