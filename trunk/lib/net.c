@@ -557,7 +557,7 @@ int net_writev_all_or_error(int fd, struct iovec *iov, unsigned int count)
 {
 	size_t bufflen = 0;
 	for (unsigned int i = 0; i < count; i++)
-		bufflen += iov->iov_len;
+		bufflen += iov[i].iov_len;
 
 	int ret = net_writev_all(fd, iov, count);
 	if (ret != (int) bufflen)
@@ -591,7 +591,7 @@ void net_readv_all_or_abort(int fd, struct iovec *iov, unsigned int count)
 {
 	size_t bufflen = 0;
 	for (unsigned int i = 0; i < count; i++)
-		bufflen += iov->iov_len;
+		bufflen += iov[i].iov_len;
 
 	int ret = net_readv_all(fd, iov, count);
 	if (check_fin(ret, errno, bufflen))
@@ -602,7 +602,7 @@ int net_readv_all_or_error(int fd, struct iovec *iov, unsigned int count)
 {
 	size_t bufflen = 0;
 	for (unsigned int i = 0; i < count; i++)
-		bufflen += iov->iov_len;
+		bufflen += iov[i].iov_len;
 
 	int ret = net_readv_all(fd, iov, count);
 	if (ret != (int) bufflen)
