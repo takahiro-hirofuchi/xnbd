@@ -463,7 +463,7 @@ int main(int argc, char **argv)
 		xnbd_bgctl_cmd_query,
 		xnbd_bgctl_cmd_cache_all,
 		xnbd_bgctl_cmd_cache_all2,
-		xnbd_bgctl_cmd_shutdown,
+		xnbd_bgctl_cmd_switch,
 		xnbd_bgctl_cmd_reconnect,
 	} cmd = xnbd_bgctl_cmd_unknown;
 
@@ -490,7 +490,7 @@ int main(int argc, char **argv)
 				if (cmd != xnbd_bgctl_cmd_unknown)
 					show_help_and_exit("specify one mode");
 
-				cmd = xnbd_bgctl_cmd_shutdown;
+				cmd = xnbd_bgctl_cmd_switch;
 				break;
 
 			case 'c':
@@ -553,7 +553,7 @@ int main(int argc, char **argv)
 
 		case xnbd_bgctl_cmd_cache_all:
 		case xnbd_bgctl_cmd_cache_all2:
-		case xnbd_bgctl_cmd_shutdown:
+		case xnbd_bgctl_cmd_switch:
 		case xnbd_bgctl_cmd_query:
 		case xnbd_bgctl_cmd_unknown:
 			if (argc - optind == 1)
@@ -581,7 +581,7 @@ int main(int argc, char **argv)
 		case xnbd_bgctl_cmd_query:
 			break;
 
-		case xnbd_bgctl_cmd_shutdown:
+		case xnbd_bgctl_cmd_switch:
 			{
 				int ret = kill(query->master_pid, SIGUSR2);
 				if (ret < 0)
