@@ -166,7 +166,7 @@ void custom_log_handler(const gchar *log_domain, GLogLevelFlags log_level,
 
 
 	if (message)
-		g_string_append_printf(gstring, "%s", message);
+		g_string_append(gstring, message);
 	else
 		g_string_append(gstring, "(NULL) message");
 
@@ -183,7 +183,7 @@ void custom_log_handler(const gchar *log_domain, GLogLevelFlags log_level,
 
 	if (params) {
 		if (params->use_syslog)
-			syslog(syslog_level(log_level), gstring->str);
+			syslog(syslog_level(log_level), "%s", gstring->str);
 		if (params->use_fd) {
 			g_assert(params->fd != -1);
 			write(params->fd, gstring->str, gstring->len);
