@@ -187,23 +187,6 @@ err_handle:
 
 
 
-static void signal_handler_xnbd(int i)
-{
-	info("signal catched xnbd, code %d", i);
-}
-
-static void set_signal_xnbd_service(void)
-{
-	struct sigaction act;
-
-	bzero(&act, sizeof(act));
-	act.sa_handler = signal_handler_xnbd;
-	sigemptyset(&act.sa_mask);
-	sigaction(SIGTERM, &act, NULL);
-	sigaction(SIGINT, &act, NULL);
-}
-
-
 void proxy_initialize_forwarder(struct xnbd_proxy *proxy, int remotefd)
 {
 	proxy->remotefd   = remotefd;
