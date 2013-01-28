@@ -12,11 +12,9 @@ xnbd-client - Connect to a server running xnbd-server(8), to use its exported bl
 
 SYNOPSIS
 --------
-*xnbd-client* [--blocksize 'SIZE'] [--connect] [--exportname 'NAME']
-    [--recovery-command 'COMMAND'] [--recovery-command-reboot 'COMMAND']
-    [--retry 'COUNT'] [--timeout 'SECONDS'] 'NBD-DEVICE' [ 'HOST' 'PORT' ...]
+*xnbd-client* ['OPTIONS'] [bs='SIZE'] [timeout='SECONDS'] 'HOST' 'PORT' 'NBD-DEVICE'
 
-*xnbd-client* [bs='SIZE'] [timeout='SECONDS'] 'HOST' 'PORT' 'NBD-DEVICE'
+*xnbd-client* ['OPTIONS'] --connect 'NBD-DEVICE' 'HOST' 'PORT' ['HOST' 'PORT' ..]
 
 *xnbd-client* --disconnect 'NBD-DEVICE'
 
@@ -85,7 +83,7 @@ The following options are supported:
 *--recovery-command* 'COMMAND'::
     Invoke the specified command on unexpected disconnection
 
-*--recovery-command-reboot* 'COMMAND'::
+*--recovery-command-reboot*:
     Invoke the reboot(8) command on unexpected disconnection
 
 *--timeout* 'SECONDS'::
