@@ -314,6 +314,7 @@ void *tx_thread_main(void *arg)
 {
 	struct proxy_session *ps = (struct proxy_session *) arg;
 	int need_exit = 0;
+	int need_skip = 0;
 
 	set_process_name("proxy_tx");
 
@@ -327,7 +328,7 @@ void *tx_thread_main(void *arg)
 
 		if (priv->need_exit)
 			need_exit = 1;
-		else {
+		else if (!need_skip) {
 			/* setup iovec */
 			struct iovec iov[2];
 			unsigned int iov_size = 0;
@@ -342,7 +343,21 @@ void *tx_thread_main(void *arg)
 				iov_size += 1;
 			}
 
-			net_writev_all_or_error(priv->clientfd, iov, iov_size);
+			int ret = net_writev_all_or_error(priv->clientfd, iov, iov_size);
+			if (ret < 0) {
+				warn("clientfd %d is dead", priv->clientfd);
+				/*
+				 * tx_thread has detected that clientfd is unusable.
+				 * tx_thread may dequeue requests from ps->tx_queue,
+				 * but now skips sending their replies.
+				 *
+				 * The error of clientfd will be also detected by rx_thread.
+				 * rx_thread will enqueue a special request with .need_exit=1;
+				 * this request is a notification of graceful shutdown.
+				 * tx_thread will finally receive this request.
+				 */
+				need_skip = 1;
+			}
 		}
 
 		if (priv->read_buff)
