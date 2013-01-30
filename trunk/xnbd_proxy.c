@@ -499,6 +499,16 @@ int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
 				}
 				break;
 
+			case XNBD_PROXY_CMD_DETECT_SWITCH:
+				/*
+				 * This command is used to detect the completion of the mode switch
+				 * from the proxy to the target mode. After receiving this command,
+				 * the proxy server does nothing special, but leaves the accepted
+				 * socket open. This socket will be closed when the proxy server
+				 * is terminated.
+				 */
+				close_wrk_fd = 0;
+				break;
 
 			case XNBD_PROXY_CMD_UNKNOWN:
 			default:

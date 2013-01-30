@@ -456,6 +456,30 @@ void show_help_and_exit(const char *msg)
 	exit(msg ? EXIT_FAILURE : EXIT_SUCCESS);
 }
 
+static int start_monitor_connection(char *unix_path)
+{
+	int fd = unix_connect(unix_path);
+
+	enum xnbd_proxy_cmd_type cmd = XNBD_PROXY_CMD_DETECT_SWITCH;
+	net_send_all_or_abort(fd, &cmd, sizeof(cmd));
+
+	return fd;
+}
+
+static void wait_for_target_mode(int monitor_fd) {
+	char buf;
+	int ret;
+
+	info("waiting for switch to finish...");
+
+	/* wait for disconnection by server */
+	ret = recv(monitor_fd, &buf, 1, 0);
+	/* expected value is 0 */
+	if (ret != 0)
+		warn("recv() returned unexpected value %d", ret);
+	close(monitor_fd);
+}
+
 int main(int argc, char **argv)
 {
 	g_thread_init(NULL);
@@ -598,11 +622,21 @@ int main(int argc, char **argv)
 			}
 
 			{
+				/*
+				 * The bgctl command will perform an read operation to the unix socket,
+				 * in order to make sure the termination of the proxy server. When the
+				 * proxy server is terminated, the read operation will return. In some
+				 * cases, the read operation will promptly return with an error code,
+				 * if the proxy server was already terminated. In any case, the read
+				 * operation can detect the termination of the proxy server.
+				 */
+				int monitor_fd = start_monitor_connection(unix_path);
 				int ret = kill(query->master_pid, SIGUSR2);
 				if (ret < 0)
 					err("send SIGUSR2 to %d", query->master_pid);
+				info("set xnbd (pid %d) to target mode", query->master_pid);
+				wait_for_target_mode(monitor_fd);
 			}
-			info("set xnbd (pid %d) to target mode", query->master_pid);
 			break;
 
 		case xnbd_bgctl_cmd_cache_all:
