@@ -38,10 +38,10 @@
 #define ARGC_RANGE(min, max)  (min), (max)
 
 #define ARGV_SUCCESS  0
-#define ARGV_ENOMEN  1
+#define ARGV_ENOMEM  1
 #define ARGV_ERROR_USAGE  2
 
-#define MESSAGE_ENOMEN  "out of memory"
+#define MESSAGE_ENOMEM  "out of memory"
 
 #define TRYLOCK_SUCCEEDED  0
 
@@ -490,7 +490,7 @@ static int extract_decode_check_usage(char * buf, gchar *** p_argv, guint * p_ar
 	{
 		*p_argv = NULL;
 		*p_argc = 0;
-		return ARGV_ENOMEN;
+		return ARGV_ENOMEM;
 	}
 
 	/* Calculate argc from argv */
@@ -586,8 +586,8 @@ static int handle_bgctl_command(const char * usage, const char * mode, unsigned 
 	const int res = extract_decode_check_usage(buf, &argv, &argc, ARGC_RANGE(expected_argc, expected_argc));
 	if (res == ARGV_ERROR_USAGE) {
 		fprintf(fp, "usage: %s\n", usage);
-	} else if (res == ARGV_ENOMEN) {
-		fprintf(fp, "%s\n", MESSAGE_ENOMEN);
+	} else if (res == ARGV_ENOMEM) {
+		fprintf(fp, "%s\n", MESSAGE_ENOMEM);
 	} else if (res == ARGV_SUCCESS) {
 		const char * const local_exportname = argv[1];
 		gboolean have_memory = 1;
@@ -675,7 +675,7 @@ static int handle_bgctl_command(const char * usage, const char * mode, unsigned 
 				destroy_value(p_disk_data);
 			}
 		} else {
-			fprintf(fp, "%s\n", MESSAGE_ENOMEN);
+			fprintf(fp, "%s\n", MESSAGE_ENOMEM);
 		}
 	}
 	g_strfreev(argv);
@@ -719,8 +719,8 @@ static void *start_filemgr_thread(void * pointer)
 				gchar ** argv = NULL;
 				guint argc = 0;
 				const int res = extract_decode_check_usage(buf, &argv, &argc, ARGC_RANGE(2, 3));
-				if (res == ARGV_ENOMEN) {
-					fprintf(fp, "%s\n", MESSAGE_ENOMEN);
+				if (res == ARGV_ENOMEM) {
+					fprintf(fp, "%s\n", MESSAGE_ENOMEM);
 				} else if (res == ARGV_ERROR_USAGE) {
 					fprintf(fp, "usage: %s\n", "add [<EXPORTNAME>] FILE");
 				} else if (res == ARGV_SUCCESS) {
@@ -738,7 +738,7 @@ static void *start_filemgr_thread(void * pointer)
 					}
 					else
 					{
-						fprintf(fp, "%s\n", MESSAGE_ENOMEN);
+						fprintf(fp, "%s\n", MESSAGE_ENOMEM);
 					}
 					g_strfreev(argv);
 				}
@@ -747,8 +747,8 @@ static void *start_filemgr_thread(void * pointer)
 				gchar ** argv = NULL;
 				guint argc = 0;
 				const int res = extract_decode_check_usage(buf, &argv, &argc, ARGC_RANGE(7, 8));
-				if (res == ARGV_ENOMEN) {
-					fprintf(fp, "%s\n", MESSAGE_ENOMEN);
+				if (res == ARGV_ENOMEM) {
+					fprintf(fp, "%s\n", MESSAGE_ENOMEM);
 				} else if (res == ARGV_ERROR_USAGE) {
 					fprintf(fp, "usage: %s\n", "add-proxy <LOCAL_EXPORTNAME> <TARGET_HOST> <TARGET_PORT> <CACHE_IMAGE> <BITMAP_IMAGE> <CONTROL_SOCKET_PATH> [<TARGET_EXPORTNAME>]");
 				} else if (res == ARGV_SUCCESS) {
@@ -763,7 +763,7 @@ static void *start_filemgr_thread(void * pointer)
 					t_disk_data * const p_disk_data = create_disk_data(local_exportname, target_host, target_port, cache_image, bitmap_image, control_socket_path, target_exportname);
 					if (! p_disk_data)
 					{
-						fprintf(fp, "%s\n", MESSAGE_ENOMEN);
+						fprintf(fp, "%s\n", MESSAGE_ENOMEM);
 					}
 					else
 					{
@@ -1065,7 +1065,7 @@ int main(int argc, char **argv) {
 				}
 				else
 				{
-					warn(MESSAGE_ENOMEN);
+					warn(MESSAGE_ENOMEM);
 				}
 				break;
 			}
@@ -1108,7 +1108,7 @@ int main(int argc, char **argv) {
 	if (child_prog == NULL) {
 		child_prog = copy_replace_basename(argv[0], "xnbd-server");
 		if (! child_prog) {
-			err(MESSAGE_ENOMEN);
+			err(MESSAGE_ENOMEM);
 		}
 	}
 
@@ -1122,7 +1122,7 @@ int main(int argc, char **argv) {
 
 	xnbd_bgctl_path = copy_replace_basename(argv[0], "xnbd-bgctl");
 	if (! xnbd_bgctl_path) {
-		err(MESSAGE_ENOMEN);
+		err(MESSAGE_ENOMEM);
 	}
 	if (access(xnbd_bgctl_path, X_OK) != 0) {
 		err("check xnbd-bgctl: %m");
@@ -1244,7 +1244,7 @@ int main(int argc, char **argv) {
 				/* unix socket */
 				t_thread_data * const p_thread_data = g_try_new(t_thread_data, 1);
 				if (! p_thread_data) {
-					warn("Could start thread: %s", MESSAGE_ENOMEN);
+					warn("Could start thread: %s", MESSAGE_ENOMEM);
 				} else {
 					p_thread_data->unix_sock_fd = ux_sockfd;
 					p_thread_data->xnbd_bgctl_path = xnbd_bgctl_path;
