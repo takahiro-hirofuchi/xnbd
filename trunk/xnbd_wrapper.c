@@ -45,10 +45,13 @@
 
 #define TRYLOCK_SUCCEEDED  0
 
+#define REMOVE_FROM_SET  TRUE
+#define KEEP_IN_SET  FALSE
+
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t waitpid_lock = PTHREAD_MUTEX_INITIALIZER;
 GHashTable * p_disk_dict = NULL;
+GHashTable * p_server_pid_set = NULL;
 guint images_added_ever = 0;
 
 
@@ -285,6 +288,27 @@ static void mark_proxy_mode_ended(const char * local_exportname)
 		G_FREE_SET_NULL(p_disk_data->proxy.target_exportname);
 	}
 	pthread_mutex_unlock(&mutex);
+}
+
+static gboolean waitpid_nohang_ghrfunc(gpointer key, gpointer value, gpointer user_data) {
+	(void)value;
+	const pid_t server_pid = (pid_t)GPOINTER_TO_INT(key);
+	int * const p_child_process_count = (int *)user_data;
+
+	int status;
+	const pid_t waitpid_res = waitpid(server_pid, &status, WNOHANG);
+	if (waitpid_res != server_pid) {
+		return KEEP_IN_SET;
+	}
+
+	inform_xnbd_server_termination(server_pid, status);
+
+	pthread_mutex_lock(&mutex);
+	(*p_child_process_count)--;
+	info("child_process_count-- : %d  (xnbd-server terminated)", (*p_child_process_count));
+	pthread_mutex_unlock(&mutex);
+
+	return REMOVE_FROM_SET;
 }
 
 static void find_smallest_index_iterator(gpointer key, const t_disk_data * p_disk_data, t_listing_state * p_listing_state) {
@@ -613,10 +637,6 @@ static int handle_bgctl_command(const char * usage, const char * mode, unsigned 
 					const char * const p1 = (argc > 2) ? argv[2] : NULL;
 					const char * const p2 = (argc > 3) ? argv[3] : NULL;
 
-					/* Synchronize all of fork, exec, waitpid so that a catchall waitpid
-					 * in another thread does not steal our xnbd-bgctl exit code */
-					pthread_mutex_lock(&waitpid_lock);
-
 					const pid_t bgctl_pid = invoke_bgctl(xnbd_bgctl_path, fp, p_disk_data->proxy.control_socket_path, mode, p1, p2);
 					if (bgctl_pid != -1) {
 						pthread_mutex_lock(&mutex);
@@ -630,47 +650,27 @@ static int handle_bgctl_command(const char * usage, const char * mode, unsigned 
 						fprintf(fp, "xnbd-bgctl could not be executed.\n");
 					} else {
 						int status = -1;
-						for (;;) {
-							const pid_t waitpid_res = waitpid(-1, &status, 0);
-							if (waitpid_res == -1) {
-								warn("waiting for xnbd-bgctl(%d), waitpid : %m", bgctl_pid);
-								break;
-							}
+						const pid_t waitpid_res = waitpid(bgctl_pid, &status, 0);
+						if (waitpid_res != bgctl_pid) {
+							warn("waiting for xnbd-bgctl(%d), waitpid : %m", bgctl_pid);
+						}
 
-							if (waitpid_res == bgctl_pid) {
-								pthread_mutex_lock(&mutex);
-								(*p_child_process_count)--;
-								pthread_mutex_unlock(&mutex);
+						pthread_mutex_lock(&mutex);
+						(*p_child_process_count)--;
+						info("child_process_count-- : %d  (xnbd-bgctl terminated)", (*p_child_process_count));
+						pthread_mutex_unlock(&mutex);
 
-								info("child_process_count-- : %d  (xnbd-bgctl terminated)", (*p_child_process_count));
+						if (WIFEXITED(status)) {
+							return_code = (unsigned char)(WEXITSTATUS(status));
+						} else {
+							assert(WIFSIGNALED(status));
+							return_code = (unsigned char)(128 + WTERMSIG(status));
+						}
 
-								if (WIFEXITED(status)) {
-									return_code = (unsigned char)(WEXITSTATUS(status));
-								} else {
-									assert(WIFSIGNALED(status));
-									return_code = (unsigned char)(128 + WTERMSIG(status));
-								}
-
-								if (return_code != 0) {
-									fprintf(fp, "Execution of xnbd-bgctl failed with code %d.\n", return_code);
-								}
-
-								/* Leave anything else to the the SIGCHLD handler in the other thread */
-								raise(SIGCHLD);
-								break;
-							} else {
-								inform_xnbd_server_termination(waitpid_res, status);
-
-								pthread_mutex_lock(&mutex);
-								(*p_child_process_count)--;
-								pthread_mutex_unlock(&mutex);
-
-								info("child_process_count-- : %d  (xnbd-served terminated)", (*p_child_process_count));
-							}
+						if (return_code != 0) {
+							fprintf(fp, "Execution of xnbd-bgctl failed with code %d.\n", return_code);
 						}
 					}
-
-					pthread_mutex_unlock(&waitpid_lock);
 				}
 				destroy_value(p_disk_data);
 			}
@@ -969,8 +969,6 @@ int main(int argc, char **argv) {
 	char *ctl_path = NULL;
 	int child_process_count = 0;
 	const int MAX_NSRVS = 512;
-	int cstatus;
-	pid_t cpid;
 	const char default_server_target[] = "--target";
 	const char *server_target = NULL;
 	int daemonize = 0;
@@ -980,6 +978,8 @@ int main(int argc, char **argv) {
 	char * xnbd_bgctl_path = NULL;
 
 	p_disk_dict = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, (GDestroyNotify)destroy_value);
+	p_server_pid_set = g_hash_table_new(g_direct_hash, g_direct_equal);
+
 
 	sigset_t sigset;
 	int sigfd;
@@ -1215,30 +1215,7 @@ int main(int argc, char **argv) {
 					unlink(ctl_path);
 					exit(EXIT_SUCCESS);
 				} else if (sfd_siginfo.ssi_signo == SIGCHLD) {
-					/* Synchronize waitpid so that our catchall waitpid does
-					 * not steal the xnbd-bgctl exit code of another thread */
-					if (pthread_mutex_trylock(&waitpid_lock) == TRYLOCK_SUCCEEDED) {
-						for (;;) {
-							/* Loop since a single SIGCHLD may indicate multiple terminated children
-							* .. or we end up with zombie xnbd-server child processes */
-							cpid = waitpid(-1, &cstatus, WNOHANG);
-							if (cpid < 1) {
-								/* No problem
-								* cpid ==  0: another thread's waitpid has handled this SIGCHLD for us, already
-								* cpid == -1: no more child processes, caused by self-induced SIGCHLD */
-								break;
-							}
-
-							inform_xnbd_server_termination(cpid, cstatus);
-
-							pthread_mutex_lock(&mutex);
-							child_process_count--;
-							info("child_process_count-- : %d  (xnbd-server terminated)", child_process_count);
-							pthread_mutex_unlock(&mutex);
-						}
-
-						pthread_mutex_unlock(&waitpid_lock);
-					}
+					g_hash_table_foreach_remove(p_server_pid_set, waitpid_nohang_ghrfunc, &child_process_count);
 				}
 			} else if (ep_events[c_ev].data.fd == ux_sockfd) {
 				/* unix socket */
@@ -1325,6 +1302,8 @@ int main(int argc, char **argv) {
 				} else if (pid > 0) {
 					/* parent */
 					free(fd_num);
+
+					g_hash_table_insert(p_server_pid_set, GINT_TO_POINTER(pid), NULL);
 
 					pthread_mutex_lock(&mutex);
 					child_process_count++;
