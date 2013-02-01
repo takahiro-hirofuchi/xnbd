@@ -444,6 +444,11 @@ int nbd_negotiate_with_server_new(int sockfd, off_t *exportsize, uint32_t *expor
 			goto err_out;
 		}
 
+		if (ntohll(pdu0.magic) == NBD_NEGOTIATE_MAGIC_OLD) {
+			warn("wrapped server expected, plain server found");
+			goto err_out;
+		}
+
 		if (ntohll(pdu0.magic) != NBD_NEGOTIATE_MAGIC_NEW) {
 			warn("negotiate magic mismatch");
 			goto err_out;
