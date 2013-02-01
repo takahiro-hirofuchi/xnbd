@@ -27,6 +27,7 @@
 #include <sys/signalfd.h>
 #include <sys/epoll.h>
 #include <assert.h>
+#include <stdbool.h>
 
 
 #define XNBD_IMAGE_ADDED  0
@@ -286,6 +287,23 @@ static void mark_proxy_mode_ended(const char * local_exportname)
 		G_FREE_SET_NULL(p_disk_data->proxy.bitmap_image);
 		G_FREE_SET_NULL(p_disk_data->proxy.control_socket_path);
 		G_FREE_SET_NULL(p_disk_data->proxy.target_exportname);
+	}
+	pthread_mutex_unlock(&mutex);
+}
+
+#define G_FREE_SET_DUPED(target, source)  \
+	do { \
+		g_free(target); \
+		target = g_strdup(source); \
+	} while(0)
+
+static void update_proxy_settings(const char * local_exportname, const char * host, const char * port, const char * target_exportname) {
+	pthread_mutex_lock(&mutex);
+	t_disk_data * const p_disk_data = (t_disk_data *)g_hash_table_lookup(p_disk_dict, local_exportname);
+	if (p_disk_data) {
+		G_FREE_SET_DUPED(p_disk_data->proxy.target_host, host);
+		G_FREE_SET_DUPED(p_disk_data->proxy.target_port, port);
+		G_FREE_SET_DUPED(p_disk_data->proxy.target_exportname, target_exportname);
 	}
 	pthread_mutex_unlock(&mutex);
 }
@@ -575,8 +593,7 @@ static int count_mgr_threads(int val)
 	return ret;
 }
 
-static pid_t invoke_bgctl(const char * xnbd_bgctl_path, FILE * fp,
-		const char * control_socket_path, const char * mode, const char * p1, const char * p2)
+static pid_t invoke_bgctl(FILE * fp, const char ** argv)
 {
 	const pid_t pid = fork();
 	if (pid != 0) {
@@ -592,39 +609,32 @@ static pid_t invoke_bgctl(const char * xnbd_bgctl_path, FILE * fp,
 		dup2(output_fd, 2);
 	}
 
-	const char * const argv[] = {xnbd_bgctl_path, mode, control_socket_path, p1, p2, NULL};
 	execv_or_abort(argv);
 
 	err("should never get here");
 	return 0;
 }
 
-static int handle_bgctl_command(const char * usage, const char * mode, unsigned int extra_count,
-		char * buf, FILE * fp, const char * xnbd_bgctl_path, char ** p_local_exportname, int * p_child_process_count)
+static int handle_bgctl_command(const char * usage, const char * mode, unsigned int expected_argc_min, unsigned int expected_argc_max,
+		char * buf, FILE * fp, const char * xnbd_bgctl_path, guint * p_argc, gchar *** p_argv, int * p_child_process_count)
 {
 	int return_code = -1;
-	const guint expected_argc = 1 + 1 + extra_count;  /* <command>, <local_exportname>, <arg>*extra_count */
 
 	gchar ** argv = NULL;
 	guint argc = 0;
-	const int res = extract_decode_check_usage(buf, &argv, &argc, ARGC_RANGE(expected_argc, expected_argc));
+	const int res = extract_decode_check_usage(buf, &argv, &argc, ARGC_RANGE(expected_argc_min, expected_argc_max));
 	if (res == ARGV_ERROR_USAGE) {
 		fprintf(fp, "usage: %s\n", usage);
 	} else if (res == ARGV_ENOMEM) {
 		fprintf(fp, "%s\n", MESSAGE_ENOMEM);
 	} else if (res == ARGV_SUCCESS) {
-		const char * const local_exportname = argv[1];
-		gboolean have_memory = 1;
-		if (p_local_exportname) {
-			char * const duped = g_strdup(local_exportname);
-			if (duped) {
-				*p_local_exportname = duped;
-			} else {
-				have_memory = 0;
-			}
+		if (p_argc && p_argv) {
+			*p_argc = argc;
+			*p_argv = argv;
 		}
 
-		if (have_memory) {
+		{
+			const char * const local_exportname = argv[1];
 			t_disk_data * const p_disk_data = get_disk_data_for(local_exportname);
 			if (! p_disk_data) {
 				fprintf(fp, "There is no export named \"%s\".\n", local_exportname);
@@ -634,10 +644,27 @@ static int handle_bgctl_command(const char * usage, const char * mode, unsigned 
 				} else if (access(p_disk_data->proxy.control_socket_path, R_OK) == -1) {
 					fprintf(fp, "Export \"%s\" not being served to any client at the moment.\n", local_exportname);
 				} else {
-					const char * const p1 = (argc > 2) ? argv[2] : NULL;
-					const char * const p2 = (argc > 3) ? argv[3] : NULL;
+					/* <input> = <command> <local_exportname> [<arg> .. [<target_exportname>]] */
+					/* <output> = <xnbd-bgctl> [<--exportname> <NAME>] <mode> <control_socket> <arg>*positional_args_to_append <NULL> */
+					const bool target_exportname_present = (argc == expected_argc_max);
+					const int positional_args_to_append = argc - 1 - 1 - (target_exportname_present ? 1 : 0);
+					const char * bgctl_argv[1 + (target_exportname_present ? 2 : 0) + 1 + 1 + positional_args_to_append + 1];
+					int bgctl_argc = 0;
+					bgctl_argv[bgctl_argc++] = xnbd_bgctl_path;
+					if (target_exportname_present) {
+						bgctl_argv[bgctl_argc++] = "--exportname";
+						bgctl_argv[bgctl_argc++] = argv[expected_argc_max - 1];  /* i.e. the last argument */
+					}
 
-					const pid_t bgctl_pid = invoke_bgctl(xnbd_bgctl_path, fp, p_disk_data->proxy.control_socket_path, mode, p1, p2);
+					bgctl_argv[bgctl_argc++] = mode;
+					bgctl_argv[bgctl_argc++] = p_disk_data->proxy.control_socket_path;
+
+					for (int i = 0; i < positional_args_to_append; i++) {
+						bgctl_argv[bgctl_argc++] = argv[1 + 1 + i];  /* <input> = <command> <local_exportname> [<arg> ..] */
+					}
+					bgctl_argv[bgctl_argc++] = NULL;
+
+					const pid_t bgctl_pid = invoke_bgctl(fp, bgctl_argv);
 					if (bgctl_pid != -1) {
 						pthread_mutex_lock(&mutex);
 						(*p_child_process_count)++;
@@ -674,11 +701,13 @@ static int handle_bgctl_command(const char * usage, const char * mode, unsigned 
 				}
 				destroy_value(p_disk_data);
 			}
-		} else {
-			fprintf(fp, "%s\n", MESSAGE_ENOMEM);
 		}
 	}
-	g_strfreev(argv);
+
+	if (! (p_argc && p_argv)) {
+		g_strfreev(argv);
+	}
+
 	return return_code;
 }
 
@@ -787,16 +816,35 @@ static void *start_filemgr_thread(void * pointer)
 			} else if (strcmp(cmd, "shutdown") == 0) {
 				perform_shutdown(fp);
 			} else if (strcmp(cmd, "bgctl-query") == 0) {
-				(void)handle_bgctl_command("bgctl-query EXPORTNAME", "--query", 0, buf, fp, p_thread_data->xnbd_bgctl_path, NULL, p_thread_data->p_child_process_count);
+				(void)handle_bgctl_command("bgctl-query EXPORTNAME", "--query", ARGC_RANGE(2, 2), buf, fp, p_thread_data->xnbd_bgctl_path, NULL, NULL, p_thread_data->p_child_process_count);
 			} else if (strcmp(cmd, "bgctl-switch") == 0) {
-				char * local_exportname = NULL;
-				const int return_code = handle_bgctl_command("bgctl-switch EXPORTNAME", "--switch", 0, buf, fp, p_thread_data->xnbd_bgctl_path, &local_exportname, p_thread_data->p_child_process_count);
+				guint argc = 0;
+				gchar ** argv = NULL;
+
+				const int return_code = handle_bgctl_command("bgctl-switch EXPORTNAME", "--switch", ARGC_RANGE(2, 2), buf, fp, p_thread_data->xnbd_bgctl_path, &argc, &argv, p_thread_data->p_child_process_count);
 				if (return_code == 0) {
+					const char * const local_exportname = argv[1];
 					mark_proxy_mode_ended(local_exportname);
 				}
-				g_free(local_exportname);
+
+				g_strfreev(argv);
 			} else if (strcmp(cmd, "bgctl-cache-all") == 0) {
-				(void)handle_bgctl_command("bgctl-cache-all EXPORTNAME", "--cache-all", 0, buf, fp, p_thread_data->xnbd_bgctl_path, NULL, p_thread_data->p_child_process_count);
+				(void)handle_bgctl_command("bgctl-cache-all EXPORTNAME", "--cache-all", ARGC_RANGE(2, 2), buf, fp, p_thread_data->xnbd_bgctl_path, NULL, NULL, p_thread_data->p_child_process_count);
+			} else if (strcmp(cmd, "bgctl-reconnect") == 0) {
+				guint argc = 0;
+				gchar ** argv = NULL;
+
+				const int return_code = handle_bgctl_command("bgctl-reconnect LOCAL_EXPORTNAME HOST PORT [TARGET_EXPORTNAME]", "--reconnect", ARGC_RANGE(4, 5), buf, fp, p_thread_data->xnbd_bgctl_path, &argc, &argv, p_thread_data->p_child_process_count);
+				if (return_code == 0) {
+					const char * const local_exportname = argv[1];
+					const char * const host = argv[2];
+					const char * const port = argv[3];
+					const char * const target_exportname = (argc >= 5) ? argv[4] : NULL;
+
+					update_proxy_settings(local_exportname, host, port, target_exportname);
+				}
+
+				g_strfreev(argv);
 			}
 			else if (strcmp(cmd, "help") == 0)
 				fprintf(fp,
@@ -812,6 +860,7 @@ static void *start_filemgr_thread(void * pointer)
 					"  bgctl-query NAME     : Query status of proxy\n"
 					"  bgctl-switch NAME    : Switch from proxy to target mode\n"
 					"  bgctl-cache-all NAME : Instruct proxy to cache all blocks\n"
+					"  bgctl-reconnect ...  : Reconnect proxy to a given location\n"
 					"\n"
 					"  shutdown             : terminate all images and shutdown xnbd-wrapper instance\n"
 					"  quit                 : quit (disconnect)\n");
