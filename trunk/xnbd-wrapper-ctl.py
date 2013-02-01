@@ -105,7 +105,8 @@ def parse_command_line(argv):
 
   %(prog)s [-s SOCKPATH] --local-exportname NAME --bgctl-query
   %(prog)s [-s SOCKPATH]            ''           --bgctl-switch
-  %(prog)s [-s SOCKPATH] --local-exportname NAME --bgctl-cache-all
+  %(prog)s [-s SOCKPATH]            ''           --bgctl-cache-all
+  %(prog)s [-s SOCKPATH] --local-exportname NAME [--target-exportname NAME] --bgctl-reconnect REMOTE_HOST REMOTE_PORT
 """)
 
     operations = parser.add_mutually_exclusive_group(required=True)
@@ -135,6 +136,8 @@ def parse_command_line(argv):
                         help="cache all blocks.")
     operations.add_argument("--bgctl-cache-all", action='store_true',
                         help="cache all blocks with the background connection.")
+    operations.add_argument("--bgctl-reconnect", metavar=['REMOTE_HOST', 'REMOTE_PORT'], nargs=2,
+                        help="reconnect the forwarding session.")
 
     parser.add_argument("--local-exportname", metavar='NAME',
                         help="set the export name to export the image as.")
@@ -143,11 +146,11 @@ def parse_command_line(argv):
 
     options = parser.parse_args(argv[1:])
 
-    if options.target_exportname and not options.add_proxy:
-        print('%s: error: Argument --target-exportname is only supported in combination with --add-proxy.' % prog(argv[0]), file=sys.stderr)
+    if options.target_exportname and not any([options.add_proxy, options.bgctl_reconnect]):
+        print('%s: error: Argument --target-exportname is only supported in combination with --add-proxy and --bgctl-reconnect.' % prog(argv[0]), file=sys.stderr)
         sys.exit(1)
 
-    if any([options.bgctl_query, options.bgctl_switch, options.bgctl_cache_all]) \
+    if any([options.bgctl_query, options.bgctl_switch, options.bgctl_cache_all, options.bgctl_reconnect]) \
             and not options.local_exportname:
         print('%s: error: Arguments --bgctl-* need to be used with --local_exportname NAME.' % prog(argv[0]), file=sys.stderr)
         sys.exit(1)
@@ -208,6 +211,14 @@ def compose_command(options, argv):
         args.append(options.add)
 
         return 'add %s' % ' '.join(percent_encode(args))
+    elif options.bgctl_reconnect:
+        args = []
+        args.append(options.local_exportname)
+        args.extend(options.bgctl_reconnect)
+        if options.target_exportname:
+            args.append(options.target_exportname)
+
+        return 'bgctl-reconnect %s' % ' '.join(percent_encode(args))
 
     assert False, 'Internal error, no command used'
 

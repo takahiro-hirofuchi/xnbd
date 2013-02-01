@@ -31,6 +31,8 @@ SYNOPSIS
 
 *xnbd-wrapper-ctl* [options] --local-exportname 'NAME' --bgctl-cache-all
 
+*xnbd-wrapper-ctl* [options] --local-exportname 'NAME' [--target-exportname 'NAME'] --bgctl-reconnect 'REMOTE_HOST' 'REMOTE_PORT'
+
 
 DESCRIPTION
 -----------
@@ -79,12 +81,15 @@ The following options are supported:
 
 *--target-exportname* 'NAME'::
     Set the export name to request from the proxied xnbd-wrapper target.
-    This option is used in combination with *--add-proxy*, only.
+    This option is used in combination with *--add-proxy* and *--bgctl-reconnect*, only.
 
 *--bgctl-cache-all*::
     Please see xnbd-bgctl(1) for details.
 
 *--bgctl-query*::
+    Please see xnbd-bgctl(1) for details.
+
+*--bgctl-reconnect* 'REMOTE_HOST' 'REMOTE_PORT'::
     Please see xnbd-bgctl(1) for details.
 
 *--bgctl-switch*::
