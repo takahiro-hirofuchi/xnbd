@@ -96,16 +96,16 @@ class FixedHelpFormatter(argparse.HelpFormatter):
 def parse_command_line(argv):
     parser = argparse.ArgumentParser(formatter_class=FixedHelpFormatter, usage="""
   %(prog)s [-s SOCKPATH] --list
-  %(prog)s [-s SOCKPATH] [--local-exportname NAME] --add-target FILE
-  %(prog)s [-s SOCKPATH] [--local-exportname NAME] [--target-exportname NAME] --add-proxy TARGET_HOST TARGET_PORT CACHE_IMAGE BITMAP_IMAGE CONTROL_SOCKET_PATH
+  %(prog)s [-s SOCKPATH] --add-target LOCAL_EXPORTNAME FILE
+  %(prog)s [-s SOCKPATH] [--target-exportname NAME] --add-proxy LOCAL_EXPORTNAME REMOTE_HOST REMOTE_PORT CACHE_IMAGE BITMAP_IMAGE CONTROL_SOCKET_PATH
   %(prog)s [-s SOCKPATH] --remove-by-file FILE
   %(prog)s [-s SOCKPATH] --remove-by-exportname NAME
   %(prog)s [-s SOCKPATH] --shutdown
 
-  %(prog)s [-s SOCKPATH] --local-exportname NAME --bgctl-query
-  %(prog)s [-s SOCKPATH]            ''           --bgctl-switch
-  %(prog)s [-s SOCKPATH]            ''           --bgctl-cache-all
-  %(prog)s [-s SOCKPATH] --local-exportname NAME [--target-exportname NAME] --bgctl-reconnect REMOTE_HOST REMOTE_PORT
+  %(prog)s [-s SOCKPATH] --bgctl-query LOCAL_EXPORTNAME
+  %(prog)s [-s SOCKPATH] --bgctl-switch LOCAL_EXPORTNAME
+  %(prog)s [-s SOCKPATH] --bgctl-cache-all LOCAL_EXPORTNAME
+  %(prog)s [-s SOCKPATH] [--target-exportname NAME] --bgctl-reconnect LOCAL_EXPORTNAME REMOTE_HOST REMOTE_PORT
 """)
 
     operations = parser.add_mutually_exclusive_group(required=True)
@@ -116,9 +116,9 @@ def parse_command_line(argv):
 
     operations.add_argument("--list", "-l", action='store_true',
                         help="list registered disk images.")
-    operations.add_argument("--add-target", metavar='FILE',
+    operations.add_argument("--add-target", metavar=['LOCAL_EXPORTNAME', 'FILE'], nargs=2,
                         help="add a disk image file to the export list.")
-    operations.add_argument("--add-proxy", metavar=['TARGET_HOST', 'TARGET_PORT', 'CACHE_IMAGE', 'BITMAP_IMAGE', 'CONTROL_SOCKET_PATH'], nargs=5,
+    operations.add_argument("--add-proxy", metavar=['LOCAL_EXPORTNAME', 'REMOTE_HOST', 'REMOTE_PORT', 'CACHE_IMAGE', 'BITMAP_IMAGE', 'CONTROL_SOCKET_PATH'], nargs=6,
                         help="add a disk image file to the export list.")
     operations.add_argument("--remove-by-file", metavar='FILE',
                         help="remove a disk image file from the list.")
@@ -127,17 +127,15 @@ def parse_command_line(argv):
     operations.add_argument("--shutdown", "-d", action='store_true',
                         help="remove all disk images from the xnbd-wrapper instance and stop it afterwards.")
 
-    operations.add_argument("--bgctl-query", action='store_true',
+    operations.add_argument("--bgctl-query", metavar='LOCAL_EXPORTNAME',
                         help="query current status of the proxy mode.")
-    operations.add_argument("--bgctl-switch", action='store_true',
+    operations.add_argument("--bgctl-switch", metavar='LOCAL_EXPORTNAME',
                         help="cache all blocks.")
-    operations.add_argument("--bgctl-cache-all", action='store_true',
+    operations.add_argument("--bgctl-cache-all", metavar='LOCAL_EXPORTNAME',
                         help="cache all blocks with the background connection.")
-    operations.add_argument("--bgctl-reconnect", metavar=['REMOTE_HOST', 'REMOTE_PORT'], nargs=2,
+    operations.add_argument("--bgctl-reconnect", metavar=['LOCAL_EXPORTNAME', 'REMOTE_HOST', 'REMOTE_PORT'], nargs=3,
                         help="reconnect the forwarding session.")
 
-    parser.add_argument("--local-exportname", metavar='NAME',
-                        help="set the export name to export the image as.")
     parser.add_argument("--target-exportname", metavar='NAME',
                         help="set the export name to request from a xnbd-wrapper target (used with --add-proxy).")
 
@@ -154,11 +152,6 @@ def parse_command_line(argv):
         print('%s: error: Argument --target-exportname is only supported in combination with --add-proxy and --bgctl-reconnect.' % prog(argv[0]), file=sys.stderr)
         sys.exit(1)
 
-    if any([options.bgctl_query, options.bgctl_switch, options.bgctl_cache_all, options.bgctl_reconnect]) \
-            and not options.local_exportname:
-        print('%s: error: Arguments --bgctl-* need to be used with --local_exportname NAME.' % prog(argv[0]), file=sys.stderr)
-        sys.exit(1)
-
     return options
 
 
@@ -172,14 +165,14 @@ def compose_command(options, argv):
         if dest:
             return line
 
-    zero_arg_exportname_commands = (
+    single_arg_exportname_commands = (
         (options.bgctl_query, 'bgctl-query'),
         (options.bgctl_switch, 'bgctl-switch'),
         (options.bgctl_cache_all, 'bgctl-cache-all'),
     )
-    for dest, command in zero_arg_exportname_commands:
+    for dest, command in single_arg_exportname_commands:
         if dest:
-            encoded_arg = urllib.quote(str(options.local_exportname))
+            encoded_arg = urllib.quote(str(dest))
             return '%s %s' % (command, encoded_arg)
 
     # Single argument commands
@@ -195,29 +188,24 @@ def compose_command(options, argv):
     # More complex commands
     if options.add_proxy:
         args = []
-        if options.local_exportname:
-            # export name != file name  (possibly)
-            args.append(options.local_exportname)
-        else:
-            # export name == file name
-            target_host, target_port, cache_image, bitmap_image, control_socket_path = options.add_proxy
-            args.append(cache_image)
         args.extend(options.add_proxy)
         if options.target_exportname:
             args.append(options.target_exportname)
 
         return 'add-proxy %s' % ' '.join(percent_encode(args))
-    elif options.add or options.add_target:  # --add is deprecated
+    elif options.add:  # deprecated
         args = []
-        if options.local_exportname:
-            # export name != file name  (possibly)
-            args.append(options.local_exportname)
-        args.append(options.add or options.add_target)
+        args.append(options.add)  # local exportname
+        args.append(options.add)  # image name
+
+        return 'add-target %s' % ' '.join(percent_encode(args))
+    elif options.add_target:
+        args = []
+        args.extend(options.add_target)
 
         return 'add-target %s' % ' '.join(percent_encode(args))
     elif options.bgctl_reconnect:
         args = []
-        args.append(options.local_exportname)
         args.extend(options.bgctl_reconnect)
         if options.target_exportname:
             args.append(options.target_exportname)
