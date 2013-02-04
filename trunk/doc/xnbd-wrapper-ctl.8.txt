@@ -14,22 +14,22 @@ SYNOPSIS
 --------
 *xnbd-wrapper-ctl* [options] --list
 
-*xnbd-wrapper-ctl* [options] [--local-exportname 'NAME'] --add-target 'FILE'
+*xnbd-wrapper-ctl* [options] --add-target 'LOCAL_EXPORTNAME' 'FILE'
 
-*xnbd-wrapper-ctl* [options] [--local-exportname 'NAME'] [--target-exportname 'NAME']
-    --add-proxy 'TARGET_HOST' 'TARGET_PORT' 'CACHE_IMAGE' 'BITMAP_IMAGE' 'CONTROL_SOCKET_PATH'
+*xnbd-wrapper-ctl* [options] [--target-exportname 'NAME']
+    --add-proxy 'LOCAL_EXPORTNAME' 'REMOTE_HOST' 'REMOTE_PORT' 'CACHE_IMAGE' 'BITMAP_IMAGE' 'CONTROL_SOCKET_PATH'
 
 *xnbd-wrapper-ctl* [options] --remove-by-file 'FILE'
 
 *xnbd-wrapper-ctl* [options] --remove-by-exportname 'NAME'
 
-*xnbd-wrapper-ctl* [options] --local-exportname 'NAME' --bgctl-query
+*xnbd-wrapper-ctl* [options] --bgctl-query 'LOCAL_EXPORTNAME'
 
-*xnbd-wrapper-ctl* [options] --local-exportname 'NAME' --bgctl-switch
+*xnbd-wrapper-ctl* [options] --bgctl-switch 'LOCAL_EXPORTNAME'
 
-*xnbd-wrapper-ctl* [options] --local-exportname 'NAME' --bgctl-cache-all
+*xnbd-wrapper-ctl* [options] --bgctl-cache-all 'LOCAL_EXPORTNAME'
 
-*xnbd-wrapper-ctl* [options] --local-exportname 'NAME' [--target-exportname 'NAME'] --bgctl-reconnect 'REMOTE_HOST' 'REMOTE_PORT'
+*xnbd-wrapper-ctl* [options] [--target-exportname 'NAME'] --bgctl-reconnect  'LOCAL_EXPORTNAME' 'REMOTE_HOST' 'REMOTE_PORT'
 
 
 DESCRIPTION
@@ -77,9 +77,6 @@ The following options are supported:
     Connect to 'SOCKETPATH' as xnbd-wrapper control socket. Default is
     /tmp/xnbd_wrapper.ctl.
 
-*--local-exportname* 'NAME'::
-    Set the export name to export the image as.
-
 *--target-exportname* 'NAME'::
     Set the export name to request from the proxied xnbd-wrapper target.
     This option is used in combination with *--add-proxy* and *--bgctl-reconnect*, only.
@@ -95,6 +92,32 @@ The following options are supported:
 
 *--bgctl-switch*::
     Please see xnbd-bgctl(1) for details.
+
+
+POSITIONAL ARGUMENTS
+--------------------
+The following positional options are supported:
+
+'FILE'::
+    The disk image file location.
+
+'LOCAL_EXPORTNAME'::
+    Export name at running xnbd-wrapper(8) process.
+
+'REMOTE_HOST'::
+    Target host to connect to, IPv4 address, IPv6 address or host name.
+
+'REMOTE_PORT'::
+    TCP port number to connect to.
+
+'CACHE_IMAGE'::
+    The (cache) disk image file location.
+
+'BITMAP_IMAGE'::
+    The caching state bitmap file location.
+
+'CONTROL_SOCKET_PATH'::
+    The Unix domain socket, the xnbd-server(8) program is listening on.
 
 
 SEE ALSO

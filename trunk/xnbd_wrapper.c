@@ -751,7 +751,7 @@ static void *start_filemgr_thread(void * pointer)
 				if (res == ARGV_ENOMEM) {
 					fprintf(fp, "%s\n", MESSAGE_ENOMEM);
 				} else if (res == ARGV_ERROR_USAGE) {
-					fprintf(fp, "usage: %s\n", "add-target [<EXPORTNAME>] FILE");
+					fprintf(fp, "usage: %s\n", "add-target <LOCAL_EXPORTNAME> <FILE>");
 				} else if (res == ARGV_SUCCESS) {
 					const char * const file = (argc == 3) ? argv[2] : argv[1];
 					const char * const exportname = (argc == 3) ? argv[1] : file;
@@ -850,7 +850,7 @@ static void *start_filemgr_thread(void * pointer)
 				fprintf(fp,
 					"  list                 : show list of disk images\n"
 					"\n"
-					"  add-target [NAME] PATH : add disk image in target mode\n"
+					"  add-target NAME PATH : add disk image in target mode\n"
 					"  add-proxy ...        : add disk image in proxy mode\n"
 					" (add [NAME] PATH)     : add disk image in target mode, deprecated\n"
 					"\n"
