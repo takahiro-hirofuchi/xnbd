@@ -96,9 +96,8 @@ class FixedHelpFormatter(argparse.HelpFormatter):
 def parse_command_line(argv):
     parser = argparse.ArgumentParser(formatter_class=FixedHelpFormatter, usage="""
   %(prog)s [-s SOCKPATH] --list
-  %(prog)s [-s SOCKPATH] [--local-exportname NAME] --add FILE
+  %(prog)s [-s SOCKPATH] [--local-exportname NAME] --add-target FILE
   %(prog)s [-s SOCKPATH] [--local-exportname NAME] [--target-exportname NAME] --add-proxy TARGET_HOST TARGET_PORT CACHE_IMAGE BITMAP_IMAGE CONTROL_SOCKET_PATH
-  %(prog)s [-s SOCKPATH] --remove INDEX
   %(prog)s [-s SOCKPATH] --remove-by-file FILE
   %(prog)s [-s SOCKPATH] --remove-by-exportname NAME
   %(prog)s [-s SOCKPATH] --shutdown
@@ -117,12 +116,10 @@ def parse_command_line(argv):
 
     operations.add_argument("--list", "-l", action='store_true',
                         help="list registered disk images.")
-    operations.add_argument("--add", "-a", metavar='FILE',
+    operations.add_argument("--add-target", metavar='FILE',
                         help="add a disk image file to the export list.")
     operations.add_argument("--add-proxy", metavar=['TARGET_HOST', 'TARGET_PORT', 'CACHE_IMAGE', 'BITMAP_IMAGE', 'CONTROL_SOCKET_PATH'], nargs=5,
                         help="add a disk image file to the export list.")
-    operations.add_argument("--remove", "-r", metavar='INDEX', type=int,
-                        help="remove a disk image file from the list.")
     operations.add_argument("--remove-by-file", metavar='FILE',
                         help="remove a disk image file from the list.")
     operations.add_argument("--remove-by-exportname", metavar='NAME',
@@ -143,6 +140,13 @@ def parse_command_line(argv):
                         help="set the export name to export the image as.")
     parser.add_argument("--target-exportname", metavar='NAME',
                         help="set the export name to request from a xnbd-wrapper target (used with --add-proxy).")
+
+    deprecated_operations = parser.add_argument_group('deprecated arguments')
+
+    deprecated_operations.add_argument("--add", "-a", metavar='FILE',
+                        help="alias to --add-target, deprecated")
+    deprecated_operations.add_argument("--remove", "-r", metavar='INDEX', type=int,
+                        help="remove a disk image file from the list, deprecated")
 
     options = parser.parse_args(argv[1:])
 
@@ -180,7 +184,7 @@ def compose_command(options, argv):
 
     # Single argument commands
     single_arg_commands = (
-        (options.remove, 'del'),
+        (options.remove, 'del'),  # deprecated
         (options.remove_by_file, 'del-file'),
         (options.remove_by_exportname, 'del-exportname'),
     )
@@ -203,14 +207,14 @@ def compose_command(options, argv):
             args.append(options.target_exportname)
 
         return 'add-proxy %s' % ' '.join(percent_encode(args))
-    elif options.add:
+    elif options.add or options.add_target:  # --add is deprecated
         args = []
         if options.local_exportname:
             # export name != file name  (possibly)
             args.append(options.local_exportname)
-        args.append(options.add)
+        args.append(options.add or options.add_target)
 
-        return 'add %s' % ' '.join(percent_encode(args))
+        return 'add-target %s' % ' '.join(percent_encode(args))
     elif options.bgctl_reconnect:
         args = []
         args.append(options.local_exportname)

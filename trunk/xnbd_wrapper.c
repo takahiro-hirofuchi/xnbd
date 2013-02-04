@@ -744,14 +744,14 @@ static void *start_filemgr_thread(void * pointer)
 	
 			if (strcmp(cmd, "list") == 0)
 				list_diskimg(fp);
-			else if (strcmp(cmd, "add") == 0) {
+			else if ((strcmp(cmd, "add") == 0) || (strcmp(cmd, "add-target") == 0)) {
 				gchar ** argv = NULL;
 				guint argc = 0;
 				const int res = extract_decode_check_usage(buf, &argv, &argc, ARGC_RANGE(2, 3));
 				if (res == ARGV_ENOMEM) {
 					fprintf(fp, "%s\n", MESSAGE_ENOMEM);
 				} else if (res == ARGV_ERROR_USAGE) {
-					fprintf(fp, "usage: %s\n", "add [<EXPORTNAME>] FILE");
+					fprintf(fp, "usage: %s\n", "add-target [<EXPORTNAME>] FILE");
 				} else if (res == ARGV_SUCCESS) {
 					const char * const file = (argc == 3) ? argv[2] : argv[1];
 					const char * const exportname = (argc == 3) ? argv[1] : file;
@@ -850,12 +850,13 @@ static void *start_filemgr_thread(void * pointer)
 				fprintf(fp,
 					"  list                 : show list of disk images\n"
 					"\n"
-					"  add [NAME] PATH      : add disk image in target mode\n"
+					"  add-target [NAME] PATH : add disk image in target mode\n"
 					"  add-proxy ...        : add disk image in proxy mode\n"
+					" (add [NAME] PATH)     : add disk image in target mode, deprecated\n"
 					"\n"
-					"  del INDEX            : delete disk image by index\n"
 					"  del-file FILE        : delete disk image by file name\n"
 					"  del-exportname NAME  : delete disk image by export name\n"
+					" (del INDEX)           : delete disk image by index, deprecated\n"
 					"\n"
 					"  bgctl-query NAME     : Query status of proxy\n"
 					"  bgctl-switch NAME    : Switch from proxy to target mode\n"
