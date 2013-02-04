@@ -14,12 +14,10 @@ SYNOPSIS
 --------
 *xnbd-wrapper-ctl* [options] --list
 
-*xnbd-wrapper-ctl* [options] [--local-exportname 'NAME'] --add 'FILE'
+*xnbd-wrapper-ctl* [options] [--local-exportname 'NAME'] --add-target 'FILE'
 
 *xnbd-wrapper-ctl* [options] [--local-exportname 'NAME'] [--target-exportname 'NAME']
     --add-proxy 'TARGET_HOST' 'TARGET_PORT' 'CACHE_IMAGE' 'BITMAP_IMAGE' 'CONTROL_SOCKET_PATH'
-
-*xnbd-wrapper-ctl* [options] --remove 'INDEX'
 
 *xnbd-wrapper-ctl* [options] --remove-by-file 'FILE'
 
@@ -46,12 +44,15 @@ OPTIONS
 -------
 The following options are supported:
 
-*--add*|*-a* 'FILE'::
+*--add-target* 'FILE'::
     Instruct the xnbd-wrapper to add the given 'FILE' as exported xNBD
     device.
 
 *--add-proxy* 'TARGET_HOST' 'TARGET_PORT' 'CACHE_IMAGE' 'BITMAP_IMAGE' 'CONTROL_SOCKET_PATH'::
     Instruct the xnbd-wrapper to add a proxy to the given target server.
+
+(*--add*|*-a* 'FILE')::
+    Deprecated alias to --add-target, please do not use.
 
 *--help*|*-h*::
     Display a short usage overview and exit
@@ -60,10 +61,6 @@ The following options are supported:
     Connects to the xNBD wrapper and retrieves the list of exported file
     names
 
-*--remove*|*-r* 'INDEX'::
-    Instruct the xnbd-wrapper to remove the volume exported on 'INDEX'
-    from the list of exported xNBD devices.
-
 *--remove-by-file* 'FILE'::
     Instruct the xnbd-wrapper to remove the volume wired to file 'FILE'
     from the list of exported xNBD devices.
@@ -71,6 +68,10 @@ The following options are supported:
 *--remove-by-exportname* 'NAME'::
     Instruct the xnbd-wrapper to remove the volume exported as 'NAME'
     from the list of exported xNBD devices.
+
+(*--remove*|*-r* 'INDEX')::
+    Instruct the xnbd-wrapper to remove the volume exported on 'INDEX'
+    from the list of exported xNBD devices.  Deprecated, please do not use.
 
 *--socket*|*-s* 'SOCKETPATH'::
     Connect to 'SOCKETPATH' as xnbd-wrapper control socket. Default is
