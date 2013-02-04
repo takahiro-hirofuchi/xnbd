@@ -19,16 +19,16 @@ _MANPAGE_INPUT = $(patsubst %, %.txt, $(_RAW_MANPAGES))
 _HTML_FILES = $(patsubst %, %.html, $(_RAW_MANPAGES))
 
 
-EXTRA_DIST = $(_MANPAGE_INPUT)
+EXTRA_DIST = $(_MANPAGE_INPUT) asciidoc.conf
 
-dist_pkgdatadir = @htmldir@
-dist_pkgdata_DATA = $(_HTML_FILES)
+dist_html_DATA = $(_HTML_FILES) ChangeLog.html docbook-xsl.css
 
 
 define TEMPLATE
-%.$(section)$(1): %.$(section).txt asciidoc.conf Makefile
+%.$(section)$(1): %.$(section).txt asciidoc.conf Makefile.am
+	@chmod u+w docbook-xsl.css 2>/dev/null || true
 	a2x \
-		--conf-file=asciidoc.conf \
+		--conf-file=$$(srcdir)/asciidoc.conf \
 		--attribute="manual_package=$$(_MANUAL_PACKAGE)" \
 		--attribute="manual_title=$$(_MANUAL_TITLE)" \
 		--attribute="manual_version=$$(_MANUAL_VERSION)" \
@@ -36,7 +36,15 @@ define TEMPLATE
 		"$$<"
 endef
 
+clean-local:
+	rm -f $(_RAW_MANPAGES) $(_HTML_FILES) ChangeLog.html docbook-xsl.css
+
 
 _MANPAGE_SECTIONS = $(shell for i in $(_RAW_MANPAGES); do echo $$i ; done | sed 's|.*\.||' | sort -u)
 $(foreach section,$(_MANPAGE_SECTIONS),$(eval $(call TEMPLATE,.html,xhtml)))
 $(foreach section,$(_MANPAGE_SECTIONS),$(eval $(call TEMPLATE,,manpage)))
+
+
+ChangeLog.html docbook-xsl.css: ../ChangeLog asciidoc.conf Makefile.am
+	@chmod u+w docbook-xsl.css 2>/dev/null || true
+	a2x --conf-file=$(srcdir)/asciidoc.conf --format=xhtml -D . "$<"

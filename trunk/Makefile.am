@@ -17,7 +17,7 @@ noinst_PROGRAMS = \
 lib_LTLIBRARIES = \
 	libxnbd_internal.la
 
-sbin_SCRIPTS = $(srcdir)/xnbd-wrapper-ctl.py
+dist_sbin_SCRIPTS = xnbd-wrapper-ctl.py
 
 
 libxnbd_internal_la_SOURCES = \
@@ -60,6 +60,10 @@ xnbd_cachestatdump_SOURCES = xnbd_cachestatdump.c
 
 xnbd_tester_LDADD = libxnbd_internal.la
 xnbd_tester_SOURCES = xnbd_tester.c
+
+
+# Install change log, too
+dist_doc_DATA = ChangeLog
 
 
 AM_CPPFLAGS = @GLIB_CFLAGS@
