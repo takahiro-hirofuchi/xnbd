@@ -8,12 +8,14 @@ Line width is meant to be 90 characters.
 xNBD Change Log
 ===============
 
-xNBD 0.2.0
-----------
+0.2.0
+-----
 
 Bugfixes
 ~~~~~~~~
  * Fix false positives in network error detection
+ * xnbd-server: By default, use syslog in daemon mode for logging, not /tmp/xnbd.log.
+     This fixes an earlier vulnerability to symlink attacks on /tmp/xnbd.log.
  * xnbd-server: No longer let network errors stop entire proxy server (issue #3)
  * xnbd-server: Make --shutdown work for wrapped servers (issue #5)
  * xnbd-(bgctl|server): Use SIGUSR2 (rather than SIGHUP) for internal (issue #2)
@@ -22,17 +24,27 @@ Bugfixes
  * xnbd-wrapper: Fix race conditions in disk registration
  * xnbd-wrapper: Fix unspecified behavior from calling pthread_detach() twice
  * xnbd-wrapper(-ctl): Add support for filenames containing spaces or newlines
+ * xnbd-client: Actually apply retry count from --retry|-r COUNT
+ * xnbd-wrapper-ctl: Fix leading whitespace in echoed server output
+ * xnbd-wrapper: On missing disk file, error out rather than sending bogus diks size
+ * xnbd-wrapper: Fix locating xnbd-server binary
+ * Fix typos in program output and man pages
 
 Improvements
 ~~~~~~~~~~~~
+ * xnbd-bgctl: Improve the speed of --cache-all
  * xnbd-bgctl: Add optional progress bar to --cache-all operation
+ * xnbd-bgctl: Guard --shutdown/--switch by --force, i.e. prevent premature switching
  * xnbd-bgctl: Make --shutdown/--switch wait for the server to finish
  * xnbd-bgctl: Show caching percentage in --query output communication
+ * xnbd-bgctl: Allow reconnecting a proxy to wrapped servers
  * xnbd-client: Add support for symlinks to NBD devices
  * xnbd-client: Mode --check now returns code 2 for a valid, unused NBD device
- * xnbd-server: Add support for wrapped remote servers in proxy mode
- * xnbd-server: Guard --switch by --force, i.e. preventy premature switch
+ * xnbd-server: Keep existing bitmap state by default, add option --clear-bitmap
+ * xnbd-server: Add support for wrapped remote servers to proxy mode (through option
+     --target-exportname)
  * xnbd-server: Stop writing to failed client connections
+ * xnbd-(server|wrapper): Add --syslog parameter
  * xnbd-wrapper: Resolve hard limit to 32 registered disks
  * xnbd-wrapper: Keep disk indices constant during runtime
  * xnbd-wrapper(-ctl): Distinct export and file name, support removal by export name
@@ -55,3 +67,35 @@ Changes relevant to packaging
  * Build system migrated to GNU autotools (autoconf, automake, libtool)
  * Man pages now shipped pre-built as Troff and HTML, too; no more docbook-to-man
  * Man page compression now left to downstream
+ * xnbd-wrapper-ctl now depends on Python 2.6 and argparse
+
+
+0.1.0-pre-hg20-e75b93a47722-2
+-----------------------------
+While technically this never was an upstream release, it is the state that people
+running xNBD on Debian GNU/Linux are familiar with.  So we decided to make an
+artificial cut.
+
+Bugfixes
+~~~~~~~~
+ * xnbd-server: Fix migration of disks larger than 4GB on a 32bit operating system
+ * xnbd-server: Fix broken startup with GLib 2.32 or later
+ * xnbd-(bgctl|server): Handle memory mapping failure properly
+ * Various build system fixes
+
+Improvements
+~~~~~~~~~~~~
+ * xnbd-server: Add --inetd option
+ * xnbd-server: Increase proxy read queue size from 10 requests to 32 requests
+ * xnbd-wrapper: Add --daemonize, --logpath, --cow, and --readonly
+ * xnbd-wrapper: Improve --help output
+ * xnbd-wrapper(-ctl): Add --shutdown option
+ * xnbd-wrapper-ctl: Rename -d (for delete) to -r (for remove)
+ * xnbd-wrapper-ctl: Add long option versions: --list, --add, --remove, --socket
+ * Add man pages xnbd-wrapper, xnbd-wrapper-ctl
+ * Improve and extend existing man pages
+
+
+0.1.0-pre
+---------
+Starting point of the change log.
