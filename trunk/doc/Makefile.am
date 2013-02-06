@@ -1,3 +1,10 @@
+# Silent rule support for AsciiDoc
+V ?= $(AM_DEFAULT_VERBOSITY)
+SILENT_RULE_A2X_MESSAGE_PLAIN  = $(if $(subst 0,,$(V)),@:,@echo "  A2X   " $@)
+SILENT_RULE_A2X_MESSAGE_EVALED = $(if $(subst 0,,$(V)),@:,@echo "  A2X   " $$@)
+HIDE_A2X = $(if $(subst 0,,$(V)),,@)
+
+
 _MANUAL_PACKAGE = @PACKAGE_NAME@
 _MANUAL_TITLE = @PACKAGE_NAME@ Manual
 _MANUAL_VERSION = @PACKAGE_VERSION@
@@ -27,7 +34,8 @@ dist_html_DATA = $(_HTML_FILES) ChangeLog.html docbook-xsl.css
 define TEMPLATE
 %.$(section)$(1): %.$(section).txt asciidoc.conf Makefile.am
 	@chmod u+w docbook-xsl.css 2>/dev/null || true
-	a2x \
+	$(SILENT_RULE_A2X_MESSAGE_EVALED)
+	$(HIDE_A2X)a2x \
 		--conf-file=$$(srcdir)/asciidoc.conf \
 		--attribute="manual_package=$$(_MANUAL_PACKAGE)" \
 		--attribute="manual_title=$$(_MANUAL_TITLE)" \
@@ -47,4 +55,5 @@ $(foreach section,$(_MANPAGE_SECTIONS),$(eval $(call TEMPLATE,,manpage)))
 
 ChangeLog.html docbook-xsl.css: ../ChangeLog asciidoc.conf Makefile.am
 	@chmod u+w docbook-xsl.css 2>/dev/null || true
-	a2x --conf-file=$(srcdir)/asciidoc.conf --format=xhtml -D . "$<"
+	$(SILENT_RULE_A2X_MESSAGE_PLAIN)
+	$(HIDE_A2X)a2x --conf-file=$(srcdir)/asciidoc.conf --format=xhtml -D . "$<"
