@@ -45,9 +45,11 @@ Improvements
  * xnbd-server: Add support for wrapped remote servers to proxy mode (through option
      --target-exportname)
  * xnbd-server: Stop writing to failed client connections
+ * xnbd-server: Document --tos and --connected-fd in man page
  * xnbd-(server|wrapper): Add --syslog parameter
  * xnbd-wrapper: Resolve hard limit to 32 registered disks
  * xnbd-wrapper: Keep disk indices constant during runtime
+ * xnbd-wrapper: Document --cow and --readonly in man page
  * xnbd-wrapper(-ctl): Distinct export and file name, support removal by export name
      or file name, too
  * xnbd-wrapper(-ctl): Add commands --bgctl-query, --bgctl-cache-all, --bgctl-switch,
