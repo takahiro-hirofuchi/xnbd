@@ -78,7 +78,7 @@ The following options are supported:
     All network I/O is redirected to the stdin descriptor.
 
 *--logpath* 'FILE'::
-    Log informational messages to file 'FILE'.
+    Log informational messages to file 'FILE' rather than stderr/syslog.
 
 *--syslog*::
     Log informational messages to syslog.
