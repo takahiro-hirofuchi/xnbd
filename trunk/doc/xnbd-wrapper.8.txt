@@ -58,6 +58,9 @@ The following options are supported:
 *--logpath* 'FILE'::
     Log informational messages to file 'FILE' rather than stderr/syslog.
 
+*--syslog*::
+    Log informational messages to syslog.
+
 *--lport* 'PORT'::
     Accept incoming connections on the given 'PORT'. A valid port is any
     number between 1 and 65536. You may not use the same listeing port
@@ -76,6 +79,12 @@ The following options are supported:
     Specifies the path to the xnbd-server program. The wrapper will
     spawn server instances on demand. Give 'PATH' as file name, default is
     "xnbd-server" (relative to the directory, where the wrapper resides).
+
+*--cow*::
+    Invoke xnbd-server(8) instances using parameter --cow-target.
+
+*--readonly*::
+    Invoke xnbd-server(8) instances using parameter --readonly.
 
 
 SEE ALSO
