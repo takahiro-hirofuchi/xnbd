@@ -994,7 +994,7 @@ static const char help_string[] =
 	"  --xnbd-binary Path to xnbd-server.\n"
 	"  --imgfile     Path to disk image file. This options can be used multiple times.\n"
 	"                You can also use xnbd-wrapper-ctl to (de)register disk images dynamically.\n"
-	"  --logpath     logfile (default /tmp/xnbd.log)\n"
+	"  --logpath PATH Use the given path for logging (default: stderr/syslog)\n"
 	"  --laddr       Listen address.\n"
 	"  --socket      Unix socket path to listen on (default: /tmp/xnbd_wrapper.ctl).\n"
 	"  --syslog      use syslog for logging\n"

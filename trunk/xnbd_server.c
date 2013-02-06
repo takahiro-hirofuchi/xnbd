@@ -733,7 +733,7 @@ Options: \n\
   --lport PORT   set the listen port (default: 8520)\n\
   --daemonize    run as a daemon process\n\
   --readonly     export a disk as readonly\n\
-  --logpath PATH use the given path for logging (default: stderr)\n\
+  --logpath PATH use the given path for logging (default: stderr/syslog)\n\
   --syslog       use syslog for logging\n\
   --inetd        set the inetd mode (use fd 0 for TCP connection)\n\
 \n\

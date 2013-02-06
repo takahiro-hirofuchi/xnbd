@@ -56,8 +56,7 @@ The following options are supported:
     in IPv4 or IPv6 notation.
 
 *--logpath* 'FILE'::
-    Log informational messages to the given 'FILE' if given. Defaults to
-    /tmp/xnbd.log
+    Log informational messages to file 'FILE' rather than stderr/syslog.
 
 *--lport* 'PORT'::
     Accept incoming connections on the given 'PORT'. A valid port is any
