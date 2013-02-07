@@ -127,16 +127,6 @@ xnbd-client(1), xnbd-bgctl(1), xnbd-wrapper(8)
 
 AUTHOR
 ------
-The NBD kernel module and the NBD tools have been written by Pavel Macheck
-(pavel@ucw.cz) and is now maintained by Paul Clements
-(Paul.Clements@steeleye.com).
+include::author_xnbd.txt[]
 
-The xNBD userland programs have been written by
-Takahiro Hirofuchi (t.hirofuchi@aist.go.jp).
-
-This manual page was written by Arno Toell (debian@toell.net) for the
-Debian GNU/Linux system (but may be used by others). Large parts are verbatim
-copies of the original nbd-server and nbd-client manual pages written by
-Wouter Verhelst (wouter@debian.org). Permission is granted to copy, distribute
-and/or modify this document under the terms of the GNU General Public License,
-version 2, as published by the Free Software Foundation.
+include::author_verhelst_toell.txt[]

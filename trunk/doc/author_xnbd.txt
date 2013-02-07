@@ -1,0 +1,6 @@
+The NBD kernel module and the NBD tools have been written by
+Pavel Macheck (pavel@ucw.cz) and is now maintained by
+Paul Clements (Paul.Clements@steeleye.com).
+
+The xNBD userland programs have been written by
+Takahiro Hirofuchi (t.hirofuchi@aist.go.jp).
