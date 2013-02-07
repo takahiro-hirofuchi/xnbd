@@ -1220,6 +1220,7 @@ int main(int argc, char **argv) {
 		err("epoll_create : %m");
 
 	/* add signalfd */
+	memset(&sigfd_ev, 0, sizeof(sigfd_ev));
 	sigfd_ev.events = POLLIN;
 	sigfd_ev.data.fd = sigfd;
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, sigfd, &sigfd_ev) == -1) {
@@ -1229,6 +1230,8 @@ int main(int argc, char **argv) {
 	/* add tcp socket */
 	if ((sockfd = make_tcp_sock(laddr, port)) == -1)
 		err("make_tcp_sock() returned %d", sockfd);
+
+	memset(&tcpfd_ev, 0, sizeof(tcpfd_ev));
 	tcpfd_ev.events = POLLIN;
 	tcpfd_ev.data.fd = sockfd;
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, sockfd, &tcpfd_ev) == -1) {
@@ -1238,6 +1241,8 @@ int main(int argc, char **argv) {
 	/* add unix socket */
 	if ((ux_sockfd = make_unix_sock(ctl_path)) < 0)
 		err("make_unix_sock() returned %d", ux_sockfd);
+
+	memset(&uxfd_ev, 0, sizeof(uxfd_ev));
 	uxfd_ev.events = POLLIN;
 	uxfd_ev.data.fd = ux_sockfd;
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, ux_sockfd, &uxfd_ev) == -1) {
