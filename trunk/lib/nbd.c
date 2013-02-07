@@ -53,7 +53,7 @@ int nbd_client_send_request_header(int remotefd, uint32_t iotype, off_t iofrom, 
 
 
 	struct nbd_request request;
-	bzero(&request, sizeof(request));
+	memset(&request, 0, sizeof(request));
 
 	request.magic = htonl(NBD_REQUEST_MAGIC);
 	request.type = htonl(iotype);
@@ -95,7 +95,7 @@ int send_read_request(int remotefd, off_t iofrom, size_t len)
 	g_assert(len <= UINT32_MAX);
 	g_assert(iofrom + len <= OFF_MAX);
 
-	bzero(&request, sizeof(request));
+	memset(&request, 0, sizeof(request));
 
 	request.magic = htonl(NBD_REQUEST_MAGIC);
 	request.type = htonl(NBD_CMD_READ);
@@ -120,7 +120,7 @@ int nbd_client_recv_header(int remotefd)
 
 	dbg("now reciving read reply");
 
-	bzero(&reply, sizeof(reply));
+	memset(&reply, 0, sizeof(reply));
 
 	int ret = net_recv_all_or_error(remotefd, &reply, sizeof(reply));
 	if (ret < 0) {
@@ -191,7 +191,7 @@ void nbd_client_send_disc_request(int remotefd)
 	struct nbd_request request;
 	int ret;
 
-	bzero(&request, sizeof(request));
+	memset(&request, 0, sizeof(request));
 
 	request.magic = htonl(NBD_REQUEST_MAGIC);
 	request.type = htonl(NBD_CMD_DISC);
@@ -226,7 +226,7 @@ int nbd_server_recv_request(int clientfd, off_t disksize, uint32_t *iotype_arg, 
 	uint32_t iolen  = 0;
 	int ret;
 
-	bzero(&request, sizeof(request));
+	memset(&request, 0, sizeof(request));
 
 	ret = net_recv_all_or_error(clientfd, &request, sizeof(request));
 	// ret = net_recv_all(clientfd, &request, sizeof(request));
@@ -349,7 +349,7 @@ char *nbd_negotiate_with_client_new_phase_0(int sockfd)
 
 	{
 		struct nbd_negotiate_pdu_new_0 pdu0;
-		bzero(&pdu0, sizeof(pdu0));
+		memset(&pdu0, 0, sizeof(pdu0));
 
 		pdu0.passwd = htonll(NBD_PASSWD);
 		pdu0.magic  = htonll(NBD_NEGOTIATE_MAGIC_NEW);
@@ -402,7 +402,7 @@ int nbd_negotiate_with_client_new_phase_1(int sockfd, off_t exportsize, int read
 
 
 	struct nbd_negotiate_pdu_new_2 pdu2;
-	bzero(&pdu2, sizeof(pdu2));
+	memset(&pdu2, 0, sizeof(pdu2));
 
 	uint32_t flags = NBD_FLAG_HAS_FLAGS;
 	if (readonly) {
@@ -522,7 +522,7 @@ static int nbd_negotiate_with_client_common(int sockfd, off_t exportsize, int re
 	int ret;
 
 	struct nbd_negotiate_pdu_old pdu;
-	bzero(&pdu, sizeof(pdu));
+	memset(&pdu, 0, sizeof(pdu));
 
 	uint32_t flags = NBD_FLAG_HAS_FLAGS;
 	if (readonly) {

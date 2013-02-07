@@ -45,7 +45,7 @@ static void nbddev_watchdog(const char *devpath, unsigned int timeout)
 		return;
 
 	struct sigaction act;
-	bzero(&act, sizeof(act));
+	memset(&act, 0, sizeof(act));
 	act.sa_handler = nbddev_watchdog_sigalarm_handler;
 	int ret = sigaction(SIGALRM, &act, NULL);
 	if (ret < 0)
@@ -162,7 +162,7 @@ static void nbddev_watchdog(const char *devpath, unsigned int timeout, unsigned 
 	close(notifyfd);
 
 	struct sigaction act;
-	bzero(&act, sizeof(act));
+	memset(&act, 0, sizeof(act));
 	act.sa_handler = nbddev_watchdog_sigalarm_handler;
 	int ret = sigaction(SIGALRM, &act, NULL);
 	if (ret < 0)

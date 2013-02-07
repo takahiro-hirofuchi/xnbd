@@ -136,7 +136,7 @@ void bgctl_thread_create(off_t disksize, const char *bgctlpath)
 {
 	struct bginfo_struct *bginfo = &bginfo_data;
 
-	bzero(bginfo, sizeof(struct bginfo_struct));
+	memset(bginfo, 0, sizeof(struct bginfo_struct));
 	pthread_mutex_init(&bginfo->lock, NULL);
 	pthread_cond_init(&bginfo->init_done, NULL);
 	bginfo->disksize  = disksize;
@@ -177,7 +177,7 @@ void bgctl_wait_shutdown(void)
 
 	pthread_mutex_destroy(&bginfo->lock);
 	pthread_cond_destroy(&bginfo->init_done);
-	bzero(bginfo, sizeof(struct bginfo_struct));
+	memset(bginfo, 0, sizeof(struct bginfo_struct));
 }
 
 
@@ -262,7 +262,7 @@ void *sender_thread_main(void *data)
 void recv_reply_header(int remotefd, uint64_t expected_index)
 {
 	struct nbd_reply reply;
-	bzero(&reply, sizeof(reply));
+	memset(&reply, 0, sizeof(reply));
 
 
 	net_recv_all_or_abort(remotefd, &reply, sizeof(reply));
@@ -587,7 +587,7 @@ static void set_sigactions()
 {
 	struct sigaction act;
 
-	bzero(&act, sizeof(act));
+	memset(&act, 0, sizeof(act));
 	act.sa_handler = SIG_IGN;
 	sigaction(SIGPIPE, &act, NULL);
 }

@@ -200,7 +200,7 @@ static void set_sigactions()
 {
 	struct sigaction act;
 
-	bzero(&act, sizeof(act));
+	memset(&act, 0, sizeof(act));
 	//sigemptyset(&act.sa_mask);
 	act.sa_handler = signal_handler;
 
@@ -826,7 +826,7 @@ int main(int argc, char **argv) {
 	int use_syslog = 0;
 	int inetd = 0;
 
-	bzero(&xnbd, sizeof(xnbd));
+	memset(&xnbd, 0, sizeof(xnbd));
 
 	set_process_name("xnbd-server");
 

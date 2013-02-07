@@ -339,7 +339,7 @@ void cache_all_blocks_async(char *unix_path, unsigned long *bm, unsigned long nb
 
 
 	struct progress_info progress;
-	bzero(&progress, sizeof(progress));
+	memset(&progress, 0, sizeof(progress));
 	progress.blocks_total = nblocks;
 
 	struct winsize terminal_size;

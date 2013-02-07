@@ -756,7 +756,7 @@ int target_mode_main_cow(struct xnbd_session *ses)
 	size_t iolen  = 0;
 	int ret;
 
-	bzero(&reply, sizeof(reply));
+	memset(&reply, 0, sizeof(reply));
 	reply.magic = htonl(NBD_REPLY_MAGIC);
 	reply.error = 0;
 

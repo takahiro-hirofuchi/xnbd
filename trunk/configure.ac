@@ -26,7 +26,7 @@ AC_SUBST([GLIB_CFLAGS])
 AC_SUBST([GLIB_LIBS])
 
 # Checks for header files.
-AC_CHECK_HEADERS([arpa/inet.h fcntl.h inttypes.h netdb.h netinet/in.h stdlib.h string.h strings.h sys/file.h sys/ioctl.h sys/socket.h sys/time.h syslog.h unistd.h])
+AC_CHECK_HEADERS([arpa/inet.h fcntl.h inttypes.h netdb.h netinet/in.h stdlib.h string.h sys/file.h sys/ioctl.h sys/socket.h sys/time.h syslog.h unistd.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_HEADER_STDBOOL
@@ -46,7 +46,7 @@ AC_FUNC_FORK
 AC_HEADER_MAJOR
 AC_FUNC_MMAP
 AC_FUNC_STRNLEN
-AC_CHECK_FUNCS([alarm bzero dup2 ftruncate getpagesize memset munmap realpath socket strerror])
+AC_CHECK_FUNCS([alarm dup2 ftruncate getpagesize memset munmap realpath socket strerror])
 
 # Compile flags
 AC_ARG_ENABLE([debug], AC_HELP_STRING([--enable-debug], [enable debugging [default=no]]), [
