@@ -41,6 +41,7 @@ Improvements
  * xnbd-bgctl: Allow reconnecting a proxy to wrapped servers
  * xnbd-client: Add support for symlinks to NBD devices
  * xnbd-client: Mode --check now returns code 2 for a valid, unused NBD device
+ * xnbd-server: Fix broken startup with GLib 2.32 or later
  * xnbd-server: Keep existing bitmap state by default, add option --clear-bitmap
  * xnbd-server: Add support for wrapped remote servers to proxy mode (through option
      --target-exportname)
@@ -73,8 +74,8 @@ Changes relevant to packaging
  * xnbd-wrapper-ctl now depends on Python 2.6 and argparse
 
 
-0.1.0-pre-hg20-e75b93a47722-2
------------------------------
+0.1.0-pre-hg20-e75b93a47722
+---------------------------
 While technically this never was an upstream release, it is the state that people
 running xNBD on Debian GNU/Linux are familiar with.  So we decided to make an
 artificial cut.
@@ -82,7 +83,6 @@ artificial cut.
 Bugfixes
 ~~~~~~~~
  * xnbd-server: Fix migration of disks larger than 4GB on a 32bit operating system
- * xnbd-server: Fix broken startup with GLib 2.32 or later
  * xnbd-(bgctl|server): Handle memory mapping failure properly
  * Various build system fixes
 
