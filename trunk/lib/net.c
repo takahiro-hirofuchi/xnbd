@@ -60,7 +60,7 @@ struct addrinfo *net_getaddrinfo(char *host, int port, int ai_family, int sockty
 	struct addrinfo hints, *ai_head;
 	char portstr[NI_MAXSERV];
 
-	bzero(&hints, sizeof(hints));
+	memset(&hints, 0, sizeof(hints));
 
 	hints.ai_family   = ai_family;
 	hints.ai_socktype = socktype; /* SOCK_STREAM */
@@ -162,7 +162,7 @@ int net_accept(int lsock)
 	char host[NI_MAXHOST], port[NI_MAXSERV];
 	int ret;
 
-	bzero(&ss, sizeof(ss));
+	memset(&ss, 0, sizeof(ss));
 
 	csock = accept(lsock, (struct sockaddr *) &ss, &len);
 	if (csock < 0) {
@@ -651,7 +651,7 @@ int unix_connect(const char *path)
 int unix_send_fd(int socket, int fd)
 {
 	struct msghdr msg;
-	bzero(&msg, sizeof(msg));
+	memset(&msg, 0, sizeof(msg));
 
 	struct iovec iov[1];
 	iov[0].iov_base = (char *) "";
@@ -690,7 +690,7 @@ int unix_send_fd(int socket, int fd)
 int unix_recv_fd(int socket)
 {
 	struct msghdr msg;
-	bzero(&msg, sizeof(msg));
+	memset(&msg, 0, sizeof(msg));
 
 	int fd;
 	char buf[1];

@@ -427,7 +427,7 @@ int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
 			case XNBD_PROXY_CMD_QUERY_STATUS:
 				{
 					struct xnbd_proxy_query query;
-					bzero(&query, sizeof(query));
+					memset(&query, 0, sizeof(query));
 					query.disksize = proxy->xnbd->disksize;
 					g_strlcpy(query.diskpath, proxy->xnbd->proxy_diskpath, sizeof(query.diskpath));
 					g_strlcpy(query.bmpath, proxy->xnbd->proxy_bmpath, sizeof(query.bmpath));

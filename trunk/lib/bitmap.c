@@ -119,7 +119,7 @@ unsigned long *bitmap_open_file(const char *bitmapfile, unsigned long bits, size
 	if (!readonly) {
 		if (zeroclear) {
 			info("bitmap file %s zero-cleared", bitmapfile);
-			bzero(buf, buflen);
+			memset(buf, 0, buflen);
 		} else {
 			info("re-using previous state from bitmap file %s", bitmapfile);
 		}
@@ -164,7 +164,7 @@ unsigned long *bitmap_create(char *bitmapfile, unsigned long bits, int *cbitmapf
 	if (buf == MAP_FAILED)
 		err("bitmap mapping failed");
 
-	bzero(buf, buflen);
+	memset(buf, 0, buflen);
 
 	/* get disk space for bitmap */
 	ret = msync(buf, buflen, MS_SYNC);
