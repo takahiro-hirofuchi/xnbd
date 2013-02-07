@@ -23,7 +23,12 @@ Development of xNBD was partially sponsored by Wavecon GmbH <www.wavecon.de>.
 
 == License ==
 
-In short, xNBD is licensed under GPLv2.
+In short:
+
+ - the code, build system and change log of xNBD are licensed under
+   "GPL v2 or later",
+
+ - the man pages of xNBD are licensed under "GPL v2 only".
 
 
 This program is free software; you can redistribute it and/or modify it under
