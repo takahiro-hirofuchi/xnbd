@@ -37,7 +37,7 @@ dist_html_DATA = $(_HTML_FILES) ChangeLog.html docbook-xsl.css
 
 
 define TEMPLATE
-%.$(section)$(1): %.$(section).txt $(_INCLUDED_FILES) asciidoc.conf Makefile.am
+%.$(section)$(1): %.$(section).txt $(_INCLUDED_FILES) asciidoc.conf Makefile.am ../configure.ac
 	@chmod u+w docbook-xsl.css 2>/dev/null || true
 	$(SILENT_RULE_A2X_MESSAGE_EVALED)
 	$(HIDE_A2X)a2x \
