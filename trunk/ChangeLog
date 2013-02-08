@@ -15,7 +15,7 @@ Bugfixes
 ~~~~~~~~
  * Fix false positives in network error detection
  * xnbd-server: By default, use syslog in daemon mode for logging, not /tmp/xnbd.log.
-     This fixes an earlier vulnerability to symlink attacks on /tmp/xnbd.log.
+     This fixes the vulnerability to symlink attacks on /tmp/xnbd.log (CVE-2013-0265).
  * xnbd-server: No longer let network errors stop entire proxy server (issue #3)
  * xnbd-server: Make --shutdown work for wrapped servers (issue #5)
  * xnbd-(bgctl|server): Use SIGUSR2 (rather than SIGHUP) for internal (issue #2)
