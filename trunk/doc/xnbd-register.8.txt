@@ -12,16 +12,22 @@ xnbd-register - Restore xNBD sessions upon boot
 
 SYNOPSIS
 --------
-*xnbd-register* [--start] [--stop] [--restart] [--status] [--quiet]
+*xnbd-register* [--quiet] --start
+
+*xnbd-register* [--quiet] --stop
+
+*xnbd-register* [--quiet] --restart
+
+*xnbd-register* [--quiet] --status
 
 
 DESCRIPTION
 -----------
-With the xmbd-register command one can restore xnbd-server and xnbd-client
-sessions based on a configuration file.  This is useful to start both, client
-or server upon boot.
+With the xnbd-register command one can restore xnbd-server and xnbd-client
+sessions based on a configuration file.  This is useful to start client,
+server or both upon boot.
 
-To achieve this, xmbd-register reads a semi-structured configuration file
+To achieve this, xnbd-register reads a semi-structured configuration file
 located in /etc/xnbd.conf.  See below for format hints.
 
 
@@ -47,6 +53,9 @@ The following options are supported:
 *--restart*::
     Restart all xnbd instances, being client or server
 
+*--quiet*::
+    Do not produce verbose output
+
 
 CONFIGURATION FILE
 ------------------
@@ -57,7 +66,7 @@ that are supposed to be restored upon start of the system.
 The syntax of the file is a JSON data structure, allowing comments starting
 with a hash key ("#"). Two types of objects are recognized: xnbd volumes
 and a server instance.  xnbd volumes are indexed by the supposed devices name.
-This is, to restore /dev/nbd0 an object named "nbd0 must be configured.
+This is, to restore /dev/nbd0 an object named "nbd0" must be configured.
 Valid arguments are host, name and port.  So, for example, this is to
 configure /dev/nbd0 connecting to localhost on port 8520.  If present,
 identify the shared device by the configured logical name:
