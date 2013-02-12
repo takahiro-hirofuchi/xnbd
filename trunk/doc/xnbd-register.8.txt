@@ -1,0 +1,111 @@
+XNBD-REGISTER(8)
+================
+:man source:   {manual_package}
+:man version:  {manual_version}
+:man manual:   {manual_title}
+
+
+NAME
+----
+xnbd-register - Restore xNBD sessions upon boot
+
+
+SYNOPSIS
+--------
+*xnbd-register* [--start] [--stop] [--restart] [--status] [--quiet]
+
+
+DESCRIPTION
+-----------
+With the xmbd-register command one can restore xnbd-server and xnbd-client
+sessions based on a configuration file.  This is useful to start both, client
+or server upon boot.
+
+To achieve this, xmbd-register reads a semi-structured configuration file
+located in /etc/xnbd.conf.  See below for format hints.
+
+
+OPTIONS
+-------
+The following options are supported:
+
+*--start*::
+    Start devices configured in the configuration files.  If the configuration
+    files describes volumes, xnbd-register will try to establish a client
+    connection to the configured server instance.
+    +
+    Alternatively, xnbd-register will start sharing configured volumes by
+    starting an xnbd-wrapper super server.
+
+*--status*::
+    Retrieve server status from a running xnbd-wrapper command, if applicable.
+
+*--stop*::
+    Analogous to the start option, the stop argument will stop all xnbd
+    connection, being client or server instances.
+
+*--restart*::
+    Restart all xnbd instances, being client or server
+
+
+CONFIGURATION FILE
+------------------
+xnbd-register will read its defaults from /etc/xnbd.conf.  This is a
+semi-structured configuration file, describing client and server connections
+that are supposed to be restored upon start of the system.
+
+The syntax of the file is a JSON data structure, allowing comments starting
+with a hash key ("#"). Two types of objects are recognized: xnbd volumes
+and a server instance.  xnbd volumes are indexed by the supposed devices name.
+This is, to restore /dev/nbd0 an object named "nbd0 must be configured.
+Valid arguments are host, name and port.  So, for example, this is to
+configure /dev/nbd0 connecting to localhost on port 8520.  If present,
+identify the shared device by the configured logical name:
+
+---------------------------
+"nbd0": {
+    "host": "127.0.0.1",
+    "port": 8520,
+    "name": "name"
+}
+---------------------------
+
+Similarly, a server instance configures an xnbd-wrapper. Valid options are:
+
+*address*::
+    Specifies the listening address
+
+*port*::
+    Specifies the listening port
+
+*socket*::
+    Specifies the listening socket for the control channels
+
+*logpath*::
+    Specifies the log path where logging output is being redirected to
+
+*volumes*::
+    A list of volumes which are exported
+
+---------------------------
+"server": {
+    "address": "127.0.0.1",
+    "port": 8520,
+    "socket": "/var/run/xnbd.ctl",
+    "logpath": "/tmp/xnbd.log",
+    "volumes": [ "/dev/volume", "/dev/sdb1", "/var/lib/image.file" ]
+}
+---------------------------
+
+
+SEE ALSO
+--------
+xnbd-wrapper(8), xnbd-client(1)
+
+
+AUTHOR
+------
+xnbd-register was written by Arno Toell (debian@toell.net) for the
+Debian GNU/Linux system.
+
+include::author_toell.txt[]
