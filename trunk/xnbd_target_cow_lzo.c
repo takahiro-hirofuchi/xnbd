@@ -227,7 +227,7 @@ struct disk_stack *create_disk_stack(char *diskpath)
 		struct stat st;
 		int ret = stat(di->bmpath, &st);
 		if (ret == 0) {
-			info("use alreay-existing bitmap %s", di->bmpath);
+			info("use already-existing bitmap %s", di->bmpath);
 		} else {
 			info("create new base bitmap %s", di->bmpath);
 			size_t tmp_bmlen;

@@ -26,7 +26,7 @@ Bugfixes
  * xnbd-wrapper(-ctl): Add support for filenames containing spaces or newlines
  * xnbd-client: Actually apply retry count from --retry|-r COUNT
  * xnbd-wrapper-ctl: Fix leading whitespace in echoed server output
- * xnbd-wrapper: On missing disk file, error out rather than sending bogus diks size
+ * xnbd-wrapper: On missing disk file, error out rather than sending bogus disk size
  * xnbd-wrapper: Fix locating xnbd-server binary
  * xnbd-wrapper: Fix unintended termination when the process is stopped and continued
  * Fix typos in program output and man pages

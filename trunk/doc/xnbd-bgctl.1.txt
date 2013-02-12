@@ -25,7 +25,7 @@ SYNOPSIS
 
 DESCRIPTION
 -----------
-With the xmbd-bgctl command you can connect to an xnbd-server control channel
+With the xnbd-bgctl command you can connect to an xnbd-server control channel
 and instruct it to act as directed. You may pass an argument to the control
 program which is then forwarded, on your behalf, to the server instance.
 

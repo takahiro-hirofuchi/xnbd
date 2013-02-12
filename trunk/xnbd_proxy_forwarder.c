@@ -191,15 +191,15 @@ void prepare_write_priv(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 
 
 	/*
-	 * For a WRITE request, we recieved all write data from the client.
+	 * For a WRITE request, we received all write data from the client.
 	 * But, a reply must be sent later in the completion thread.
 	 * send(clientfd) may be blocked while holding send_lock.
 	 *
 	 * The completion threads holds send_lock, and unfortunately sometimes
 	 * becomes blocked due to a TCP flow control: A client is still
-	 * submitting the following requests, and not recieving replies from a
+	 * submitting the following requests, and not receiving replies from a
 	 * server.
-	 * The main thread is blocked for send_lock, and cannot recieve the
+	 * The main thread is blocked for send_lock, and cannot receive the
 	 * following requests anymore.
 	 *
 	 * Also, the reordering of request results should be avoided?
@@ -210,7 +210,7 @@ void prepare_write_priv(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 	 * Therefore, sending reply should be done in the completion thread.
 	 *
 	 * UPDATE: the main thread does not perform send() to the client
-	 * anymmore; send(clientfd) is only performed at the completion thread.
+	 * anymore; send(clientfd) is only performed at the completion thread.
 	 * So, we remove send_lock for clientfd.
 	 **/
 }
@@ -313,7 +313,7 @@ int forwarder_rx_thread_mainloop(struct xnbd_proxy *proxy)
 
 
 
-	/* large file support on 32bit architecutre */
+	/* large file support on 32bit architecture */
 	char *mmaped_buf = NULL;
 	size_t mmaped_len = 0;
 	off_t mmaped_offset = 0;

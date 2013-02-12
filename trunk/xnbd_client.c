@@ -303,7 +303,7 @@ const char *recovery_command_internal_reboot_call = "reboot now";
  * 1. xnbd-client quits with exit code 2, if it cannot establish an NBD session
  * with any server specified.
  *
- * 2. After a NBD session is establishd, it starts to serve an NBD device by
+ * 2. After a NBD session is established, it starts to serve an NBD device by
  * calling ioctl(NBD_DO_IT). xnbd-client (parent) quits after it checks an NBD
  * device file is actually working. Without this check, the next command like
  * mount may fail.

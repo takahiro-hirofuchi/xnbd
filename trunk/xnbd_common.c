@@ -130,7 +130,7 @@ void *mmap_iorange(struct xnbd_info *xnbd, int fd, off_t iofrom, size_t iolen, c
 	/*
 	 * mapping_start (off_t) is 64bit in 64-bit environments or in the
 	 * 32-bit envinronment with LARGEFILE. mapping_length (size_t) is 64 bit in
-	 * 64-bit envinronments, 32 bit in 32-bit envinronments.
+	 * 64-bit environments, 32 bit in 32-bit environments.
 	 **/
 
 	if (xnbd->readonly)

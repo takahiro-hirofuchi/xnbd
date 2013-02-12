@@ -140,7 +140,7 @@ int recv_request(struct proxy_session *ps)
 		priv->write_buff = g_malloc(iolen);
 
 		/*
-		 * Recieve write data to a temporariy buffer. 
+		 * Receive write data to a temporary buffer.
 		 *
 		 * Cache disk I/O is allowed only in the completion thread. 
 		 * This ensures all disk I/O is serialized.
@@ -564,7 +564,7 @@ int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
 
 
 
-/* before calling this funciton, all sessions must be terminated */
+/* before calling this function, all sessions must be terminated */
 void xnbd_proxy_stop(struct xnbd_info *xnbd)
 {
 	g_assert(g_list_length(xnbd->sessions) == 0);
@@ -653,7 +653,7 @@ void xnbd_proxy_start(struct xnbd_info *xnbd)
 
 		/*
 		 * Tell the master that xnbd_proxy gets ready. We need to send
-		 * something to differenciate close() by abort.
+		 * something to differentiate close() by abort.
 		 **/
 		net_send_all_or_abort(xnbd->proxy_sockpair_proxy_fd, "", 1);
 		shutdown(xnbd->proxy_sockpair_proxy_fd, SHUT_WR);

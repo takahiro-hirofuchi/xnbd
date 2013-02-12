@@ -218,7 +218,7 @@ void *sender_thread_main(void *data)
 		else if (params->rwmode == TESTWRONLY)
 			req->iotype = NBD_CMD_WRITE;
 		else
-			err("unkown rwmode");
+			err("unknown rwmode");
 
 
 		req->iofrom = (off_t) (1.0L * params->disksize * random() / RAND_MAX);

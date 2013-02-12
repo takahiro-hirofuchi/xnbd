@@ -118,7 +118,7 @@ int nbd_client_recv_header(int remotefd)
 {
 	struct nbd_reply reply;
 
-	dbg("now reciving read reply");
+	dbg("now receiving read reply");
 
 	memset(&reply, 0, sizeof(reply));
 
@@ -172,7 +172,7 @@ int nbd_client_recv_read_reply_iov(int remotefd, struct iovec *iov, unsigned int
 
 int nbd_client_recv_read_reply(int remotefd, char *buf, size_t len)
 {
-	dbg("now reciving read reply");
+	dbg("now receiving read reply");
 
 	g_assert(buf);
 	g_assert(len <= UINT32_MAX);
@@ -323,11 +323,11 @@ struct nbd_negotiate_pdu_new_2 {
 
 /*
  * The option NBD_OPT_EXPORT_NAME is introduced in the recent version of the
- * original NBD. It allows a client to speficy a target image name.
+ * original NBD. It allows a client to specify a target image name.
  *
  * I feel the negotiation phase of the NBD protocol is not so smart; it
  * should be changed to be reasonable. But, for the compatibility with the
- * orignal NBD and qemu, here the option is implemented.
+ * original NBD and qemu, here the option is implemented.
  *
  * From the viewpoint of the client, the new protocol is summarized as follows:
  *
