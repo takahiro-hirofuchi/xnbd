@@ -16,6 +16,7 @@ dist_man1_MANS = \
 	xnbd-watchdog.1
 
 dist_man8_MANS = \
+	xnbd-register.8 \
 	xnbd-server.8 \
 	xnbd-wrapper.8 \
 	xnbd-wrapper-ctl.8

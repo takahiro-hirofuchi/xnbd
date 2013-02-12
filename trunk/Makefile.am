@@ -17,7 +17,9 @@ noinst_PROGRAMS = \
 lib_LTLIBRARIES = \
 	libxnbd_internal.la
 
-dist_sbin_SCRIPTS = xnbd-wrapper-ctl.py
+dist_sbin_SCRIPTS = \
+	xnbd-register.py \
+	xnbd-wrapper-ctl.py
 
 
 libxnbd_internal_la_SOURCES = \
@@ -62,6 +64,8 @@ xnbd_tester_LDADD = libxnbd_internal.la
 xnbd_tester_SOURCES = xnbd_tester.c
 
 
+dist_sysconf_DATA = xnbd.conf
+
 # Install change log, too
 dist_doc_DATA = ChangeLog
 
@@ -71,10 +75,12 @@ AM_LDFLAGS = @GLIB_LIBS@
 
 
 install-exec-hook:
+	mv $(DESTDIR)$(sbindir)/xnbd-register{.py,}
 	mv $(DESTDIR)$(sbindir)/xnbd-wrapper-ctl{.py,}
 
 uninstall-hook:
 	rm $(DESTDIR)$(sbindir)/xnbd-wrapper-ctl
+	rm $(DESTDIR)$(sbindir)/xnbd-register
 
 
 # Target added for backwards-compatibility with previous Makefile
