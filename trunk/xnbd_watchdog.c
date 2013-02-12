@@ -119,7 +119,7 @@ static int watchdog_main(const char *devpath, int notify, unsigned int polling_i
 	for (;;) {
 		ssize_t ret = pread(fd, buf, bufsize, 0);
 		if (ret == 0) {
-			info("watchdog detected %s shutdowned", devpath);
+			info("watchdog detected %s shutdown", devpath);
 			break;
 		} else if (ret < 0)
 			err("read, ret %zd, %m", ret);

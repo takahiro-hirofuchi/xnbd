@@ -237,7 +237,7 @@ char *get_line(int fd)
 
 	dbg("end get_line");
 
-	/* this returned buffer must be freeed */
+	/* this returned buffer must be freed */
 
 	return line;
 

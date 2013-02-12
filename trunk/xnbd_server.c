@@ -82,7 +82,7 @@ void xnbd_initialize(struct xnbd_info *xnbd)
 
 void xnbd_shutdown(struct xnbd_info *xnbd)
 {
-	info("xnbd_shutdowning ...");
+	info("xnbd shutting down...");
 
 	if (xnbd->cmd == xnbd_cmd_target)
 		close(xnbd->target_diskfd);
@@ -129,7 +129,7 @@ void do_service(struct xnbd_session *ses)
 	}
 
 
-	info("shutdown xnbd master done (cmd %d), ret %d", xnbd->cmd, ret);
+	info("xnbd master shutdown done (cmd %d), ret %d", xnbd->cmd, ret);
 }
 
 
@@ -308,7 +308,7 @@ void shutdown_all_sessions(struct xnbd_info *xnbd)
 		info("notify worker (%d) of session termination", s->pid);
 		ssize_t ret = write(s->pipe_master_fd, "", 1);
 		if (ret < 0)
-			warn("notifiy failed");
+			warn("notify failed");
 
 		/* if everything goes well, we do not need to send SIGKILL */
 		ret = waitpid(s->pid, NULL, 0);
@@ -451,7 +451,7 @@ int master_server(int port, void *data, int connect_fd)
 		 * the next event comes.
 		 *
 		 * This means that ppoll() does not return -1 with errno ==
-		 * EINTR, for the signal that deliverred while the process was
+		 * EINTR, for the signal that delivered while the process was
 		 * running outside ppoll().
 		 *
 		 * For Debian's 2.6.26 kernels, it's ok.
