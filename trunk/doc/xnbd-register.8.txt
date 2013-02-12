@@ -114,7 +114,7 @@ xnbd-wrapper(8), xnbd-client(1)
 
 AUTHOR
 ------
-xnbd-register was written by Arno Toell (debian@toell.net) for the
+xnbd-register was written by Arno Toell (arno@debian.org) for the
 Debian GNU/Linux system.
 
 include::author_toell.txt[]
