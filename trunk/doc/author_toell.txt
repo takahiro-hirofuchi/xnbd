@@ -1,4 +1,4 @@
-This manual page was written by Arno Toell (debian@toell.net) for the Debian
+This manual page was written by Arno Toell (arno@debian.org) for the Debian
 GNU/Linux system (but may be used by others). Permission is granted to copy,
 distribute and/or modify this document under the terms of the GNU General
 Public License, version 2, as published by the Free Software Foundation.
