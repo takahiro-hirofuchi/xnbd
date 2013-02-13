@@ -570,11 +570,11 @@ static int make_unix_sock(const char *uxsock_path)
 	strcpy(ux_saddr.sun_path, uxsock_path);
 	ux_saddr.sun_family = AF_UNIX;
 	if (bind(uxsock, &ux_saddr, sizeof(ux_saddr))) {
-		warn("bind(AF_UNIX): %m");
+		warn("bind(AF_UNIX), socket \"%s\": %m", uxsock_path);
 		return -2;
 	}
 	if (listen(uxsock, 8)) {
-		warn("listen(AF_UNIX): %m");
+		warn("listen(AF_UNIX), socket \"%s\": %m", uxsock_path);
 		return -3;
 	}
 	return uxsock;
