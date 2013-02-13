@@ -111,7 +111,7 @@ def parse_command_line(argv):
     operations = parser.add_mutually_exclusive_group(required=True)
 
     parser.add_argument("-s", "--socket",
-                        dest="sockpath", default="/tmp/xnbd_wrapper.ctl",
+                        dest="sockpath", default="/var/run/xnbd-wrapper.ctl",
                         help="specify the socket file path of xnbd-wrapper.")
 
     operations.add_argument("--list", "-l", action='store_true',

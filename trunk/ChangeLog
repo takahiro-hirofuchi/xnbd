@@ -52,6 +52,8 @@ Improvements
  * xnbd-wrapper: Resolve hard limit to 32 registered disks
  * xnbd-wrapper: Keep disk indices constant during runtime
  * xnbd-wrapper: Document --cow and --readonly in man page
+ * xnbd-wrapper(-ctl): Change default control socket path from /tmp/xnbd_wrapper.ctl
+     to /var/run/xnbd-wrapper.ctl as a measure of precaution
  * xnbd-wrapper(-ctl): Distinct export and file name, support removal by export name
      or file name, too
  * xnbd-wrapper(-ctl): Add commands --bgctl-query, --bgctl-cache-all, --bgctl-switch,

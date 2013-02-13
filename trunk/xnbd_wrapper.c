@@ -996,12 +996,12 @@ static const char help_string[] =
 	"                You can also use xnbd-wrapper-ctl to (de)register disk images dynamically.\n"
 	"  --logpath PATH Use the given path for logging (default: stderr/syslog)\n"
 	"  --laddr       Listen address.\n"
-	"  --socket      Unix socket path to listen on (default: /tmp/xnbd_wrapper.ctl).\n"
+	"  --socket      Unix socket path to listen on (default: /var/run/xnbd-wrapper.ctl).\n"
 	"  --syslog      use syslog for logging\n"
 	"\n"
 	"Examples: \n"
 	"  xnbd-wrapper --imgfile /data/disk1\n"
-	"  xnbd-wrapper --imgfile /data/disk1 --imgfile /data/disk2 --xnbd-binary /usr/local/bin/xnbd-server --laddr 127.0.0.1 --lport 18520 --socket /tmp/xnbd_wrapper_1.ctl\n";
+	"  xnbd-wrapper --imgfile /data/disk1 --imgfile /data/disk2 --xnbd-binary /usr/local/bin/xnbd-server --laddr 127.0.0.1 --lport 18520 --socket /run/xnbd-wrapper-1.ctl\n";
 
 
 int main(int argc, char **argv) {
@@ -1015,7 +1015,7 @@ int main(int argc, char **argv) {
 	char *requested_img = NULL;
 	struct stat sb;
 	pthread_t thread;
-	const char default_ctl_path[] = "/tmp/xnbd_wrapper.ctl";
+	const char default_ctl_path[] = "/var/run/xnbd-wrapper.ctl";
 	char *ctl_path = NULL;
 	int child_process_count = 0;
 	const int MAX_NSRVS = 512;
