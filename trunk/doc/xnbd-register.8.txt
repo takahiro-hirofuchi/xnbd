@@ -101,7 +101,7 @@ Similarly, a server instance configures an xnbd-wrapper. Valid options are:
     "address": "127.0.0.1",
     "port": 8520,
     "socket": "/var/run/xnbd.ctl",
-    "logpath": "/tmp/xnbd.log",
+    "logpath": "/var/log/xnbd.log",
     "volumes": [ "/dev/volume", "/dev/sdb1", "/var/lib/image.file" ]
 }
 ---------------------------
