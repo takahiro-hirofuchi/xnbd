@@ -73,7 +73,7 @@ The following options are supported:
 
 *--socket* 'PATH'::
     The xNBD wrapper can be controlled through a control socket. When
-    given, use 'PATH' as file name, default is /tmp/xnbd_wrapper.ctl.
+    given, use 'PATH' as file name, default is /var/run/xnbd-wrapper.ctl.
 
 *--xnbd-binary* 'PATH'::
     Specifies the path to the xnbd-server program. The wrapper will

@@ -75,7 +75,7 @@ The following options are supported:
 
 *--socket*|*-s* 'SOCKETPATH'::
     Connect to 'SOCKETPATH' as xnbd-wrapper control socket. Default is
-    /tmp/xnbd_wrapper.ctl.
+    /var/run/xnbd-wrapper.ctl.
 
 *--target-exportname* 'NAME'::
     Set the export name to request from the proxied xnbd-wrapper target.
