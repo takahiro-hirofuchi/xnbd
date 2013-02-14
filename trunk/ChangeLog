@@ -56,8 +56,8 @@ Improvements
      to /var/run/xnbd-wrapper.ctl as a measure of precaution
  * xnbd-wrapper(-ctl): Distinct export and file name, support removal by export name
      or file name, too
- * xnbd-wrapper(-ctl): Add commands --bgctl-query, --bgctl-cache-all, --bgctl-switch,
-     and --bgctl-reconnect
+ * xnbd-wrapper(-ctl): Add support for proxy mode images through commands --add-proxy,
+     --bgctl-query, --bgctl-cache-all, --bgctl-switch, and --bgctl-reconnect
  * xnbd-wrapper-ctl: Improve reporting on socket opening errors
  * Improve man pages, help output, error reporting
 
