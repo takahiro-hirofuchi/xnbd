@@ -313,7 +313,8 @@ const char *recovery_command_internal_reboot_call = "reboot now";
  **/
 
 
-static int xnbd_connect(const char *devpath, unsigned long blocksize, unsigned int timeout, GList *dst_list, int max_retry, const char *recovery_command, const char *exportname)
+static void xnbd_connect_to_remote(GList *dst_list, int max_retry, const char *exportname,
+		int * p_sockfd, off_t * p_disksize, uint32_t * p_flags)
 {
 	int sockfd;
 	off_t disksize;
@@ -364,6 +365,40 @@ static int xnbd_connect(const char *devpath, unsigned long blocksize, unsigned i
 	}
 
 	/* so far, we get a negotiated socket */
+
+	if (p_sockfd) {
+		*p_sockfd = sockfd;
+	} else {
+		close(sockfd);
+	}
+
+	assert(p_disksize);
+	*p_disksize = disksize;
+
+	if (p_flags) {
+		*p_flags = flags;
+	}
+}
+
+
+static void xnbd_report_target_size(unsigned int timeout, GList *dst_list, int max_retry, const char *exportname)
+{
+	off_t disksize = -1;
+	xnbd_connect_to_remote(dst_list, max_retry, exportname, NULL, &disksize, NULL);
+
+	assert(disksize >= 0);
+	printf("%ld\n", disksize);
+	fflush(stdout);
+}
+
+
+static int xnbd_setup_client(const char *devpath, unsigned long blocksize, unsigned int timeout, GList *dst_list, int max_retry, const char *recovery_command, const char *exportname)
+{
+	int sockfd;
+	off_t disksize;
+	uint32_t flags;
+
+	xnbd_connect_to_remote(dst_list, max_retry, exportname, &sockfd, &disksize, &flags);
 
 	int retcode = -3;
 
@@ -484,6 +519,9 @@ static struct option longopts[] = {
 	{"disconnect",	required_argument, NULL, 'd'},
 	{"check",	required_argument, NULL, 'c'},
 	{"help", 	no_argument, NULL, 'h'},
+	{"getsize64", no_argument, NULL, 's'},
+	/* insert new commands here to keep longopts[cmd].name further down working */
+
 	{"timeout",	required_argument, NULL, 't'},
 	{"blocksize",	required_argument, NULL, 'b'},
 	{"retry",	required_argument, NULL, 'r'},
@@ -499,6 +537,7 @@ enum {
 	cmd_disconnect,
 	cmd_check,
 	cmd_help,
+	cmd_getsize64,
 } cmd = cmd_unknown;
 
 
@@ -515,6 +554,8 @@ Usage: \n\
 \n\
   xnbd-client --check nbd_device \n\
   xnbd-client -c nbd_device \n\
+\n\
+  xnbd-client --getsize64 [options] host port [host port] ... \n\
 \n\
   xnbd-client --help \n\
 \n\
@@ -592,6 +633,13 @@ int main(int argc, char *argv[]) {
 					show_help_and_exit("specify one mode");
 
 				cmd = cmd_help;
+				break;
+
+			case 's':
+				if (cmd != cmd_unknown)
+					show_help_and_exit("specify one mode");
+
+				cmd = cmd_getsize64;
 				break;
 
 			case 't':
@@ -674,7 +722,7 @@ int main(int argc, char *argv[]) {
 		info("bs=%lu timeout=%d %s %s %s", blocksize, timeout, host, port, devpath);
 		dst_add(&dst_list, host, port);
 
-		xnbd_connect(devpath, blocksize, timeout, dst_list, max_retry, recovery_command, exportname);
+		xnbd_setup_client(devpath, blocksize, timeout, dst_list, max_retry, recovery_command, exportname);
 
 		exit(EXIT_SUCCESS);
 	}
@@ -683,6 +731,7 @@ int main(int argc, char *argv[]) {
 
 	switch (cmd) {
 		case cmd_connect:
+		case cmd_getsize64:
 			/* do it later */
 			break;
 
@@ -722,10 +771,12 @@ int main(int argc, char *argv[]) {
 	}
 
 
-	/* handle the case in which cmd == cmd_connect */
+	/* handle the case in which cmd == cmd_connect/cmd_getsize64 */
 
-	devpath = argv[optind];
-	optind++;
+	if (cmd == cmd_connect) {
+		devpath = argv[optind];
+		optind++;
+	}
 
 	if ((argc -optind) % 2 != 0)
 		show_help_and_exit("incomplete pairs of host and port");
@@ -735,11 +786,17 @@ int main(int argc, char *argv[]) {
 		const char *port = argv[i + 1];
 
 		dst_add(&dst_list, host, port);
-		info("bs=%lu timeout=%d %s %s %s", blocksize, timeout, host, port, devpath);
+		if (cmd != cmd_getsize64) {
+			info("bs=%lu timeout=%d %s %s %s", blocksize, timeout, host, port, devpath);
+		}
 	}
 
-	xnbd_connect(devpath, blocksize, timeout, dst_list, max_retry, recovery_command, exportname);
-
+	if (cmd == cmd_connect) {
+		xnbd_setup_client(devpath, blocksize, timeout, dst_list, max_retry, recovery_command, exportname);
+	} else {
+		assert(cmd == cmd_getsize64);
+		xnbd_report_target_size(timeout, dst_list, max_retry, exportname);
+	}
 
 	return 0;
 }
