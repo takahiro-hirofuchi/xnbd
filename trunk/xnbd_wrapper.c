@@ -980,6 +980,33 @@ static void exec_xnbd_server(struct exec_params *params, char *fd_num, const t_d
 	execv_or_abort((const char * const *)args);
 }
 
+
+static void query_remote_disk_size(off_t * p_disk_size_bytes, const char * host,
+		const char * port, const char * exportname)
+{
+	assert(p_disk_size_bytes && host && port);
+
+	const int sockfd = net_connect(host, port, SOCK_STREAM, IPPROTO_TCP);
+	if (sockfd < 0) {
+		warn("cannot connect to %s(%s)", host, port);
+		return;
+	}
+
+	int ret;
+	if (exportname)
+		ret = nbd_negotiate_with_server_new(sockfd, p_disk_size_bytes, NULL, strlen(exportname), exportname);
+	else
+		ret = nbd_negotiate_with_server2(sockfd, p_disk_size_bytes, NULL);
+
+	close(sockfd);
+
+	if (ret < 0) {
+		warn("negotiation with %s:%s failed", host, port);
+		return;
+	}
+}
+
+
 static const char help_string[] =
 	"\n\n"
 	"Usage: \n"
@@ -1013,7 +1040,6 @@ int main(int argc, char **argv) {
 	int sockfd, conn_sockfd, ux_sockfd;
 	int ch, ret;
 	char *requested_img = NULL;
-	struct stat sb;
 	pthread_t thread;
 	const char default_ctl_path[] = "/var/run/xnbd-wrapper.ctl";
 	char *ctl_path = NULL;
@@ -1339,14 +1365,36 @@ int main(int argc, char **argv) {
 						_exit(EXIT_FAILURE);
 					}
 
-					if (stat(disk_data->disk_file_name, &sb) == -1) {
-						warn("stat failed: %s", disk_data->disk_file_name);
-						if(close(conn_sockfd))
-							warn("close(p1)");
-						_exit(EXIT_FAILURE);
+					off_t disk_size_bytes = -1;
+
+					if (disk_data->proxy.target_host) {
+						/* proxy mode, forward original remote disk size */
+						query_remote_disk_size(&disk_size_bytes,
+								disk_data->proxy.target_host,
+								disk_data->proxy.target_port,
+								disk_data->proxy.target_exportname);
+
+						if (disk_size_bytes < 0) {
+							warn("could query remote disk size for image: %s", disk_data->disk_file_name);
+							if(close(conn_sockfd))
+								warn("close(p1.1)");
+							_exit(EXIT_FAILURE);
+						}
+					} else {
+						/* target mode, stat local file */
+						struct stat sb;
+						if (stat(disk_data->disk_file_name, &sb) == -1) {
+							warn("stat failed: %s", disk_data->disk_file_name);
+							if(close(conn_sockfd))
+								warn("close(p1.2)");
+							_exit(EXIT_FAILURE);
+						}
+						disk_size_bytes = sb.st_size;
 					}
 
-					if (nbd_negotiate_with_client_new_phase_1(conn_sockfd, sb.st_size, 0)) {
+					info("disk_size_bytes: %ld", disk_size_bytes);
+
+					if (nbd_negotiate_with_client_new_phase_1(conn_sockfd, disk_size_bytes, 0)) {
 						if(close(conn_sockfd))
 							warn("close(p2)");
 						_exit(EXIT_FAILURE);
