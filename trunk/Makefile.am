@@ -66,8 +66,10 @@ xnbd_tester_SOURCES = xnbd_tester.c
 
 dist_sysconf_DATA = xnbd.conf
 
-# Install change log, too
-dist_doc_DATA = ChangeLog
+# Install change log and read me, too
+dist_doc_DATA = \
+	ChangeLog \
+	README
 
 
 AM_CPPFLAGS = @GLIB_CFLAGS@
