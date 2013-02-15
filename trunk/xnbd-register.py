@@ -92,7 +92,6 @@ def start_client(device, data):
 
 	start_cmd.append(data['host'])
 	start_cmd.append(str(data['port']))
-	#vprint(start_cmd)
 	call(start_cmd, "Starting /dev/%s ... " % (device))
 
 def stop_client(device, data):
@@ -102,7 +101,6 @@ def stop_client(device, data):
 def start_server(data):
 	start_cmd = [XNBD_WRAPPER, "--daemonize", "--logpath", data['logpath'],
 		"--laddr", data['address'], "--port", str(data['port']), "--socket", data['socket']]
-	#vprint(start_cmd)
 	call(start_cmd, "Starting `%s' ..." % (XNBD_WRAPPER))
 
 	if isinstance(data['volumes'], types.ListType):
@@ -114,7 +112,6 @@ def start_server(data):
 
 	for exportname, volume in exportname_volume_tuple_list:
 		add_volume = [XNBD_WRAPPER_CTL, "--socket", data['socket'], "--add-target", exportname, volume]
-		#vprint(add_volume)
 		if (os.path.exists(volume)):
 			call(add_volume, "Adding `%s' ..." % volume)
 		else:
@@ -126,7 +123,6 @@ def stop_server(data):
 
 def print_status(data):
 	status = [XNBD_WRAPPER_CTL, "--socket", data['socket'], "-l"]
-	#vprint(status)
 	call(status, "")
 
 
@@ -139,7 +135,6 @@ parser.add_argument('--config', dest='config_file', default='/etc/xnbd.conf', he
 parser.add_argument('--quiet', action='store_true', help='don\'t give verbose output')
 
 args = parser.parse_args()
-#print(args)
 
 if(args.quiet):
 	VERBOSE = False
