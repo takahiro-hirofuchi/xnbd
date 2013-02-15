@@ -608,12 +608,12 @@ void show_help_and_exit(const char *msg)
 
 	info("make xnbd-server xnbd-tester");
 	info("For target mode");
-	info("  ./xnbd-server --target disk1G.img --lport 8992");
+	info("  ./xnbd-server --target --lport 8992 disk1G.img");
 	info("  ./xnbd-tester --rwmode 1 localhost 8992 disk1G.img /tmp/tmp.img");
 	info(" ");
 	info("For proxy mode");
-	info("  ./xnbd-server --target disk1G.img --lport 8992");
-	info("  ./xnbd-server --proxy localhost 8992 /tmp/disk.cache /tmp/disk.cache.bitmap --lport 8521");
+	info("  ./xnbd-server --target --lport 8992 disk1G.img");
+	info("  ./xnbd-server --proxy --lport 8521 localhost 8992 /tmp/disk.cache /tmp/disk.cache.bitmap /tmp/xnbd-bg.ctl");
 	info("  ./xnbd-tester --rwmode 1 --bgctlpath /tmp/xnbd-bg.ctl localhost 8521 /tmp/disk.cache /tmp/tmp.img");
 	info(" ");
 	err("See source code for detail.");
