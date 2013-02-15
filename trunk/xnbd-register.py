@@ -28,7 +28,6 @@ import json
 import re
 import os.path
 
-CONFIG_FILE = "/etc/xnbd.conf"
 XNBD_CLIENT = "xnbd-client"
 XNBD_WRAPPER = "xnbd-wrapper"
 XNBD_WRAPPER_CTL = "xnbd-wrapper-ctl"
@@ -38,20 +37,20 @@ def vprint(msg, **kwargs):
 	if (VERBOSE):
 		print(msg, **kwargs)
 
-def check_syntax(data):
+def check_syntax(data, config_file):
 	if (not isinstance(data, dict)):
 		vprint("Invalid syntax in configuration file `%s': Expected a sequence of nbdX and/or server objects")
 		sys.exit(1)
 	for key in data:
 		if (key != "server" and not key.startswith("nbd")):
-			vprint("Invalid key: `%s' in configuration file `%s'" % (key, CONFIG_FILE))
+			vprint("Invalid key: `%s' in configuration file `%s'" % (key, config_file))
 			sys.exit(1)
 
 		if (key == "server"):
 			server_keys = set(["address", "port", "socket",	"volumes", "logpath"])
 			config_keys = set(data[key].keys())
 			if (config_keys < server_keys):
-				vprint("Incomplete server configuration. Was expecting `address', `port', `socket' and `volumes' in configuration file `%s'"  % CONFIG_FILE)
+				vprint("Incomplete server configuration. Was expecting `address', `port', `socket' and `volumes' in configuration file `%s'"  % config_file)
 				sys.exit(1)
 
 			ukeys = config_keys - server_keys
@@ -127,6 +126,7 @@ parser.add_argument('-s', '--start', action='store_true', help='mount configured
 parser.add_argument('-r', '--restart', action='store_true', help='(re-)mount configured xNBD client connections')
 parser.add_argument('-t', '--stop', action='store_true', help='umount configured xNBD client connections')
 parser.add_argument('-a', '--status', action='store_true', help='umount configured xNBD client connections')
+parser.add_argument('--config', dest='config_file', default='/etc/xnbd.conf', help='config file to use (default: /etc/xnbd.conf)')
 parser.add_argument('--quiet', action='store_true', help='don\'t give verbose output')
 
 args = parser.parse_args()
@@ -136,7 +136,7 @@ if(args.quiet):
 	VERBOSE = False
 
 try:
-	conf_parser = open(CONFIG_FILE, "r")
+	conf_parser = open(args.config_file, "r")
 	read_configuration = ""
 	for line in conf_parser.readlines():
 		line = re.sub("\#.*$", "", line) # ignore comments
@@ -144,14 +144,14 @@ try:
 
 	configuration = json.loads(read_configuration)
 except (IOError, OSError) as e:
-	vprint("Configuration file not accessible `%s\': %s" % ( CONFIG_FILE, e ) )
+	vprint("Configuration file not accessible `%s\': %s" % ( args.config_file, e ) )
 	sys.exit(1)
 except ValueError as e:
-	vprint("Syntax error in configuration `%s': %s" % (CONFIG_FILE, e))
+	vprint("Syntax error in configuration `%s': %s" % (args.config_file, e))
 	sys.exit(1)
 
 conf_parser.close()
-check_syntax(configuration)
+check_syntax(configuration, args.config_file)
 
 if ( not len(configuration) ):
 	vprint("WARNING: Not starting anything")

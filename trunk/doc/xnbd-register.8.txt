@@ -12,13 +12,13 @@ xnbd-register - Restore xNBD sessions upon boot
 
 SYNOPSIS
 --------
-*xnbd-register* [--quiet] --start
+*xnbd-register* ['OPTIONS'] --start
 
-*xnbd-register* [--quiet] --stop
+*xnbd-register* ['OPTIONS'] --stop
 
-*xnbd-register* [--quiet] --restart
+*xnbd-register* ['OPTIONS'] --restart
 
-*xnbd-register* [--quiet] --status
+*xnbd-register* ['OPTIONS'] --status
 
 
 DESCRIPTION
@@ -52,6 +52,9 @@ The following options are supported:
 
 *--restart*::
     Restart all xnbd instances, being client or server
+
+*--config* 'FILE'::
+    Config file to use.  Defaults to /etc/xnbd.conf.
 
 *--quiet*::
     Do not produce verbose output
