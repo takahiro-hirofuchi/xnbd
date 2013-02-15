@@ -97,7 +97,8 @@ Similarly, a server instance configures an xnbd-wrapper. Valid options are:
     Specifies the log path where logging output is being redirected to
 
 *volumes*::
-    A list of volumes which are exported
+    A mapping of volumes which are exported.
+    Mapping keys are export names, mapping values are disk image paths.
 
 ---------------------------
 "server": {
@@ -105,7 +106,11 @@ Similarly, a server instance configures an xnbd-wrapper. Valid options are:
     "port": 8520,
     "socket": "/var/run/xnbd.ctl",
     "logpath": "/var/log/xnbd.log",
-    "volumes": [ "/dev/volume", "/dev/sdb1", "/var/lib/image.file" ]
+    "volumes": {
+        "one": "/dev/volume",
+        "two": "/dev/sdb1",
+        "three": "/var/lib/image.file",
+    }
 }
 ---------------------------
 

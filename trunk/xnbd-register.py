@@ -27,6 +27,7 @@ import subprocess
 import json
 import re
 import os.path
+import types
 
 XNBD_CLIENT = "xnbd-client"
 XNBD_WRAPPER = "xnbd-wrapper"
@@ -103,8 +104,16 @@ def start_server(data):
 		"--laddr", data['address'], "--port", str(data['port']), "--socket", data['socket']]
 	#vprint(start_cmd)
 	call(start_cmd, "Starting `%s' ..." % (XNBD_WRAPPER))
-	for volume in data['volumes']:
-		add_volume = [XNBD_WRAPPER_CTL, "--socket", data['socket'], "--add", volume]
+
+	if isinstance(data['volumes'], types.ListType):
+		# List data, format of 0.1.0-pre*
+		exportname_volume_tuple_list = [(path, path) for path in data['volumes']]
+	else:
+		# Dict data, format of >=0.2.0
+		exportname_volume_tuple_list = list(data['volumes'].items())
+
+	for exportname, volume in exportname_volume_tuple_list:
+		add_volume = [XNBD_WRAPPER_CTL, "--socket", data['socket'], "--add-target", exportname, volume]
 		#vprint(add_volume)
 		if (os.path.exists(volume)):
 			call(add_volume, "Adding `%s' ..." % volume)
