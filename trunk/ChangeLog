@@ -44,6 +44,7 @@ Improvements
  * xnbd-register: New tool, integrated from Debian
  * xnbd-register: Exit gracefully if config file missing
  * xnbd-register: Add --config option
+ * xnbd-register: Add support for export names
  * xnbd-server: Fix broken startup with GLib 2.32 or later
  * xnbd-server: Keep existing bitmap state by default, add option --clear-bitmap
  * xnbd-server: Add support for wrapped remote servers to proxy mode (through option
