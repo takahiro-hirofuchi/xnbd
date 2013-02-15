@@ -75,7 +75,12 @@ def check_syntax(data, config_file):
 
 def call(command, description):
 	vprint(description, end='')
-	p = subprocess.Popen(command, stderr = subprocess.STDOUT)
+	try:
+		p = subprocess.Popen(command, stderr = subprocess.STDOUT)
+	except OSError:
+		vprint("failed")
+		return 127
+
 	p.wait()
 	if (p.returncode != 0):
 		vprint("failed")
@@ -101,7 +106,8 @@ def stop_client(device, data):
 def start_server(data):
 	start_cmd = [XNBD_WRAPPER, "--daemonize", "--logpath", data['logpath'],
 		"--laddr", data['address'], "--port", str(data['port']), "--socket", data['socket']]
-	call(start_cmd, "Starting `%s' ..." % (XNBD_WRAPPER))
+	if call(start_cmd, "Starting `%s' ..." % (XNBD_WRAPPER)):
+		sys.exit(1)
 
 	if isinstance(data['volumes'], types.ListType):
 		# List data, format of 0.1.0-pre*
