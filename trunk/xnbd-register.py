@@ -145,6 +145,7 @@ try:
 	configuration = json.loads(read_configuration)
 except (IOError, OSError) as e:
 	vprint("Configuration file not accessible `%s\': %s" % ( CONFIG_FILE, e ) )
+	sys.exit(1)
 except ValueError as e:
 	vprint("Syntax error in configuration `%s': %s" % (CONFIG_FILE, e))
 	sys.exit(1)

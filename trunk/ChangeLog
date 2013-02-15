@@ -42,6 +42,7 @@ Improvements
  * xnbd-client: Add support for symlinks to NBD devices
  * xnbd-client: Mode --check now returns code 2 for a valid, unused NBD device
  * xnbd-register: New tool, integrated from Debian
+ * xnbd-register: Exit gracefully if config file missing
  * xnbd-server: Fix broken startup with GLib 2.32 or later
  * xnbd-server: Keep existing bitmap state by default, add option --clear-bitmap
  * xnbd-server: Add support for wrapped remote servers to proxy mode (through option
