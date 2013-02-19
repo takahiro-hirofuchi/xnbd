@@ -226,5 +226,15 @@ if __name__ =='__main__':
         sys.exit(1)
 
     res = ctl.send_cmd(compose_command(opts, sys.argv))
-    if not re.match("^ *(|\n)$", res):
+
+    m = re.match('^(?P<output>.*\n)?return code (?P<code>[0-9]+)\n$', res, re.MULTILINE)
+    if m:
+        gd = m.groupdict()
+        print(gd['output'] or '', end='')
+        return_code = int(gd['code'])
+        if return_code < 0 or return_code > 255:
+            return_code = 1;
+        sys.exit(return_code)
+    else:
         print(res, end='')
+        sys.exit(1)
