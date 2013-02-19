@@ -96,13 +96,21 @@ unsigned long *bitmap_open_file(const char *bitmapfile, unsigned long bits, size
 			if (size != buflen)
 				err("bitmap size mismatch, %ju %zu", size, buflen);
 		} else {
-			if (get_disksize(fd) == 0) {
+			const uint64_t previous_size = get_disksize(fd);
+			if (previous_size == 0) {
 				zeroclear = 1;  /* ensure proper initialization on initial creation */
 			}
 
-			int ret = ftruncate(fd, buflen);
-			if (ret < 0)
-				err("ftruncate %m");
+			if (previous_size != buflen) {
+				if (zeroclear) {
+					const int ret = ftruncate(fd, buflen);
+					if (ret < 0) {
+						err("ftruncate %m");
+					}
+				} else {
+					err("Denying to re-use existing bitmap file of different size with no --clear-bitmap given.");
+				}
+			}
 		}
 
 		buf = mmap(NULL, buflen, mmap_flag, MAP_SHARED, fd, 0);
