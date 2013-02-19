@@ -233,28 +233,36 @@ static int add_diskimg(t_disk_data * p_disk_data)
 	return res;
 }
 
-static void del_diskimg_by_index(int num)
+static int del_diskimg_by_index(int num)
 {
+	guint removed_count = 0;
+
 	num--;
 	if (num >= 0) {
 		pthread_mutex_lock(&mutex);
-		g_hash_table_foreach_remove(p_disk_dict, (GHRFunc)find_by_index, GUINT_TO_POINTER((guint)num));
+		removed_count = g_hash_table_foreach_remove(p_disk_dict, (GHRFunc)find_by_index, GUINT_TO_POINTER((guint)num));
 		pthread_mutex_unlock(&mutex);
 	}
+
+	return (removed_count > 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
-static void del_diskimg_by_file(const char * filename)
+static int del_diskimg_by_file(const char * filename)
 {
 	pthread_mutex_lock(&mutex);
-	g_hash_table_foreach_remove(p_disk_dict, (GHRFunc)find_by_file, (gpointer)filename);
+	const guint removed_count = g_hash_table_foreach_remove(p_disk_dict, (GHRFunc)find_by_file, (gpointer)filename);
 	pthread_mutex_unlock(&mutex);
+
+	return (removed_count > 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
-static void del_diskimg_by_exportname(const char * local_exportname)
+static int del_diskimg_by_exportname(const char * local_exportname)
 {
 	pthread_mutex_lock(&mutex);
-	g_hash_table_foreach_remove(p_disk_dict, (GHRFunc)find_by_exportname, (gpointer)local_exportname);
+	const guint removed_count = g_hash_table_foreach_remove(p_disk_dict, (GHRFunc)find_by_exportname, (gpointer)local_exportname);
 	pthread_mutex_unlock(&mutex);
+
+	return (removed_count > 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
 static t_disk_data * get_disk_data_for(const char *local_exportname)
@@ -361,6 +369,16 @@ static void list_images_iterator(gpointer key, const t_disk_data * p_disk_data, 
 	}
 }
 
+static void report_return_code(FILE * fp, int code)
+{
+	if (code < 0) {
+		code = EXIT_FAILURE;
+	}
+
+	fprintf(fp, "return code %d\n", code);
+	fflush(fp);
+}
+
 static void list_diskimg(FILE *fp)
 {
 	pthread_mutex_lock(&mutex);
@@ -384,7 +402,6 @@ static void list_diskimg(FILE *fp)
 		fprintf(fp, "no item\n");
 	}
 	pthread_mutex_unlock(&mutex);
-	fflush(fp);
 }
 
 static void perform_shutdown(FILE * fp)
@@ -741,7 +758,9 @@ static void *start_filemgr_thread(void * pointer)
 				/* perror("sscanf"); */
 				continue;
 			}
-	
+
+			int return_code = EXIT_SUCCESS;
+
 			if (strcmp(cmd, "list") == 0)
 				list_diskimg(fp);
 			else if ((strcmp(cmd, "add") == 0) || (strcmp(cmd, "add-target") == 0)) {
@@ -750,8 +769,10 @@ static void *start_filemgr_thread(void * pointer)
 				const int res = extract_decode_check_usage(buf, &argv, &argc, ARGC_RANGE(2, 3));
 				if (res == ARGV_ENOMEM) {
 					fprintf(fp, "%s\n", MESSAGE_ENOMEM);
+					return_code = EXIT_FAILURE;
 				} else if (res == ARGV_ERROR_USAGE) {
 					fprintf(fp, "usage: %s\n", "add-target <LOCAL_EXPORTNAME> <FILE>");
+					return_code = EXIT_FAILURE;
 				} else if (res == ARGV_SUCCESS) {
 					const char * const file = (argc == 3) ? argv[2] : argv[1];
 					const char * const exportname = (argc == 3) ? argv[1] : file;
@@ -764,10 +785,13 @@ static void *start_filemgr_thread(void * pointer)
 							fprintf(fp, "cannot open %s\n", file);
 						else if (ret == XNBD_NOT_ADDING_TWICE)
 							fprintf(fp, "image cannot be added twice\n");
+
+						return_code = (ret == XNBD_IMAGE_ADDED) ? EXIT_SUCCESS : EXIT_FAILURE;
 					}
 					else
 					{
 						fprintf(fp, "%s\n", MESSAGE_ENOMEM);
+						return_code = EXIT_FAILURE;
 					}
 					g_strfreev(argv);
 				}
@@ -778,8 +802,10 @@ static void *start_filemgr_thread(void * pointer)
 				const int res = extract_decode_check_usage(buf, &argv, &argc, ARGC_RANGE(7, 8));
 				if (res == ARGV_ENOMEM) {
 					fprintf(fp, "%s\n", MESSAGE_ENOMEM);
+					return_code = EXIT_FAILURE;
 				} else if (res == ARGV_ERROR_USAGE) {
 					fprintf(fp, "usage: %s\n", "add-proxy <LOCAL_EXPORTNAME> <TARGET_HOST> <TARGET_PORT> <CACHE_IMAGE> <BITMAP_IMAGE> <CONTROL_SOCKET_PATH> [<TARGET_EXPORTNAME>]");
+					return_code = EXIT_FAILURE;
 				} else if (res == ARGV_SUCCESS) {
 					const char * const local_exportname = argv[1];
 					const char * const target_host = argv[2];
@@ -793,6 +819,7 @@ static void *start_filemgr_thread(void * pointer)
 					if (! p_disk_data)
 					{
 						fprintf(fp, "%s\n", MESSAGE_ENOMEM);
+						return_code = EXIT_FAILURE;
 					}
 					else
 					{
@@ -801,41 +828,56 @@ static void *start_filemgr_thread(void * pointer)
 							fprintf(fp, "cannot open %s\n", cache_image);
 						else if (ret == XNBD_NOT_ADDING_TWICE)
 							fprintf(fp, "image cannot be added twice\n");
+
+						return_code = (ret == XNBD_IMAGE_ADDED) ? EXIT_SUCCESS : EXIT_FAILURE;
 					}
 					g_strfreev(argv);
 				}
 			}
-			else if (strcmp(cmd, "del") == 0)
-				del_diskimg_by_index(atoi(arg));
-			else if (strcmp(cmd, "del-file") == 0) {
+			else if (strcmp(cmd, "del") == 0) {
+				const int number = atoi(arg);
+				return_code = del_diskimg_by_index(number);
+
+				if (return_code != EXIT_SUCCESS) {
+					fprintf(fp, "Image number %d could not be deleted.\n", number);
+				}
+			} else if (strcmp(cmd, "del-file") == 0) {
 				decode_percent_encoding(arg);
-				del_diskimg_by_file(arg);
+				return_code = del_diskimg_by_file(arg);
+
+				if (return_code != EXIT_SUCCESS) {
+					fprintf(fp, "Image with filename \"%s\" could not be deleted.\n", arg);
+				}
 			} else if (strcmp(cmd, "del-exportname") == 0) {
 				decode_percent_encoding(arg);
-				del_diskimg_by_exportname(arg);
+				return_code = del_diskimg_by_exportname(arg);
+
+				if (return_code != EXIT_SUCCESS) {
+					fprintf(fp, "Image with exportname \"%s\" could not be deleted.\n", arg);
+				}
 			} else if (strcmp(cmd, "shutdown") == 0) {
 				perform_shutdown(fp);
 			} else if (strcmp(cmd, "bgctl-query") == 0) {
-				(void)handle_bgctl_command("bgctl-query EXPORTNAME", "--query", ARGC_RANGE(2, 2), buf, fp, p_thread_data->xnbd_bgctl_path, NULL, NULL, p_thread_data->p_child_process_count);
+				return_code = handle_bgctl_command("bgctl-query EXPORTNAME", "--query", ARGC_RANGE(2, 2), buf, fp, p_thread_data->xnbd_bgctl_path, NULL, NULL, p_thread_data->p_child_process_count);
 			} else if (strcmp(cmd, "bgctl-switch") == 0) {
 				guint argc = 0;
 				gchar ** argv = NULL;
 
-				const int return_code = handle_bgctl_command("bgctl-switch EXPORTNAME", "--switch", ARGC_RANGE(2, 2), buf, fp, p_thread_data->xnbd_bgctl_path, &argc, &argv, p_thread_data->p_child_process_count);
-				if (return_code == 0) {
+				return_code = handle_bgctl_command("bgctl-switch EXPORTNAME", "--switch", ARGC_RANGE(2, 2), buf, fp, p_thread_data->xnbd_bgctl_path, &argc, &argv, p_thread_data->p_child_process_count);
+				if (return_code == EXIT_SUCCESS) {
 					const char * const local_exportname = argv[1];
 					mark_proxy_mode_ended(local_exportname);
 				}
 
 				g_strfreev(argv);
 			} else if (strcmp(cmd, "bgctl-cache-all") == 0) {
-				(void)handle_bgctl_command("bgctl-cache-all EXPORTNAME", "--cache-all", ARGC_RANGE(2, 2), buf, fp, p_thread_data->xnbd_bgctl_path, NULL, NULL, p_thread_data->p_child_process_count);
+				return_code = handle_bgctl_command("bgctl-cache-all EXPORTNAME", "--cache-all", ARGC_RANGE(2, 2), buf, fp, p_thread_data->xnbd_bgctl_path, NULL, NULL, p_thread_data->p_child_process_count);
 			} else if (strcmp(cmd, "bgctl-reconnect") == 0) {
 				guint argc = 0;
 				gchar ** argv = NULL;
 
-				const int return_code = handle_bgctl_command("bgctl-reconnect LOCAL_EXPORTNAME HOST PORT [TARGET_EXPORTNAME]", "--reconnect", ARGC_RANGE(4, 5), buf, fp, p_thread_data->xnbd_bgctl_path, &argc, &argv, p_thread_data->p_child_process_count);
-				if (return_code == 0) {
+				return_code = handle_bgctl_command("bgctl-reconnect LOCAL_EXPORTNAME HOST PORT [TARGET_EXPORTNAME]", "--reconnect", ARGC_RANGE(4, 5), buf, fp, p_thread_data->xnbd_bgctl_path, &argc, &argv, p_thread_data->p_child_process_count);
+				if (return_code == EXIT_SUCCESS) {
 					const char * const local_exportname = argv[1];
 					const char * const host = argv[2];
 					const char * const port = argv[3];
@@ -867,8 +909,12 @@ static void *start_filemgr_thread(void * pointer)
 					"  quit                 : quit (disconnect)\n");
 			else if (strcmp(cmd, "quit") == 0)
 				break;
-			else
+			else {
 				fprintf(fp, "unknown command\n");
+				return_code = EXIT_FAILURE;
+			}
+
+			report_return_code(fp, return_code);
 		}
 	} else {
 		fprintf(fp, "too many connections\n");
