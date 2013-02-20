@@ -227,7 +227,7 @@ if __name__ =='__main__':
 
     res = ctl.send_cmd(compose_command(opts, sys.argv))
 
-    m = re.match('^(?P<output>.*\n)?return code (?P<code>[0-9]+)\n$', res, re.MULTILINE)
+    m = re.match('^(?P<output>.*\n)?return code (?P<code>[0-9]+)\n$', res, re.MULTILINE | re.DOTALL)
     if m:
         gd = m.groupdict()
         print(gd['output'] or '', end='')
