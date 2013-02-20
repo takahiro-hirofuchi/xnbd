@@ -74,7 +74,7 @@ typedef struct _t_disk_data {
 
 typedef struct _t_thread_data {
 	int unix_sock_fd;
-	const char * xnbd_bgctl_path;
+	const char * xnbd_bgctl_command;
 	int * p_child_process_count;
 } t_thread_data;
 
@@ -626,7 +626,7 @@ static pid_t invoke_bgctl(FILE * fp, const char ** argv)
 }
 
 static int handle_bgctl_command(const char * usage, const char * mode, unsigned int expected_argc_min, unsigned int expected_argc_max,
-		char * buf, FILE * fp, const char * xnbd_bgctl_path, guint * p_argc, gchar *** p_argv, int * p_child_process_count)
+		char * buf, FILE * fp, const char * xnbd_bgctl_command, guint * p_argc, gchar *** p_argv, int * p_child_process_count)
 {
 	int return_code = -1;
 
@@ -660,7 +660,7 @@ static int handle_bgctl_command(const char * usage, const char * mode, unsigned 
 					const int positional_args_to_append = argc - 1 - 1 - (target_exportname_present ? 1 : 0);
 					const char * bgctl_argv[1 + (target_exportname_present ? 2 : 0) + 1 + 1 + positional_args_to_append + 1];
 					int bgctl_argc = 0;
-					bgctl_argv[bgctl_argc++] = xnbd_bgctl_path;
+					bgctl_argv[bgctl_argc++] = xnbd_bgctl_command;
 					if (target_exportname_present) {
 						bgctl_argv[bgctl_argc++] = "--exportname";
 						bgctl_argv[bgctl_argc++] = argv[expected_argc_max - 1];  /* i.e. the last argument */
@@ -851,12 +851,12 @@ static void *start_filemgr_thread(void * pointer)
 			} else if (strcmp(cmd, "shutdown") == 0) {
 				perform_shutdown(fp);
 			} else if (strcmp(cmd, "bgctl-query") == 0) {
-				return_code = handle_bgctl_command("bgctl-query EXPORTNAME", "--query", ARGC_RANGE(2, 2), buf, fp, p_thread_data->xnbd_bgctl_path, NULL, NULL, p_thread_data->p_child_process_count);
+				return_code = handle_bgctl_command("bgctl-query EXPORTNAME", "--query", ARGC_RANGE(2, 2), buf, fp, p_thread_data->xnbd_bgctl_command, NULL, NULL, p_thread_data->p_child_process_count);
 			} else if (strcmp(cmd, "bgctl-switch") == 0) {
 				guint argc = 0;
 				gchar ** argv = NULL;
 
-				return_code = handle_bgctl_command("bgctl-switch EXPORTNAME", "--switch", ARGC_RANGE(2, 2), buf, fp, p_thread_data->xnbd_bgctl_path, &argc, &argv, p_thread_data->p_child_process_count);
+				return_code = handle_bgctl_command("bgctl-switch EXPORTNAME", "--switch", ARGC_RANGE(2, 2), buf, fp, p_thread_data->xnbd_bgctl_command, &argc, &argv, p_thread_data->p_child_process_count);
 				if (return_code == EXIT_SUCCESS) {
 					const char * const local_exportname = argv[1];
 					mark_proxy_mode_ended(local_exportname);
@@ -864,12 +864,12 @@ static void *start_filemgr_thread(void * pointer)
 
 				g_strfreev(argv);
 			} else if (strcmp(cmd, "bgctl-cache-all") == 0) {
-				return_code = handle_bgctl_command("bgctl-cache-all EXPORTNAME", "--cache-all", ARGC_RANGE(2, 2), buf, fp, p_thread_data->xnbd_bgctl_path, NULL, NULL, p_thread_data->p_child_process_count);
+				return_code = handle_bgctl_command("bgctl-cache-all EXPORTNAME", "--cache-all", ARGC_RANGE(2, 2), buf, fp, p_thread_data->xnbd_bgctl_command, NULL, NULL, p_thread_data->p_child_process_count);
 			} else if (strcmp(cmd, "bgctl-reconnect") == 0) {
 				guint argc = 0;
 				gchar ** argv = NULL;
 
-				return_code = handle_bgctl_command("bgctl-reconnect LOCAL_EXPORTNAME HOST PORT [TARGET_EXPORTNAME]", "--reconnect", ARGC_RANGE(4, 5), buf, fp, p_thread_data->xnbd_bgctl_path, &argc, &argv, p_thread_data->p_child_process_count);
+				return_code = handle_bgctl_command("bgctl-reconnect LOCAL_EXPORTNAME HOST PORT [TARGET_EXPORTNAME]", "--reconnect", ARGC_RANGE(4, 5), buf, fp, p_thread_data->xnbd_bgctl_command, &argc, &argv, p_thread_data->p_child_process_count);
 				if (return_code == EXIT_SUCCESS) {
 					const char * const local_exportname = argv[1];
 					const char * const host = argv[2];
@@ -1133,7 +1133,7 @@ static const char help_string[] =
 int main(int argc, char **argv) {
 	char *fd_num;
 	pid_t pid;
-	const char *child_prog = "xnbd-server";
+	const char *xnbd_server_command = "xnbd-server";
 	char *laddr = NULL;
 	char *port = NULL;
 	int sockfd, conn_sockfd, ux_sockfd;
@@ -1150,7 +1150,7 @@ int main(int argc, char **argv) {
 	int syslog = 0;
 	const char *logpath = NULL;
 	struct exec_params exec_srv_params = { .readonly = 0 };
-	const char * xnbd_bgctl_path = "xnbd-bgctl";
+	const char * xnbd_bgctl_command = "xnbd-bgctl";
 
 	p_disk_dict = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, (GDestroyNotify)destroy_value);
 	p_server_pid_set = g_hash_table_new(g_direct_hash, g_direct_equal);
@@ -1246,7 +1246,7 @@ int main(int argc, char **argv) {
 				break;
 			}
 			case 'b':
-				child_prog = optarg;
+				xnbd_server_command = optarg;
 				break;
 			case 's':
 				ctl_path = optarg;
@@ -1282,11 +1282,11 @@ int main(int argc, char **argv) {
 	}
 
 	ensure_command_available("which");  /* self test */
-	ensure_command_available(xnbd_bgctl_path);
-	ensure_command_available(child_prog);
+	ensure_command_available(xnbd_bgctl_command);
+	ensure_command_available(xnbd_server_command);
 
-	info("xnbd-server executable: %s", child_prog);
-	exec_srv_params.binpath = child_prog;
+	info("xnbd-server executable: %s", xnbd_server_command);
+	exec_srv_params.binpath = xnbd_server_command;
 
 	if (port == NULL) {
 		if (asprintf(&port, "%d", XNBD_PORT) == -1) {
@@ -1388,7 +1388,7 @@ int main(int argc, char **argv) {
 					warn("Could start thread: %s", MESSAGE_ENOMEM);
 				} else {
 					p_thread_data->unix_sock_fd = ux_sockfd;
-					p_thread_data->xnbd_bgctl_path = xnbd_bgctl_path;
+					p_thread_data->xnbd_bgctl_command = xnbd_bgctl_command;
 					p_thread_data->p_child_process_count = &child_process_count;
 					if (pthread_create(&thread, NULL, start_filemgr_thread, (void *)p_thread_data))
 						warn("pthread_create : %m");
