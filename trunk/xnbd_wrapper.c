@@ -1117,7 +1117,8 @@ static const char help_string[] =
 	"  --readonly    run server instances as a readonly target.\n"
 	"  --lport       Listen port (default: 8520).\n"
 	" (--port)       Deprecated, please use --lport instead.\n"
-	"  --xnbd-server Path to xnbd-server.\n"
+	"  --xnbd-bgctl  Path to xnbd-bgctl executable.\n"
+	"  --xnbd-server Path to xnbd-server executable.\n"
 	"  --imgfile     Path to disk image file. This options can be used multiple times.\n"
 	"                You can also use xnbd-wrapper-ctl to (de)register disk images dynamically.\n"
 	"  --logpath PATH Use the given path for logging (default: stderr/syslog)\n"
@@ -1173,6 +1174,7 @@ int main(int argc, char **argv) {
 		{"lport",       required_argument, NULL, 'p'},
 		{"port",        required_argument, NULL, 'p'}, /* DEPRECATED */
 		{"socket",      required_argument, NULL, 's'},
+		{"xnbd-bgctl",  required_argument, NULL, 't'},
 		{"xnbd-server", required_argument, NULL, 'b'},
 		{"xnbd-binary", required_argument, NULL, 'b'}, /* DEPRECATED */
 		{"cow",         no_argument,       NULL, 'c'},
@@ -1248,6 +1250,9 @@ int main(int argc, char **argv) {
 			case 'b':
 				xnbd_server_command = optarg;
 				break;
+			case 't':
+				xnbd_bgctl_command = optarg;
+				break;
 			case 's':
 				ctl_path = optarg;
 				break;
@@ -1285,6 +1290,7 @@ int main(int argc, char **argv) {
 	ensure_command_available(xnbd_bgctl_command);
 	ensure_command_available(xnbd_server_command);
 
+	info("xnbd-bgctl executable: %s", xnbd_bgctl_command);
 	info("xnbd-server executable: %s", xnbd_server_command);
 	exec_srv_params.binpath = xnbd_server_command;
 
