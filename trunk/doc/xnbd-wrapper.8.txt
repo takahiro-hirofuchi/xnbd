@@ -75,6 +75,11 @@ The following options are supported:
     The xNBD wrapper can be controlled through a control socket. When
     given, use 'PATH' as file name, default is /var/run/xnbd-wrapper.ctl.
 
+*--xnbd-bgctl* 'COMMAND'::
+    Specifies the path to the xnbd-bgctl executable.
+    'COMMAND' can be a file name or a command to resolve to a file name
+    using `$PATH`.   By default, "xnbd-bgctl" resolved from `$PATH` is used.
+
 *--xnbd-server* 'COMMAND'::
     Specifies the path to the xnbd-server executable. The wrapper will
     spawn server instances on demand.
