@@ -69,6 +69,7 @@ Improvements
 Deprecations
 ~~~~~~~~~~~~
  * xnbd-wrapper: Deprecate --port in favor of --lport
+ * xnbd-wrapper: Deprecate --xnbd-binary in favor of --xnbd-server
  * xnbd-wrapper(-ctl): Deprecate --add in favor of --add-target
  * xnbd-wrapper(-ctl): Deprecate --remove in favor of --remove-by-file
      and --remove-by-exportname

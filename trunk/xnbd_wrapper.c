@@ -1056,7 +1056,7 @@ static void query_remote_disk_size(off_t * p_disk_size_bytes, const char * host,
 static const char help_string[] =
 	"\n\n"
 	"Usage: \n"
-	"  %s [--lport port] [--xnbd-binary path-to-xnbdserver] [--imgfile disk-image-file] [--laddr listen-addr] [--socket socket-path]\n"
+	"  %s [--lport port] [--xnbd-server path-to-xnbdserver] [--imgfile disk-image-file] [--laddr listen-addr] [--socket socket-path]\n"
 	"\n"
 	"Options: \n"
 	"  --daemonize   run wrapper as a daemon process\n"
@@ -1064,7 +1064,7 @@ static const char help_string[] =
 	"  --readonly    run server instances as a readonly target.\n"
 	"  --lport       Listen port (default: 8520).\n"
 	" (--port)       Deprecated, please use --lport instead.\n"
-	"  --xnbd-binary Path to xnbd-server.\n"
+	"  --xnbd-server Path to xnbd-server.\n"
 	"  --imgfile     Path to disk image file. This options can be used multiple times.\n"
 	"                You can also use xnbd-wrapper-ctl to (de)register disk images dynamically.\n"
 	"  --logpath PATH Use the given path for logging (default: stderr/syslog)\n"
@@ -1074,7 +1074,7 @@ static const char help_string[] =
 	"\n"
 	"Examples: \n"
 	"  xnbd-wrapper --imgfile /data/disk1\n"
-	"  xnbd-wrapper --imgfile /data/disk1 --imgfile /data/disk2 --xnbd-binary /usr/local/bin/xnbd-server --laddr 127.0.0.1 --lport 18520 --socket /run/xnbd-wrapper-1.ctl\n";
+	"  xnbd-wrapper --imgfile /data/disk1 --imgfile /data/disk2 --xnbd-server /usr/local/bin/xnbd-server --laddr 127.0.0.1 --lport 18520 --socket /run/xnbd-wrapper-1.ctl\n";
 
 
 int main(int argc, char **argv) {
@@ -1120,7 +1120,8 @@ int main(int argc, char **argv) {
 		{"lport",       required_argument, NULL, 'p'},
 		{"port",        required_argument, NULL, 'p'}, /* DEPRECATED */
 		{"socket",      required_argument, NULL, 's'},
-		{"xnbd-binary", required_argument, NULL, 'b'},
+		{"xnbd-server", required_argument, NULL, 'b'},
+		{"xnbd-binary", required_argument, NULL, 'b'}, /* DEPRECATED */
 		{"cow",         no_argument,       NULL, 'c'},
 		{"readonly",    no_argument,       NULL, 'r'},
 		{"daemonize",   no_argument,       NULL, 'd'},
@@ -1235,10 +1236,10 @@ int main(int argc, char **argv) {
 	}
 
 	if (access(child_prog, X_OK) != 0) {
-		err("check xnbd-binary: %m");
+		err("check xnbd-server executable: %m");
 	}
 
-	info("xnbd-binary: %s", child_prog);
+	info("xnbd-server executable: %s", child_prog);
 	exec_srv_params.binpath = child_prog;
 
 

@@ -13,7 +13,7 @@ xnbd-wrapper - Manage multiple files to be exported as a block device to other
 SYNOPSIS
 --------
 *xnbd-wrapper* [ --imgfile 'IMAGE' [--imgfile 'IMAGE' ...] ]
-    [--laddr 'ADDRESS'] [--lport 'PORT'] [--socket 'PATH'] [--xnbd-binary 'PATH']
+    [--laddr 'ADDRESS'] [--lport 'PORT'] [--socket 'PATH'] [--xnbd-server 'PATH']
     [--daemonize] [--logpath 'PATH']
 
 
@@ -75,10 +75,14 @@ The following options are supported:
     The xNBD wrapper can be controlled through a control socket. When
     given, use 'PATH' as file name, default is /var/run/xnbd-wrapper.ctl.
 
-*--xnbd-binary* 'PATH'::
+*--xnbd-server* 'PATH'::
     Specifies the path to the xnbd-server program. The wrapper will
     spawn server instances on demand. Give 'PATH' as file name, default is
     "xnbd-server" (relative to the directory, where the wrapper resides).
+
+(*--xnbd-binary* 'PATH')::
+    Deprecated, please use *--xnbd-server* 'PATH' instead.
+    This option might be removed in future releases.
 
 *--cow*::
     Invoke xnbd-server(8) instances using parameter --cow-target.
