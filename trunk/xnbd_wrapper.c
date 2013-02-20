@@ -147,8 +147,7 @@ static void inform_xnbd_server_termination(pid_t pid, int status) {
 	}
 }
 
-static void execv_or_abort(const char * const * argv)
-{
+static void about_to_execute(const char * const * argv) {
 #ifdef XNBD_DEBUG
 	{
 		info("About to execute...");
@@ -159,8 +158,13 @@ static void execv_or_abort(const char * const * argv)
 			walker++;
 		}
 	}
+#else
+	(void)argv;
 #endif
+}
 
+static void execv_or_abort(const char * const * argv)
+{
 	(void)execv(argv[0], (char **)argv);
 
 	warn("exec failed");
@@ -618,6 +622,8 @@ static pid_t invoke_bgctl(FILE * fp, const char ** argv)
 		return pid;
 	}
 
+	about_to_execute(argv);  /* before output redirection! */
+
 	/* Redirect stdout/stderr to <fp> */
 	close(0);
 	const int output_fd = fileno(fp);
@@ -1023,6 +1029,7 @@ static void exec_xnbd_server(struct exec_params *params, char *fd_num, const t_d
 
 	args[++i] = NULL;
 
+	about_to_execute((const char * const *)args);
 	execv_or_abort((const char * const *)args);
 }
 
