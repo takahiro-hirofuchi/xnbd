@@ -163,9 +163,9 @@ static void about_to_execute(const char * const * argv) {
 #endif
 }
 
-static void execv_or_abort(const char * const * argv)
+static void execvp_or_abort(const char * const * argv)
 {
-	(void)execv(argv[0], (char **)argv);
+	(void)execvp(argv[0], (char **)argv);
 
 	warn("exec failed");
 	_exit(EXIT_FAILURE);
@@ -418,19 +418,6 @@ static void perform_shutdown(FILE * fp)
 	kill(0, SIGTERM);
 }
 
-static char * copy_replace_basename(const char * argv_zero, const char * new_basename)
-{
-	assert(argv_zero);
-	assert(new_basename);
-	char * res = NULL;
-	char * const wrapper_abspath = realpath(argv_zero, NULL);
-	if (asprintf(&res, "%s/%s", dirname(wrapper_abspath), new_basename) == -1) {
-		return NULL;
-	}
-	free(wrapper_abspath);
-	return res;
-}
-
 static int hexdig_char_to_int(char c)
 {
 	switch (c) {
@@ -632,7 +619,7 @@ static pid_t invoke_bgctl(FILE * fp, const char ** argv)
 		dup2(output_fd, 2);
 	}
 
-	execv_or_abort(argv);
+	execvp_or_abort(argv);
 
 	err("should never get here");
 	return 0;
@@ -985,7 +972,7 @@ static int make_tcp_sock(const char *addr_or_name, const char *port)
 }
 
 struct exec_params {
-	char *binpath;
+	const char *binpath;
 	const char *target_mode;
 	int readonly;
 	int syslog;
@@ -995,7 +982,7 @@ static void exec_xnbd_server(struct exec_params *params, char *fd_num, const t_d
 {
 	char *args[8 + 4 + 2];
 	int i = 0;
-	args[i] = params->binpath;
+	args[i] = (char *)params->binpath;
 
 	if (disk_data->proxy.target_host) {
 		args[++i] = (char *)"--proxy";
@@ -1030,9 +1017,68 @@ static void exec_xnbd_server(struct exec_params *params, char *fd_num, const t_d
 	args[++i] = NULL;
 
 	about_to_execute((const char * const *)args);
-	execv_or_abort((const char * const *)args);
+	execvp_or_abort((const char * const *)args);
 }
 
+static bool command_available(const char * command) {
+	const pid_t pid = fork();
+	if (pid == 0) {
+		/* Inside child process */
+		const char * const argv[] = {
+			"/usr/bin/which",
+			command,
+			NULL,
+		};
+
+		about_to_execute(argv);  /* before output redirection! */
+
+		/* Redirect stdout/stderr to /dev/null */
+		close(0);
+#ifndef XNBD_DEBUG
+		const int output_fd = open("/dev/null", O_WRONLY);
+		if (output_fd != -1) {
+			dup2(output_fd, 1);
+			dup2(output_fd, 2);
+		}
+#endif
+
+		execvp_or_abort(argv);
+
+		err("should never get here");
+		return false;
+	}
+
+	/* Inside parent process */
+	int status;
+	const pid_t waitpid_res = waitpid(pid, &status, 0);
+	if (waitpid_res != pid) {
+		err("waitpid failed: %m");
+	}
+
+	assert(WIFEXITED(status));
+	return (WEXITSTATUS(status) == 0) ? true : false;
+}
+
+static void ensure_command_available(const char * command) {
+	assert(command);
+	if (! command_available(command)) {
+		if (strchr(command, '/')) {
+			/* File on disk */
+			struct stat buf;
+			const int statt_res = stat(command, &buf);
+			if (statt_res == 1) {
+				err("Cannot access file \"%s\": %m", command);
+			}
+
+			if (access(command, X_OK) != 0) {
+				err("Will not be able to execute file \"%s\" later: %m", command);
+			}
+		} else {
+			/* Command name to be complete from ${PATH} */
+			err("Command \"%s\" not found", command);
+		}
+	}
+}
 
 static void query_remote_disk_size(off_t * p_disk_size_bytes, const char * host,
 		const char * port, const char * exportname)
@@ -1087,7 +1133,7 @@ static const char help_string[] =
 int main(int argc, char **argv) {
 	char *fd_num;
 	pid_t pid;
-	char *child_prog = NULL;
+	const char *child_prog = "xnbd-server";
 	char *laddr = NULL;
 	char *port = NULL;
 	int sockfd, conn_sockfd, ux_sockfd;
@@ -1104,7 +1150,7 @@ int main(int argc, char **argv) {
 	int syslog = 0;
 	const char *logpath = NULL;
 	struct exec_params exec_srv_params = { .readonly = 0 };
-	char * xnbd_bgctl_path = NULL;
+	const char * xnbd_bgctl_path = "xnbd-bgctl";
 
 	p_disk_dict = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, (GDestroyNotify)destroy_value);
 	p_server_pid_set = g_hash_table_new(g_direct_hash, g_direct_equal);
@@ -1235,29 +1281,12 @@ int main(int argc, char **argv) {
 		exec_srv_params.syslog = 0;
 	}
 
-	if (child_prog == NULL) {
-		child_prog = copy_replace_basename(argv[0], "xnbd-server");
-		if (! child_prog) {
-			err(MESSAGE_ENOMEM);
-		}
-	}
-
-	if (access(child_prog, X_OK) != 0) {
-		err("check xnbd-server executable: %m");
-	}
+	ensure_command_available("which");  /* self test */
+	ensure_command_available(xnbd_bgctl_path);
+	ensure_command_available(child_prog);
 
 	info("xnbd-server executable: %s", child_prog);
 	exec_srv_params.binpath = child_prog;
-
-
-	xnbd_bgctl_path = copy_replace_basename(argv[0], "xnbd-bgctl");
-	if (! xnbd_bgctl_path) {
-		err(MESSAGE_ENOMEM);
-	}
-	if (access(xnbd_bgctl_path, X_OK) != 0) {
-		err("check xnbd-bgctl: %m");
-	}
-
 
 	if (port == NULL) {
 		if (asprintf(&port, "%d", XNBD_PORT) == -1) {
