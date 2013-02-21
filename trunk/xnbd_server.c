@@ -24,14 +24,6 @@
 #include "xnbd.h"
 #include "xnbd_common.h"
 
-/* IPTOS */
-#include <netinet/in.h>
-#include <netinet/ip.h>
-
-
-
-
-
 /* called once in the master process */
 void xnbd_initialize(struct xnbd_info *xnbd)
 {
@@ -267,13 +259,6 @@ void invoke_new_session(struct xnbd_info *xnbd, int csockfd)
 		//	sleep(10);
 		//}
 
-
-		if (xnbd->tos) {
-			const int val = IPTOS_THROUGHPUT;
-			int ret = setsockopt(csockfd, IPPROTO_IP, IP_TOS, (const void *) &val, sizeof(val));
-			if (ret < 0)
-				err("setsockopt, %m");
-		}
 
 		do_service(ses);
 
@@ -710,7 +695,6 @@ static struct option longopts[] = {
 	{"readonly", no_argument, NULL, 'r'},
 	{"logpath", required_argument, NULL, 'L'},
 	{"syslog", no_argument, NULL, 'S'},
-	{"tos", no_argument, NULL, 'T'},
 	{"connected-fd", required_argument, NULL, 'F'},
 	{"inetd", no_argument, NULL, 'i'},
 	{"target-exportname", required_argument, NULL, 'n'},
@@ -820,7 +804,6 @@ int main(int argc, char **argv) {
 	char *gstatpath = NULL;
 	int daemonize = 0;
 	int readonly = 0;
-	int tos = 0;
 	int connected_fd = -1;
 	const char *logpath = NULL;
 	int use_syslog = 0;
@@ -941,11 +924,6 @@ int main(int argc, char **argv) {
 				info("readonly enabled");
 				break;
 
-			case 'T':
-				tos = 1;
-				info("ToS enabled");
-				break;
-
 			case 'F':
 				/* use a file descriptor specified in the command line */
 				if (inetd)
@@ -1047,7 +1025,6 @@ int main(int argc, char **argv) {
 
 	xnbd.cmd = cmd;
 	xnbd.readonly = readonly;
-	xnbd.tos = tos;
 	xnbd_initialize(&xnbd);
 
 	PAGESIZE = (unsigned int) getpagesize();

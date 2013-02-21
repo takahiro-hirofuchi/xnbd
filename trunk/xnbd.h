@@ -142,11 +142,6 @@ struct xnbd_info {
 
 	GList *sessions;
 
-	/* use IPTOS_ flag for IP packets */
-	int tos;
-
-
-
 	/* xnbd_cmd_target mode */
 	char *target_diskpath;
 	int target_diskfd;
