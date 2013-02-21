@@ -91,9 +91,6 @@ The following options are supported:
     Export the image file as read-only. If a client sends a write
     request, it will receive an error, but the connection will stay up.
 
-*--tos*::
-    Optimize socket connections for throughput (rather than minimal delay).
-
 *--connected-fd* 'NUMBER'::
     Use file descriptor 'NUMBER' as a bi-directional, pre-negotiated channel to a
     single client.  Used by xnbd-wrapper(8) on invocation of xnbd-server, internally.
