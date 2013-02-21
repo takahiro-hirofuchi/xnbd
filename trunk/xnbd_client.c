@@ -381,7 +381,7 @@ static void xnbd_connect_to_remote(GList *dst_list, int max_retry, const char *e
 }
 
 
-static void xnbd_report_target_size(unsigned int timeout, GList *dst_list, int max_retry, const char *exportname)
+static void xnbd_report_target_size(GList *dst_list, int max_retry, const char *exportname)
 {
 	off_t disksize = -1;
 	xnbd_connect_to_remote(dst_list, max_retry, exportname, NULL, &disksize, NULL);
@@ -795,7 +795,7 @@ int main(int argc, char *argv[]) {
 		xnbd_setup_client(devpath, blocksize, timeout, dst_list, max_retry, recovery_command, exportname);
 	} else {
 		assert(cmd == cmd_getsize64);
-		xnbd_report_target_size(timeout, dst_list, max_retry, exportname);
+		xnbd_report_target_size(dst_list, max_retry, exportname);
 	}
 
 	return 0;
