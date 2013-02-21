@@ -234,7 +234,7 @@ void *sender_thread_main(void *data)
 				(req->iotype == NBD_CMD_READ) ? "read" : "write",
 				req->iofrom, req->iolen);
 
-		g_assert(req->iofrom + req->iolen <= params->disksize);
+		g_assert(req->iofrom + req->iolen <= (unsigned long)params->disksize);
 
 		nbd_client_send_request_header(params->remotefd, req->iotype, req->iofrom, req->iolen, (uint64_t) index);
 
