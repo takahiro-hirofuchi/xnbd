@@ -690,7 +690,6 @@ static struct option longopts[] = {
 	{"version", no_argument, NULL, 'v'},
 	/* options */
 	{"lport", required_argument, NULL, 'l'},
-	{"gstatpath", required_argument, NULL, 'G'},
 	{"daemonize", no_argument, NULL, 'd'},
 	{"readonly", no_argument, NULL, 'r'},
 	{"logpath", required_argument, NULL, 'L'},
@@ -801,7 +800,6 @@ int main(int argc, char **argv) {
 	struct xnbd_info xnbd;
 	enum xnbd_cmd_type cmd = xnbd_cmd_unknown;
 	int lport = XNBD_PORT;
-	char *gstatpath = NULL;
 	int daemonize = 0;
 	int readonly = 0;
 	int connected_fd = -1;
@@ -911,12 +909,6 @@ int main(int argc, char **argv) {
 			case 'l':
 				lport = atoi(optarg);
 				info("listen port %d", lport);
-				break;
-
-			case 'G':
-				gstatpath = optarg;
-				info("ext2 group I/O status %s", optarg);
-				err("not-yet-released feature");
 				break;
 
 			case 'r':
