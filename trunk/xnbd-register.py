@@ -180,22 +180,23 @@ if (not args.stop and not args.restart and not args.start):
 	vprint("%s: One action is required" % sys.argv[0])
 	sys.exit(1)
 
-ordered_items = configuration.keys()
-if 'server' in ordered_items:
-	ordered_items.remove('server')
-	ordered_items = ['server', ] + ordered_items
+client_device_names = [k for k in configuration.keys() if k != 'server']
+wrapper_configured = 'server' in configuration
 
+if (args.stop or args.restart):
+	# Stop clients first, they may be using our own wrapper
+	for instance in client_device_names:
+		stop_client(instance, configuration[instance])
 
-for instance in ordered_items:
-	if (args.stop or args.restart):
-		if (instance == 'server'):
-			stop_server(configuration[instance])
-		else:
-			stop_client(instance, configuration[instance])
-	if (args.start or args.restart):
-		if (instance == 'server'):
-			start_server(configuration[instance])
-		else:
-			start_client(instance, configuration[instance])
+	if wrapper_configured:
+		stop_server(configuration['server'])
+
+if (args.start or args.restart):
+	# Start wrapper frist, it may be used our own clients
+	if wrapper_configured:
+		start_server(configuration['server'])
+
+	for instance in client_device_names:
+		start_client(instance, configuration[instance])
 
 sys.exit(0)

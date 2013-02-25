@@ -45,6 +45,7 @@ Improvements
  * xnbd-register: Exit gracefully if config file missing
  * xnbd-register: Add --config option
  * xnbd-register: Add support for export names
+ * xnbd-register: Stop clients before wrapper (since they might be using the wrapper)
  * xnbd-server: Fix broken startup with GLib 2.32 or later
  * xnbd-server: Keep existing bitmap state by default, add option --clear-bitmap
  * xnbd-server: Prevent re-use of bitmap with different disk size
