@@ -54,7 +54,7 @@ AC_ARG_ENABLE([debug], AC_HELP_STRING([--enable-debug], [enable debugging [defau
 	CPPFLAGS+="-DXNBD_DEBUG"
 ])
 
-CFLAGS+=" -Wall -Wextra -Wstrict-aliasing=2 -Wformat=2 -Wcast-align -Wwrite-strings -Wfloat-equal -Wpointer-arith -Wswitch-enum -fstack-protector -fstack-check"
+CFLAGS+=" -Wall -Wextra -Wformat=2 -Wcast-align -Wwrite-strings -Wfloat-equal -Wpointer-arith -Wswitch-enum -fstack-protector -fstack-check"
 
 
 AC_CONFIG_FILES([Makefile
