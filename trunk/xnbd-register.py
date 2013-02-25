@@ -71,13 +71,13 @@ def check_syntax(data, config_file):
 			sys.exit(1)
 
 		if (key == WRAPPER_KEY):
-			server_keys = set(["address", "port", "socket",	"volumes", "logpath"])
+			wrapper_keys = set(["address", "port", "socket",	"volumes", "logpath"])
 			config_keys = set(data[key].keys())
-			if (config_keys < server_keys):
+			if (config_keys < wrapper_keys):
 				vprint("Incomplete wrapper configuration. Was expecting `address', `port', `socket' and `volumes' in configuration file `%s'"  % config_file)
 				sys.exit(1)
 
-			ukeys = config_keys - server_keys
+			ukeys = config_keys - wrapper_keys
 			if (ukeys):
 				vprint("WARNING: Unknown wrapper option(s): %s\n" % reduce(lambda x,y: x + y,  ["%s"% (x) for x in ukeys]))
 			continue
@@ -126,7 +126,7 @@ def stop_client(device, data):
 	stop_cmd = [XNBD_CLIENT,  '--disconnect', '/dev/%s' % (device)]
 	call(stop_cmd, "Stopping /dev/%s ... " % (device))
 
-def start_server(data):
+def start_wrapper(data):
 	start_cmd = [XNBD_WRAPPER, "--daemonize", "--logpath", data['logpath'],
 		"--laddr", data['address'], "--port", str(data['port']), "--socket", data['socket']]
 	if call(start_cmd, "Starting `%s' ..." % (XNBD_WRAPPER)):
@@ -146,7 +146,7 @@ def start_server(data):
 		else:
 			vprint("%s: Can't access volume" % (volume))
 
-def stop_server(data):
+def stop_wrapper(data):
 	stop = [XNBD_WRAPPER_CTL, "--socket", data['socket'], "--shutdown"]
 	call(stop, "Shutting down all xnbd shares ...")
 
@@ -212,12 +212,12 @@ if (args.stop or args.restart):
 		stop_client(instance, configuration[instance])
 
 	if wrapper_configured:
-		stop_server(configuration[WRAPPER_KEY])
+		stop_wrapper(configuration[WRAPPER_KEY])
 
 if (args.start or args.restart):
 	# Start wrapper frist, it may be used our own clients
 	if wrapper_configured:
-		start_server(configuration[WRAPPER_KEY])
+		start_wrapper(configuration[WRAPPER_KEY])
 
 	for instance in client_device_names:
 		start_client(instance, configuration[instance])
