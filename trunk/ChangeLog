@@ -76,6 +76,7 @@ Deprecations
  * xnbd-wrapper(-ctl): Deprecate --remove in favor of --remove-by-file
      and --remove-by-exportname
  * xnbd-server: Deprecate --shutdown in favor of --switch
+ * xnbd-register: Deprecate config key "server" in favor of "wrapper"
 
 Changes relevant to packaging
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -35,15 +35,35 @@ XNBD_WRAPPER = "xnbd-wrapper"
 XNBD_WRAPPER_CTL = "xnbd-wrapper-ctl"
 VERBOSE = True
 
-WRAPPER_KEY = 'server'
+SERVER_KEY = 'server'
+WRAPPER_KEY = 'wrapper'
 
 def vprint(msg, **kwargs):
 	if (VERBOSE):
 		print(msg, **kwargs)
 
+def handle_server_wrapper_migration(conf, config_file):
+	server_present = SERVER_KEY in conf
+	wrapper_present = WRAPPER_KEY in conf
+
+	if server_present and wrapper_present:
+		vprint('Conflict in config file "%s": Use of both key "%s" (old, deprecated) and key "%s" (new) not supported. Please merge into "%s".' \
+				% (config_file, SERVER_KEY, WRAPPER_KEY, WRAPPER_KEY))
+		sys.exit(1)
+	elif server_present:
+		vprint('Warning for config file "%s": Use of key "%s" is deprecated, please rename to "%s". Thanks.' \
+				% (config_file, SERVER_KEY, WRAPPER_KEY))
+		assert not wrapper_present
+
+		# Rename server to wrapper
+		conf[WRAPPER_KEY] = conf[SERVER_KEY]
+		del conf[SERVER_KEY]
+
+	assert SERVER_KEY not in conf
+
 def check_syntax(data, config_file):
 	if (not isinstance(data, dict)):
-		vprint("Invalid syntax in configuration file `%s': Expected a sequence of nbdX and/or server objects")
+		vprint("Invalid syntax in configuration file `%s': Expected a sequence of nbdX and/or wrapper objects")
 		sys.exit(1)
 	for key in data:
 		if (key != WRAPPER_KEY and not key.startswith("nbd")):
@@ -54,12 +74,12 @@ def check_syntax(data, config_file):
 			server_keys = set(["address", "port", "socket",	"volumes", "logpath"])
 			config_keys = set(data[key].keys())
 			if (config_keys < server_keys):
-				vprint("Incomplete server configuration. Was expecting `address', `port', `socket' and `volumes' in configuration file `%s'"  % config_file)
+				vprint("Incomplete wrapper configuration. Was expecting `address', `port', `socket' and `volumes' in configuration file `%s'"  % config_file)
 				sys.exit(1)
 
 			ukeys = config_keys - server_keys
 			if (ukeys):
-				vprint("WARNING: Unknown server option(s): %s\n" % reduce(lambda x,y: x + y,  ["%s"% (x) for x in ukeys]))
+				vprint("WARNING: Unknown wrapper option(s): %s\n" % reduce(lambda x,y: x + y,  ["%s"% (x) for x in ukeys]))
 			continue
 
 		elif (key.startswith("nbd")):
@@ -164,6 +184,7 @@ except ValueError as e:
 	sys.exit(1)
 
 conf_parser.close()
+handle_server_wrapper_migration(configuration, args.config_file)
 check_syntax(configuration, args.config_file)
 
 if ( not len(configuration) ):
@@ -174,7 +195,7 @@ wrapper_configured = WRAPPER_KEY in configuration
 
 if (args.status):
 	if (not wrapper_configured):
-		vprint("WARNING: No known server socket")
+		vprint("WARNING: Wrapper socket unknown (since no wrapper is configured)")
 		sys.exit(2)
 	print_status(configuration[WRAPPER_KEY])
 	sys.exit(0)
