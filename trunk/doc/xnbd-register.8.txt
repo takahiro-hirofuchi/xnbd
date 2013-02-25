@@ -23,9 +23,9 @@ SYNOPSIS
 
 DESCRIPTION
 -----------
-With the xnbd-register command one can restore xnbd-server and xnbd-client
+With the xnbd-register command one can restore xnbd-wrapper and xnbd-client
 sessions based on a configuration file.  This is useful to start client,
-server or both upon boot.
+wrapper or both upon boot.
 
 To achieve this, xnbd-register reads a semi-structured configuration file
 located in /etc/xnbd.conf.  See below for format hints.
@@ -38,20 +38,20 @@ The following options are supported:
 *--start*::
     Start devices configured in the configuration files.  If the configuration
     files describes volumes, xnbd-register will try to establish a client
-    connection to the configured server instance.
+    connection to the configured wrapper instance.
     +
     Alternatively, xnbd-register will start sharing configured volumes by
     starting an xnbd-wrapper super server.
 
 *--status*::
-    Retrieve server status from a running xnbd-wrapper command, if applicable.
+    Retrieve wrapper status from a running xnbd-wrapper command, if applicable.
 
 *--stop*::
     Analogous to the start option, the stop argument will stop all xnbd
-    connection, being client or server instances.
+    connection, being client or wrapper instances.
 
 *--restart*::
-    Restart all xnbd instances, being client or server
+    Restart all xnbd instances, being client or wrapper
 
 *--config* 'FILE'::
     Config file to use.  Defaults to /etc/xnbd.conf.
@@ -63,12 +63,12 @@ The following options are supported:
 CONFIGURATION FILE
 ------------------
 xnbd-register will read its defaults from /etc/xnbd.conf.  This is a
-semi-structured configuration file, describing client and server connections
+semi-structured configuration file, describing client and wrapper connections
 that are supposed to be restored upon start of the system.
 
 The syntax of the file is a JSON data structure, allowing comments starting
 with a hash key ("#"). Two types of objects are recognized: xnbd volumes
-and a server instance.  xnbd volumes are indexed by the supposed devices name.
+and a wrapper instance.  xnbd volumes are indexed by the supposed devices name.
 This is, to restore /dev/nbd0 an object named "nbd0" must be configured.
 Valid arguments are host, name and port.  So, for example, this is to
 configure /dev/nbd0 connecting to localhost on port 8520.  If present,
@@ -82,7 +82,7 @@ identify the shared device by the configured logical name:
 }
 ---------------------------
 
-Similarly, a server instance configures an xnbd-wrapper. Valid options are:
+Similarly, a wrapper instance configures an xnbd-wrapper. Valid options are:
 
 *address*::
     Specifies the listening address
