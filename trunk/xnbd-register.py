@@ -35,6 +35,8 @@ XNBD_WRAPPER = "xnbd-wrapper"
 XNBD_WRAPPER_CTL = "xnbd-wrapper-ctl"
 VERBOSE = True
 
+WRAPPER_KEY = 'server'
+
 def vprint(msg, **kwargs):
 	if (VERBOSE):
 		print(msg, **kwargs)
@@ -44,11 +46,11 @@ def check_syntax(data, config_file):
 		vprint("Invalid syntax in configuration file `%s': Expected a sequence of nbdX and/or server objects")
 		sys.exit(1)
 	for key in data:
-		if (key != "server" and not key.startswith("nbd")):
+		if (key != WRAPPER_KEY and not key.startswith("nbd")):
 			vprint("Invalid key: `%s' in configuration file `%s'" % (key, config_file))
 			sys.exit(1)
 
-		if (key == "server"):
+		if (key == WRAPPER_KEY):
 			server_keys = set(["address", "port", "socket",	"volumes", "logpath"])
 			config_keys = set(data[key].keys())
 			if (config_keys < server_keys):
@@ -168,20 +170,20 @@ if ( not len(configuration) ):
 	vprint("WARNING: Not starting anything")
 	sys.exit(2)
 
+wrapper_configured = WRAPPER_KEY in configuration
 
 if (args.status):
-	if (not 'server' in configuration):
+	if (not wrapper_configured):
 		vprint("WARNING: No known server socket")
 		sys.exit(2)
-	print_status(configuration['server'])
+	print_status(configuration[WRAPPER_KEY])
 	sys.exit(0)
 
 if (not args.stop and not args.restart and not args.start):
 	vprint("%s: One action is required" % sys.argv[0])
 	sys.exit(1)
 
-client_device_names = [k for k in configuration.keys() if k != 'server']
-wrapper_configured = 'server' in configuration
+client_device_names = [k for k in configuration.keys() if k != WRAPPER_KEY]
 
 if (args.stop or args.restart):
 	# Stop clients first, they may be using our own wrapper
@@ -189,12 +191,12 @@ if (args.stop or args.restart):
 		stop_client(instance, configuration[instance])
 
 	if wrapper_configured:
-		stop_server(configuration['server'])
+		stop_server(configuration[WRAPPER_KEY])
 
 if (args.start or args.restart):
 	# Start wrapper frist, it may be used our own clients
 	if wrapper_configured:
-		start_server(configuration['server'])
+		start_server(configuration[WRAPPER_KEY])
 
 	for instance in client_device_names:
 		start_client(instance, configuration[instance])
