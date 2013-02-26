@@ -1391,7 +1391,7 @@ int main(int argc, char **argv) {
 				/* unix socket */
 				t_thread_data * const p_thread_data = g_try_new(t_thread_data, 1);
 				if (! p_thread_data) {
-					warn("Could start thread: %s", MESSAGE_ENOMEM);
+					warn("Could not start thread: %s", MESSAGE_ENOMEM);
 				} else {
 					p_thread_data->unix_sock_fd = ux_sockfd;
 					p_thread_data->xnbd_bgctl_command = xnbd_bgctl_command;
