@@ -44,7 +44,7 @@ The following options are supported:
 *--cache-all2*::
     This command is identical to *--cache-all* but detaches the process from
     the terminal and is hence using a dedicated connection for data
-    transfer.
+    transfer. Not implemented fully yet.
 
 *--query*::
     This command retrieves completion statistics from the proxy server
