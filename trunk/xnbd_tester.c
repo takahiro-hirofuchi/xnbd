@@ -1,7 +1,7 @@
 /* 
  * xNBD - an enhanced Network Block Device program
  *
- * Copyright (C) 2008-2012 National Institute of Advanced Industrial Science
+ * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
  * and Technology
  *
  * Author: Takahiro Hirofuchi <t.hirofuchi _at_ aist.go.jp>
@@ -136,7 +136,7 @@ void bgctl_thread_create(off_t disksize, const char *bgctlpath)
 {
 	struct bginfo_struct *bginfo = &bginfo_data;
 
-	bzero(bginfo, sizeof(struct bginfo_struct));
+	memset(bginfo, 0, sizeof(struct bginfo_struct));
 	pthread_mutex_init(&bginfo->lock, NULL);
 	pthread_cond_init(&bginfo->init_done, NULL);
 	bginfo->disksize  = disksize;
@@ -177,7 +177,7 @@ void bgctl_wait_shutdown(void)
 
 	pthread_mutex_destroy(&bginfo->lock);
 	pthread_cond_destroy(&bginfo->init_done);
-	bzero(bginfo, sizeof(struct bginfo_struct));
+	memset(bginfo, 0, sizeof(struct bginfo_struct));
 }
 
 
@@ -218,7 +218,7 @@ void *sender_thread_main(void *data)
 		else if (params->rwmode == TESTWRONLY)
 			req->iotype = NBD_CMD_WRITE;
 		else
-			err("unkown rwmode");
+			err("unknown rwmode");
 
 
 		req->iofrom = (off_t) (1.0L * params->disksize * random() / RAND_MAX);
@@ -234,7 +234,7 @@ void *sender_thread_main(void *data)
 				(req->iotype == NBD_CMD_READ) ? "read" : "write",
 				req->iofrom, req->iolen);
 
-		g_assert(req->iofrom + req->iolen <= params->disksize);
+		g_assert(req->iofrom + req->iolen <= (unsigned long)params->disksize);
 
 		nbd_client_send_request_header(params->remotefd, req->iotype, req->iofrom, req->iolen, (uint64_t) index);
 
@@ -262,7 +262,7 @@ void *sender_thread_main(void *data)
 void recv_reply_header(int remotefd, uint64_t expected_index)
 {
 	struct nbd_reply reply;
-	bzero(&reply, sizeof(reply));
+	memset(&reply, 0, sizeof(reply));
 
 
 	net_recv_all_or_abort(remotefd, &reply, sizeof(reply));
@@ -587,7 +587,7 @@ static void set_sigactions()
 {
 	struct sigaction act;
 
-	bzero(&act, sizeof(act));
+	memset(&act, 0, sizeof(act));
 	act.sa_handler = SIG_IGN;
 	sigaction(SIGPIPE, &act, NULL);
 }
@@ -606,14 +606,14 @@ void show_help_and_exit(const char *msg)
 	if (msg)
 		info("%s\n", msg);
 
-	info("make xnbd-server-test xnbd-tester");
+	info("make xnbd-server xnbd-tester");
 	info("For target mode");
-	info("  ./xnbd-server-test --target disk1G.img --lport 8992");
+	info("  ./xnbd-server --target --lport 8992 disk1G.img");
 	info("  ./xnbd-tester --rwmode 1 localhost 8992 disk1G.img /tmp/tmp.img");
 	info(" ");
 	info("For proxy mode");
-	info("  ./xnbd-server-test --target disk1G.img --lport 8992");
-	info("  ./xnbd-server-test --proxy localhost 8992 /tmp/disk.cache /tmp/disk.cache.bitmap --lport 8521 --bgctlprefix /tmp/xnbd-bg.ctl");
+	info("  ./xnbd-server --target --lport 8992 disk1G.img");
+	info("  ./xnbd-server --proxy --lport 8521 localhost 8992 /tmp/disk.cache /tmp/disk.cache.bitmap /tmp/xnbd-bg.ctl");
 	info("  ./xnbd-tester --rwmode 1 --bgctlpath /tmp/xnbd-bg.ctl localhost 8521 /tmp/disk.cache /tmp/tmp.img");
 	info(" ");
 	err("See source code for detail.");

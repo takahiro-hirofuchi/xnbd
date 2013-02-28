@@ -1,7 +1,7 @@
 /* 
  * xNBD - an enhanced Network Block Device program
  *
- * Copyright (C) 2008-2012 National Institute of Advanced Industrial Science
+ * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
  * and Technology
  *
  * Author: Takahiro Hirofuchi <t.hirofuchi _at_ aist.go.jp>
@@ -140,7 +140,7 @@ int recv_request(struct proxy_session *ps)
 		priv->write_buff = g_malloc(iolen);
 
 		/*
-		 * Recieve write data to a temporariy buffer. 
+		 * Receive write data to a temporary buffer.
 		 *
 		 * Cache disk I/O is allowed only in the completion thread. 
 		 * This ensures all disk I/O is serialized.
@@ -164,7 +164,7 @@ int recv_request(struct proxy_session *ps)
 		;
 
 	} else {
-		warn("client bug: uknown iotype");
+		warn("client bug: unknown iotype");
 		goto err_handle;
 	}
 
@@ -185,23 +185,6 @@ err_handle:
 
 
 
-
-
-static void signal_handler_xnbd(int i)
-{
-	info("signal catched xnbd, code %d", i);
-}
-
-static void set_signal_xnbd_service(void)
-{
-	struct sigaction act;
-
-	bzero(&act, sizeof(act));
-	act.sa_handler = signal_handler_xnbd;
-	sigemptyset(&act.sa_mask);
-	sigaction(SIGTERM, &act, NULL);
-	sigaction(SIGINT, &act, NULL);
-}
 
 
 void proxy_initialize_forwarder(struct xnbd_proxy *proxy, int remotefd)
@@ -236,7 +219,7 @@ void proxy_initialize(struct xnbd_info *xnbd, struct xnbd_proxy *proxy)
 
 
 	/* set up a bitmap and a cache disk */
-	proxy->cbitmap = bitmap_open_file(xnbd->proxy_bmpath, xnbd->nblocks, &proxy->cbitmaplen, 0, 1);
+	proxy->cbitmap = bitmap_open_file(xnbd->proxy_bmpath, xnbd->nblocks, &proxy->cbitmaplen, 0, xnbd->proxy_clear_bitmap ? 1 : 0);
 
 	int cachefd = open(xnbd->proxy_diskpath, O_RDWR | O_CREAT | O_NOATIME, S_IRUSR | S_IWUSR);
 	if (cachefd < 0)
@@ -314,6 +297,7 @@ void *tx_thread_main(void *arg)
 {
 	struct proxy_session *ps = (struct proxy_session *) arg;
 	int need_exit = 0;
+	int need_skip = 0;
 
 	set_process_name("proxy_tx");
 
@@ -327,7 +311,7 @@ void *tx_thread_main(void *arg)
 
 		if (priv->need_exit)
 			need_exit = 1;
-		else {
+		else if (!need_skip) {
 			/* setup iovec */
 			struct iovec iov[2];
 			unsigned int iov_size = 0;
@@ -342,7 +326,21 @@ void *tx_thread_main(void *arg)
 				iov_size += 1;
 			}
 
-			net_writev_all_or_error(priv->clientfd, iov, iov_size);
+			int ret = net_writev_all_or_error(priv->clientfd, iov, iov_size);
+			if (ret < 0) {
+				warn("clientfd %d is dead", priv->clientfd);
+				/*
+				 * tx_thread has detected that clientfd is unusable.
+				 * tx_thread may dequeue requests from ps->tx_queue,
+				 * but now skips sending their replies.
+				 *
+				 * The error of clientfd will be also detected by rx_thread.
+				 * rx_thread will enqueue a special request with .need_exit=1;
+				 * this request is a notification of graceful shutdown.
+				 * tx_thread will finally receive this request.
+				 */
+				need_skip = 1;
+			}
 		}
 
 		if (priv->read_buff)
@@ -429,6 +427,7 @@ int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
 			case XNBD_PROXY_CMD_QUERY_STATUS:
 				{
 					struct xnbd_proxy_query query;
+					memset(&query, 0, sizeof(query));
 					query.disksize = proxy->xnbd->disksize;
 					g_strlcpy(query.diskpath, proxy->xnbd->proxy_diskpath, sizeof(query.diskpath));
 					g_strlcpy(query.bmpath, proxy->xnbd->proxy_bmpath, sizeof(query.bmpath));
@@ -500,10 +499,20 @@ int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
 				}
 				break;
 
+			case XNBD_PROXY_CMD_DETECT_SWITCH:
+				/*
+				 * This command is used to detect the completion of the mode switch
+				 * from the proxy to the target mode. After receiving this command,
+				 * the proxy server does nothing special, but leaves the accepted
+				 * socket open. This socket will be closed when the proxy server
+				 * is terminated.
+				 */
+				close_wrk_fd = 0;
+				break;
 
 			case XNBD_PROXY_CMD_UNKNOWN:
 			default:
-				warn("uknown proxy cmd %d (wrk_fd %d)", cmd, wrk_fd);
+				warn("unknown proxy cmd %d (wrk_fd %d)", cmd, wrk_fd);
 		}
 
 		if (close_wrk_fd)
@@ -540,7 +549,7 @@ int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
 
 			ret = write(ps->wrk_fd, "", 1);
 			if (ret < 0)
-				err("notify the worker process, %m");
+				warn("notifying the worker process failed: %m");
 
 			close(ps->wrk_fd);
 			conn_list = g_list_remove(conn_list, ps);
@@ -555,7 +564,7 @@ int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
 
 
 
-/* before calling this funciton, all sessions must be terminated */
+/* before calling this function, all sessions must be terminated */
 void xnbd_proxy_stop(struct xnbd_info *xnbd)
 {
 	g_assert(g_list_length(xnbd->sessions) == 0);
@@ -644,7 +653,7 @@ void xnbd_proxy_start(struct xnbd_info *xnbd)
 
 		/*
 		 * Tell the master that xnbd_proxy gets ready. We need to send
-		 * something to differenciate close() by abort.
+		 * something to differentiate close() by abort.
 		 **/
 		net_send_all_or_abort(xnbd->proxy_sockpair_proxy_fd, "", 1);
 		shutdown(xnbd->proxy_sockpair_proxy_fd, SHUT_WR);

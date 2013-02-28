@@ -1,7 +1,7 @@
 /* 
  * xNBD - an enhanced Network Block Device program
  *
- * Copyright (C) 2008-2012 National Institute of Advanced Industrial Science
+ * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
  * and Technology
  *
  * Author: Takahiro Hirofuchi <t.hirofuchi _at_ aist.go.jp>
@@ -104,7 +104,8 @@ enum xnbd_proxy_cmd_type {
 	XNBD_PROXY_CMD_QUERY_STATUS,
 	XNBD_PROXY_CMD_REGISTER_FD,
 	XNBD_PROXY_CMD_REGISTER_FORWARDER_FD,
-	XNBD_PROXY_CMD_REGISTER_SHARED_BUFFER_FD
+	XNBD_PROXY_CMD_REGISTER_SHARED_BUFFER_FD,
+	XNBD_PROXY_CMD_DETECT_SWITCH
 };
 
 /* query about current status via a unix socket */

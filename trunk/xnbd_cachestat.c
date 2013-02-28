@@ -1,7 +1,7 @@
 /* 
  * xNBD - an enhanced Network Block Device program
  *
- * Copyright (C) 2008-2012 National Institute of Advanced Industrial Science
+ * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
  * and Technology
  *
  * Author: Takahiro Hirofuchi <t.hirofuchi _at_ aist.go.jp>
@@ -215,16 +215,6 @@ int cachestat_initialize(const char *path, unsigned long nblocks)
 	if (cachestfd < 0) {
 		err("open cachestfd  %s, %s", path, strerror(errno));
 	}
-
-	{
-		char *tmpbuf = g_malloc(logsize);
-		bzero(tmpbuf, logsize);
-		//The line below fails, as the symbol is not imported from
-		//anywhere
-		//writeit(cachestfd, tmpbuf, logsize);
-		g_free(tmpbuf);
-	}
-
 	
 	info("cachest file %s size %llu B\n", path, (off64_t) logsize);
 

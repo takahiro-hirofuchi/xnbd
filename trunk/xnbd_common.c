@@ -1,7 +1,7 @@
 /* 
  * xNBD - an enhanced Network Block Device program
  *
- * Copyright (C) 2008-2012 National Institute of Advanced Industrial Science
+ * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
  * and Technology
  *
  * Author: Takahiro Hirofuchi <t.hirofuchi _at_ aist.go.jp>
@@ -130,7 +130,7 @@ void *mmap_iorange(struct xnbd_info *xnbd, int fd, off_t iofrom, size_t iolen, c
 	/*
 	 * mapping_start (off_t) is 64bit in 64-bit environments or in the
 	 * 32-bit envinronment with LARGEFILE. mapping_length (size_t) is 64 bit in
-	 * 64-bit envinronments, 32 bit in 32-bit envinronments.
+	 * 64-bit environments, 32 bit in 32-bit environments.
 	 **/
 
 	if (xnbd->readonly)
@@ -195,20 +195,6 @@ unsigned long get_disk_nblocks(off_t disksize)
 	return (unsigned long) nblocks64;
 }
 
-void redirect_stderr(const char *logfile)
-{
-        int logfd = open(logfile ? logfile : DEFAULT_XNBDSERVER_LOGFILE,
-                         O_WRONLY | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR);
-        if (logfd < 0)
-                err("open %s, %m", logfile);
-
-        int ret = dup2(logfd, fileno(stderr));
-        if (ret < 0)
-                err("dup2 %m");
-
-        close(logfd);
-}
-
 int get_log_fd(const char *path)
 {
         int fd = open(path, O_WRONLY | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR);
@@ -216,27 +202,4 @@ int get_log_fd(const char *path)
                 err("open %s, %m", path);
 
         return fd;
-}
-
-void detach(const char *logpath)
-{
-        close(STDIN_FILENO);
-
-        int devnull = open("/dev/null", O_WRONLY);
-        if (devnull < 0)
-		err("open /dev/null, %m");
-
-	dup2(devnull, STDOUT_FILENO);
-
-        close(devnull);
-
-        if(!logpath) {
-                logpath = DEFAULT_XNBDSERVER_LOGFILE;
-                info("logfile %s", logpath);
-                redirect_stderr(logpath);
-        }
-
-        int ret = daemon(0, 1);
-        if (ret < 0)
-                err("daemon %m");
 }

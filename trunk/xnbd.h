@@ -1,7 +1,7 @@
 /* 
  * xNBD - an enhanced Network Block Device program
  *
- * Copyright (C) 2008-2012 National Institute of Advanced Industrial Science
+ * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
  * and Technology
  *
  * Author: Takahiro Hirofuchi <t.hirofuchi _at_ aist.go.jp>
@@ -32,15 +32,15 @@
 
 #define _GNU_SOURCE
 
-#include <xutils.h>
+#include "lib/xutils.h"
 
 
 
 
 #include <inttypes.h>
+#include <stdbool.h>
 
 #include <unistd.h>
-#include <strings.h>
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -142,11 +142,6 @@ struct xnbd_info {
 
 	GList *sessions;
 
-	/* use IPTOS_ flag for IP packets */
-	int tos;
-
-
-
 	/* xnbd_cmd_target mode */
 	char *target_diskpath;
 	int target_diskfd;
@@ -165,6 +160,7 @@ struct xnbd_info {
 	char *proxy_rport;
 	char *proxy_unixpath;
 	char *proxy_target_exportname;  /* export name to request from a xnbd-wrapper target */
+	bool proxy_clear_bitmap;
 
 	/* 
 	 * NOTE: when invoking a new thread, must close the master_fds of the

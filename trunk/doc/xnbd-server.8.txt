@@ -78,7 +78,7 @@ The following options are supported:
     All network I/O is redirected to the stdin descriptor.
 
 *--logpath* 'FILE'::
-    Log informational messages to file 'FILE'.
+    Log informational messages to file 'FILE' rather than stderr/syslog.
 
 *--syslog*::
     Log informational messages to syslog.
@@ -91,9 +91,19 @@ The following options are supported:
     Export the image file as read-only. If a client sends a write
     request, it will receive an error, but the connection will stay up.
 
+*--connected-fd* 'NUMBER'::
+    Use file descriptor 'NUMBER' as a bi-directional, pre-negotiated channel to a
+    single client.  Used by xnbd-wrapper(8) on invocation of xnbd-server, internally.
+    The file descriptor is turned to blocking mode by xnbd-server before usage.
+
+
+OPTIONS (proxy mode only)
+-------------------------
 *--target-exportname* 'NAME'::
-    Set the export name to request from an xnbd-wrapper target. This
-    option is used in combination with *--proxy*, only.
+    Set the export name to request from an xnbd-wrapper target.
+
+*--clear-bitmap*::
+    Clear an existing bitmap file.  By default, previous state is re-used.
 
 
 SIGNALS
@@ -103,7 +113,7 @@ SIGNALS
     only in the target mode.
 
 *SIGUSR2*::
-    Change the proxy mode to the target mode. Use xnbd-bgctl --shutdown
+    Change the proxy mode to the target mode. Use xnbd-bgctl --switch
     instead of sending this signal.
 
 
@@ -114,16 +124,6 @@ xnbd-client(1), xnbd-bgctl(1), xnbd-wrapper(8)
 
 AUTHOR
 ------
-The NBD kernel module and the NBD tools have been written by Pavel Macheck
-(pavel@ucw.cz) and is now maintained by Paul Clements
-(Paul.Clements@steeleye.com).
+include::author_xnbd.txt[]
 
-The xNBD userland programs have been written by
-Takahiro Hirofuchi (t.hirofuchi@aist.go.jp).
-
-This manual page was written by Arno Toell (debian@toell.net) for the
-Debian GNU/Linux system (but may be used by others). Large parts are verbatim
-copies of the original nbd-server and nbd-client manual pages written by
-Wouter Verhelst (wouter@debian.org). Permission is granted to copy, distribute
-and/or modify this document under the terms of the GNU General Public License,
-version 2, as published by the Free Software Foundation.
+include::author_verhelst_toell.txt[]

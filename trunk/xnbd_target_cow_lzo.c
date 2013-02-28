@@ -1,7 +1,7 @@
 /* 
  * xNBD - an enhanced Network Block Device program
  *
- * Copyright (C) 2008-2012 National Institute of Advanced Industrial Science
+ * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
  * and Technology
  *
  * Author: Takahiro Hirofuchi <t.hirofuchi _at_ aist.go.jp>
@@ -227,7 +227,7 @@ struct disk_stack *create_disk_stack(char *diskpath)
 		struct stat st;
 		int ret = stat(di->bmpath, &st);
 		if (ret == 0) {
-			info("use alreay-existing bitmap %s", di->bmpath);
+			info("use already-existing bitmap %s", di->bmpath);
 		} else {
 			info("create new base bitmap %s", di->bmpath);
 			size_t tmp_bmlen;
@@ -756,7 +756,7 @@ int target_mode_main_cow(struct xnbd_session *ses)
 	size_t iolen  = 0;
 	int ret;
 
-	bzero(&reply, sizeof(reply));
+	memset(&reply, 0, sizeof(reply));
 	reply.magic = htonl(NBD_REPLY_MAGIC);
 	reply.error = 0;
 

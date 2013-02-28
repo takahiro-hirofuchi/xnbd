@@ -1,7 +1,7 @@
 /* 
  * xNBD - an enhanced Network Block Device program
  *
- * Copyright (C) 2008-2012 National Institute of Advanced Industrial Science
+ * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
  * and Technology
  *
  * Author: Takahiro Hirofuchi <t.hirofuchi _at_ aist.go.jp>
@@ -53,7 +53,7 @@ int nbd_client_send_request_header(int remotefd, uint32_t iotype, off_t iofrom, 
 
 
 	struct nbd_request request;
-	bzero(&request, sizeof(request));
+	memset(&request, 0, sizeof(request));
 
 	request.magic = htonl(NBD_REQUEST_MAGIC);
 	request.type = htonl(iotype);
@@ -95,7 +95,7 @@ int send_read_request(int remotefd, off_t iofrom, size_t len)
 	g_assert(len <= UINT32_MAX);
 	g_assert(iofrom + len <= OFF_MAX);
 
-	bzero(&request, sizeof(request));
+	memset(&request, 0, sizeof(request));
 
 	request.magic = htonl(NBD_REQUEST_MAGIC);
 	request.type = htonl(NBD_CMD_READ);
@@ -118,9 +118,9 @@ int nbd_client_recv_header(int remotefd)
 {
 	struct nbd_reply reply;
 
-	dbg("now reciving read reply");
+	dbg("now receiving read reply");
 
-	bzero(&reply, sizeof(reply));
+	memset(&reply, 0, sizeof(reply));
 
 	int ret = net_recv_all_or_error(remotefd, &reply, sizeof(reply));
 	if (ret < 0) {
@@ -172,7 +172,7 @@ int nbd_client_recv_read_reply_iov(int remotefd, struct iovec *iov, unsigned int
 
 int nbd_client_recv_read_reply(int remotefd, char *buf, size_t len)
 {
-	dbg("now reciving read reply");
+	dbg("now receiving read reply");
 
 	g_assert(buf);
 	g_assert(len <= UINT32_MAX);
@@ -191,7 +191,7 @@ void nbd_client_send_disc_request(int remotefd)
 	struct nbd_request request;
 	int ret;
 
-	bzero(&request, sizeof(request));
+	memset(&request, 0, sizeof(request));
 
 	request.magic = htonl(NBD_REQUEST_MAGIC);
 	request.type = htonl(NBD_CMD_DISC);
@@ -226,7 +226,7 @@ int nbd_server_recv_request(int clientfd, off_t disksize, uint32_t *iotype_arg, 
 	uint32_t iolen  = 0;
 	int ret;
 
-	bzero(&request, sizeof(request));
+	memset(&request, 0, sizeof(request));
 
 	ret = net_recv_all_or_error(clientfd, &request, sizeof(request));
 	// ret = net_recv_all(clientfd, &request, sizeof(request));
@@ -323,11 +323,11 @@ struct nbd_negotiate_pdu_new_2 {
 
 /*
  * The option NBD_OPT_EXPORT_NAME is introduced in the recent version of the
- * original NBD. It allows a client to speficy a target image name.
+ * original NBD. It allows a client to specify a target image name.
  *
  * I feel the negotiation phase of the NBD protocol is not so smart; it
  * should be changed to be reasonable. But, for the compatibility with the
- * orignal NBD and qemu, here the option is implemented.
+ * original NBD and qemu, here the option is implemented.
  *
  * From the viewpoint of the client, the new protocol is summarized as follows:
  *
@@ -349,7 +349,7 @@ char *nbd_negotiate_with_client_new_phase_0(int sockfd)
 
 	{
 		struct nbd_negotiate_pdu_new_0 pdu0;
-		bzero(&pdu0, sizeof(pdu0));
+		memset(&pdu0, 0, sizeof(pdu0));
 
 		pdu0.passwd = htonll(NBD_PASSWD);
 		pdu0.magic  = htonll(NBD_NEGOTIATE_MAGIC_NEW);
@@ -402,7 +402,7 @@ int nbd_negotiate_with_client_new_phase_1(int sockfd, off_t exportsize, int read
 
 
 	struct nbd_negotiate_pdu_new_2 pdu2;
-	bzero(&pdu2, sizeof(pdu2));
+	memset(&pdu2, 0, sizeof(pdu2));
 
 	uint32_t flags = NBD_FLAG_HAS_FLAGS;
 	if (readonly) {
@@ -441,6 +441,11 @@ int nbd_negotiate_with_server_new(int sockfd, off_t *exportsize, uint32_t *expor
 
 		if (ntohll(pdu0.passwd) != NBD_PASSWD) {
 			warn("password mismatch");
+			goto err_out;
+		}
+
+		if (ntohll(pdu0.magic) == NBD_NEGOTIATE_MAGIC_OLD) {
+			warn("wrapped server expected, plain server found");
 			goto err_out;
 		}
 
@@ -517,7 +522,7 @@ static int nbd_negotiate_with_client_common(int sockfd, off_t exportsize, int re
 	int ret;
 
 	struct nbd_negotiate_pdu_old pdu;
-	bzero(&pdu, sizeof(pdu));
+	memset(&pdu, 0, sizeof(pdu));
 
 	uint32_t flags = NBD_FLAG_HAS_FLAGS;
 	if (readonly) {
@@ -559,8 +564,21 @@ int nbd_negotiate_with_server2(int sockfd, off_t *exportsize, uint32_t *exportfl
 {
 	struct nbd_negotiate_pdu_old pdu;
 
-
-	int ret = net_recv_all_or_error(sockfd, &pdu, sizeof(pdu));
+	/* Since both <nbd_negotiate_pdu_old> and <nbd_negotiate_pdu_new_0>
+	 * share these first 128 bits
+	 *
+	 * struct .... {
+	 *   uint64_t passwd;
+	 *   uint64_t magic;
+	 * } __attribute__((__packed__));
+	 *
+	 * we first read 128 bits only.  From the magic value, we know if
+	 * we're daeling with a wrapper (NBD_NEGOTIATE_MAGIC_NEW) or a
+	 * plain server (NBD_NEGOTIATE_MAGIC_OLD).  That way we can produce
+	 * a more helpful error and save waiting for more bytes without hope.
+	 */
+	const size_t passwd_plus_magic_len = sizeof(uint64_t) + sizeof(uint64_t);
+	int ret = net_recv_all_or_error(sockfd, &pdu, passwd_plus_magic_len);
 	if (ret < 0) {
 		warn("receiving negotiate header failed");
 		return -1;
@@ -571,6 +589,16 @@ int nbd_negotiate_with_server2(int sockfd, off_t *exportsize, uint32_t *exportfl
 		return -1;
 	}
 
+	if (ntohll(pdu.magic) == NBD_NEGOTIATE_MAGIC_NEW) {
+		warn("plain server expected, wrapped server found");
+		return -1;
+	}
+
+	ret = net_recv_all_or_error(sockfd, ((char *)&pdu) + passwd_plus_magic_len, sizeof(pdu) - passwd_plus_magic_len);
+	if (ret < 0) {
+		warn("receiving negotiate header failed");
+		return -1;
+	}
 
 	if (ntohll(pdu.magic) != NBD_NEGOTIATE_MAGIC_OLD) {
 		warn("negotiate magic mismatch");

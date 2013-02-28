@@ -1,7 +1,7 @@
 /* 
  * xNBD - an enhanced Network Block Device program
  *
- * Copyright (C) 2008-2012 National Institute of Advanced Industrial Science
+ * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
  * and Technology
  *
  * Author: Takahiro Hirofuchi <t.hirofuchi _at_ aist.go.jp>
@@ -35,7 +35,7 @@ static char *get_nameinfo_string(struct addrinfo *ai)
 	ret = getnameinfo(ai->ai_addr, ai->ai_addrlen, hbuf, sizeof(hbuf),
 			sbuf, sizeof(sbuf), NI_NUMERICHOST | NI_NUMERICSERV);
 	if (ret)
-		g_warning("getnameinfo failed, %s", gai_strerror(ret));
+		warn("getnameinfo failed, %s", gai_strerror(ret));
 
 	const char *type = "unknown_ai_socktype";
 
@@ -60,7 +60,7 @@ struct addrinfo *net_getaddrinfo(char *host, int port, int ai_family, int sockty
 	struct addrinfo hints, *ai_head;
 	char portstr[NI_MAXSERV];
 
-	bzero(&hints, sizeof(hints));
+	memset(&hints, 0, sizeof(hints));
 
 	hints.ai_family   = ai_family;
 	hints.ai_socktype = socktype; /* SOCK_STREAM */
@@ -95,7 +95,7 @@ unsigned int net_create_server_sockets(struct addrinfo *ai_head, int *fds, size_
 		int sockfd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
 		if (sockfd < 0)  {
 			/* if the host does not support ipv6, this might happen. */
-			g_warning("socket(%s) failed, %m", name);
+			warn("socket(%s) failed, %m", name);
 			g_free(name);
 			continue;
 		}
@@ -115,7 +115,7 @@ unsigned int net_create_server_sockets(struct addrinfo *ai_head, int *fds, size_
 
 		/* just for double check */
 		if (sockfd >= FD_SETSIZE)
-			g_warning("select/poll() may fail because sockfd (%d) >= FD_SETSIZE.", sockfd);
+			warn("select/poll() may fail because sockfd (%d) >= FD_SETSIZE.", sockfd);
 
 		int ret = bind(sockfd, ai->ai_addr, ai->ai_addrlen);
 		if (ret < 0)
@@ -148,7 +148,7 @@ unsigned int net_create_server_sockets(struct addrinfo *ai_head, int *fds, size_
 	}
 
 	if (index == 0)
-		g_warning("no server sockets created");
+		warn("no server sockets created");
 
 	return index;
 }
@@ -162,11 +162,11 @@ int net_accept(int lsock)
 	char host[NI_MAXHOST], port[NI_MAXSERV];
 	int ret;
 
-	bzero(&ss, sizeof(ss));
+	memset(&ss, 0, sizeof(ss));
 
 	csock = accept(lsock, (struct sockaddr *) &ss, &len);
 	if (csock < 0) {
-		g_warning("accept failed, fd %d, %s (%d)", csock, strerror(errno), errno);
+		warn("accept failed, fd %d, %s (%d)", csock, strerror(errno), errno);
 		return -1;
 	}
 
@@ -174,17 +174,17 @@ int net_accept(int lsock)
 			host, sizeof(host), port, sizeof(port),
 			(NI_NUMERICHOST | NI_NUMERICSERV));
 	if (ret)
-		g_warning("getnameinfo failed, %s", gai_strerror(ret));
+		warn("getnameinfo failed, %s", gai_strerror(ret));
 
 	if (ss.ss_family == AF_INET) 
-		g_message("connected from %s:%s", host, port);
+		info("connected from %s:%s", host, port);
 	else if (ss.ss_family == AF_INET6) 
-		g_message("connected from [%s]:%s", host, port);
+		info("connected from [%s]:%s", host, port);
 	else if (ss.ss_family == AF_UNIX) 
-		// g_message("connected at %s", ((struct sockaddr_un *) &ss)->sun_path);
-		g_message("connected (unix)");
+		// info("connected at %s", ((struct sockaddr_un *) &ss)->sun_path);
+		info("connected (unix)");
 	else 
-		g_message("connected (unknown pf)");
+		info("connected (unknown pf)");
 
 	return csock;
 }
@@ -196,7 +196,7 @@ int net_set_reuseaddr(int sockfd)
 
 	ret = setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val));
 	if (ret < 0)
-		g_warning("setsockopt SO_REUSEADDR failed");
+		warn("setsockopt SO_REUSEADDR failed");
 
 	return ret;
 }
@@ -208,7 +208,7 @@ int net_set_nodelay(int sockfd)
 
 	ret = setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, &val, sizeof(val));
 	if (ret < 0)
-		g_warning("setsockopt TCP_NODELAY failed");
+		warn("setsockopt TCP_NODELAY failed");
 
 	return ret;
 }
@@ -220,7 +220,7 @@ int net_set_bindv6only(int sockfd)
 
 	ret = setsockopt(sockfd, IPPROTO_IPV6, IPV6_V6ONLY, &val, sizeof(val));
 	if (ret < 0)
-		g_warning("setsockopt IPV6_V6ONLY failed");
+		warn("setsockopt IPV6_V6ONLY failed");
 
 	return ret;
 }
@@ -232,7 +232,7 @@ int net_set_keepalive(int sockfd)
 
 	ret = setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, &val, sizeof(val));
 	if (ret < 0)
-		g_warning("setsockopt SO_KEEPALIVE failed");
+		warn("setsockopt SO_KEEPALIVE failed");
 
 	return ret;
 }
@@ -252,7 +252,7 @@ int net_connect(const char *hostname, const char *service, int socktype, int pro
 	/* get all possible addresses */
 	int ret = getaddrinfo(hostname, service, &hints, &ai_head);
 	if (ret) {
-		g_warning("getaddrinfo failed, %s %s: %s", hostname, service, gai_strerror(ret));
+		warn("getaddrinfo failed, %s %s: %s", hostname, service, gai_strerror(ret));
 		return -1;
 	}
 
@@ -264,7 +264,7 @@ int net_connect(const char *hostname, const char *service, int socktype, int pro
 
 		sockfd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
 		if (sockfd < 0) {
-			g_warning("socket() failed, %m");
+			warn("socket() failed, %m");
 			goto cleanup;
 		}
 
@@ -386,7 +386,7 @@ static int net_iov_all(int fd, struct iovec *iov, int count, int reading)
 #endif
 
 		if (sent == 0) {
-			g_message("%s() returned 0 (fd %d)", mode, fd);
+			info("%s() returned 0 (fd %d)", mode, fd);
 			/* writev returns 0,
 			 *   if an I/O size is zero
 			 * readv returns 0, 
@@ -399,11 +399,11 @@ static int net_iov_all(int fd, struct iovec *iov, int count, int reading)
 
 		if (sent == -1) {
 			if (errno == ECONNRESET)
-				g_message("received TCP_RST (fd %d)", fd);
+				info("received TCP_RST (fd %d)", fd);
 			else if (errno == EPIPE)
-				g_message("raised EPIPE (fd %d)", fd);
+				info("raised EPIPE (fd %d)", fd);
 			else 
-				g_warning("%s error %s (%d) (fd %d)", mode, strerror(errno), errno, fd);
+				warn("%s error %s (%d) (fd %d)", mode, strerror(errno), errno, fd);
 
 			return -1;
 		}
@@ -421,7 +421,7 @@ static int net_iov_all(int fd, struct iovec *iov, int count, int reading)
 				int rest_in_block = expected - sent;
 				// int sent_in_block = iov[i].iov_len - rest_in_block;
 				int sent_in_block = next_iov[i].iov_len - rest_in_block;
-				next_iov[i].iov_base += sent_in_block;
+				next_iov[i].iov_base = (char *)next_iov[i].iov_base + sent_in_block;
 				next_iov[i].iov_len  = rest_in_block;
 
 				/* next iovec */
@@ -492,11 +492,11 @@ void check_done(int ret, int errcode)
 	if (ret == -1)  {
 		if (errcode == ECONNRESET || errcode == EPIPE) {
 			/* TODO: use err() ? */
-			g_message("got RST. abort");
+			info("got RST. abort");
 			exit(EXIT_SUCCESS);
 		}
 
-		g_message("unknown err");
+		info("unknown err");
 
 		err("xmit: %s (%d)", strerror(errcode), errcode);
 	} else if (ret >= 0)
@@ -519,7 +519,7 @@ int check_fin(int ret, int errcode, size_t len)
 	if (ret == -1)  {
 		if (errcode == ECONNRESET || errcode == EPIPE) {
 			/* TODO: use err() ? or return 1 */
-			g_message("got RST. abort");
+			info("got RST. abort");
 			exit(EXIT_SUCCESS);
 		}
 
@@ -557,7 +557,7 @@ int net_writev_all_or_error(int fd, struct iovec *iov, unsigned int count)
 {
 	size_t bufflen = 0;
 	for (unsigned int i = 0; i < count; i++)
-		bufflen += iov->iov_len;
+		bufflen += iov[i].iov_len;
 
 	int ret = net_writev_all(fd, iov, count);
 	if (ret != (int) bufflen)
@@ -591,7 +591,7 @@ void net_readv_all_or_abort(int fd, struct iovec *iov, unsigned int count)
 {
 	size_t bufflen = 0;
 	for (unsigned int i = 0; i < count; i++)
-		bufflen += iov->iov_len;
+		bufflen += iov[i].iov_len;
 
 	int ret = net_readv_all(fd, iov, count);
 	if (check_fin(ret, errno, bufflen))
@@ -602,7 +602,7 @@ int net_readv_all_or_error(int fd, struct iovec *iov, unsigned int count)
 {
 	size_t bufflen = 0;
 	for (unsigned int i = 0; i < count; i++)
-		bufflen += iov->iov_len;
+		bufflen += iov[i].iov_len;
 
 	int ret = net_readv_all(fd, iov, count);
 	if (ret != (int) bufflen)
@@ -651,7 +651,7 @@ int unix_connect(const char *path)
 int unix_send_fd(int socket, int fd)
 {
 	struct msghdr msg;
-	bzero(&msg, sizeof(msg));
+	memset(&msg, 0, sizeof(msg));
 
 	struct iovec iov[1];
 	iov[0].iov_base = (char *) "";
@@ -690,7 +690,7 @@ int unix_send_fd(int socket, int fd)
 int unix_recv_fd(int socket)
 {
 	struct msghdr msg;
-	bzero(&msg, sizeof(msg));
+	memset(&msg, 0, sizeof(msg));
 
 	int fd;
 	char buf[1];
