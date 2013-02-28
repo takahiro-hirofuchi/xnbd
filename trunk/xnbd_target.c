@@ -1,7 +1,7 @@
 /* 
  * xNBD - an enhanced Network Block Device program
  *
- * Copyright (C) 2008-2012 National Institute of Advanced Industrial Science
+ * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
  * and Technology
  *
  * Author: Takahiro Hirofuchi <t.hirofuchi _at_ aist.go.jp>
@@ -155,7 +155,7 @@ int target_mode_main_mmap(struct xnbd_session *ses)
 	size_t iolen  = 0;
 	int ret;
 
-	bzero(&reply, sizeof(reply));
+	memset(&reply, 0, sizeof(reply));
 	reply.magic = htonl(NBD_REPLY_MAGIC);
 	reply.error = 0;
 
@@ -206,7 +206,7 @@ int target_mode_main_mmap(struct xnbd_session *ses)
 		case NBD_CMD_READ:
 			dbg("disk read iofrom %ju iolen %zu", iofrom, iolen);
 
-			bzero(&iov, sizeof(iov));
+			memset(&iov, 0, sizeof(iov));
 			iov[0].iov_base = &reply;
 			iov[0].iov_len  = sizeof(reply);
 			iov[1].iov_base = iobuf;

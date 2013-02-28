@@ -5,14 +5,18 @@
 See http://bitbucket.org/hirofuchi/xnbd
 
 
-== Author ==
+== Authors and Contributors ==
 
 Takahiro Hirofuchi <t.hirofuchi _at_ aist.go.jp>
+
+Arno Toell <arno _at_ debian.org>
+Takahiro Hamanishi <hama _at_ soum.co.jp>
+Sebastian Pipping <sebastian _at_ pipping.org>
 
 
 == Copyright ==
 
-Copyright (C) 2008-2012 National Institute of Advanced Industrial Science and
+Copyright (C) 2008-2013 National Institute of Advanced Industrial Science and
 Technology. All rights reserved.
 
 Note: This program partially includes small pieces of source code written by
@@ -23,7 +27,12 @@ Development of xNBD was partially sponsored by Wavecon GmbH <www.wavecon.de>.
 
 == License ==
 
-In short, xNBD is licensed under GPLv2.
+In short:
+
+ - the code, build system and change log of xNBD are licensed under
+   "GPL v2 or later",
+
+ - the man pages of xNBD are licensed under "GPL v2 only".
 
 
 This program is free software; you can redistribute it and/or modify it under

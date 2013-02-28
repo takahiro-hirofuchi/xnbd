@@ -1,7 +1,7 @@
 /* 
  * xNBD - an enhanced Network Block Device program
  *
- * Copyright (C) 2008-2012 National Institute of Advanced Industrial Science
+ * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
  * and Technology
  *
  * Author: Takahiro Hirofuchi <t.hirofuchi _at_ aist.go.jp>
@@ -45,7 +45,7 @@ static void nbddev_watchdog(const char *devpath, unsigned int timeout)
 		return;
 
 	struct sigaction act;
-	bzero(&act, sizeof(act));
+	memset(&act, 0, sizeof(act));
 	act.sa_handler = nbddev_watchdog_sigalarm_handler;
 	int ret = sigaction(SIGALRM, &act, NULL);
 	if (ret < 0)
@@ -119,7 +119,7 @@ static int watchdog_main(const char *devpath, int notify, unsigned int polling_i
 	for (;;) {
 		ssize_t ret = pread(fd, buf, bufsize, 0);
 		if (ret == 0) {
-			info("watchdog detected %s shutdowned", devpath);
+			info("watchdog detected %s shutdown", devpath);
 			break;
 		} else if (ret < 0)
 			err("read, ret %zd, %m", ret);
@@ -162,7 +162,7 @@ static void nbddev_watchdog(const char *devpath, unsigned int timeout, unsigned 
 	close(notifyfd);
 
 	struct sigaction act;
-	bzero(&act, sizeof(act));
+	memset(&act, 0, sizeof(act));
 	act.sa_handler = nbddev_watchdog_sigalarm_handler;
 	int ret = sigaction(SIGALRM, &act, NULL);
 	if (ret < 0)

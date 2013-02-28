@@ -1,7 +1,7 @@
 /* 
  * xNBD - an enhanced Network Block Device program
  *
- * Copyright (C) 2008-2012 National Institute of Advanced Industrial Science
+ * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
  * and Technology
  *
  * Author: Takahiro Hirofuchi <t.hirofuchi _at_ aist.go.jp>
@@ -237,7 +237,7 @@ char *get_line(int fd)
 
 	dbg("end get_line");
 
-	/* this returned buffer must be freeed */
+	/* this returned buffer must be freed */
 
 	return line;
 

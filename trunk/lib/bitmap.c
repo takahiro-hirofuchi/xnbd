@@ -1,7 +1,7 @@
 /* 
  * xNBD - an enhanced Network Block Device program
  *
- * Copyright (C) 2008-2012 National Institute of Advanced Industrial Science
+ * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
  * and Technology
  *
  * Author: Takahiro Hirofuchi <t.hirofuchi _at_ aist.go.jp>
@@ -96,9 +96,21 @@ unsigned long *bitmap_open_file(const char *bitmapfile, unsigned long bits, size
 			if (size != buflen)
 				err("bitmap size mismatch, %ju %zu", size, buflen);
 		} else {
-			int ret = ftruncate(fd, buflen);
-			if (ret < 0)
-				err("ftruncate %m");
+			const uint64_t previous_size = get_disksize(fd);
+			if (previous_size == 0) {
+				zeroclear = 1;  /* ensure proper initialization on initial creation */
+			}
+
+			if (previous_size != buflen) {
+				if (zeroclear) {
+					const int ret = ftruncate(fd, buflen);
+					if (ret < 0) {
+						err("ftruncate %m");
+					}
+				} else {
+					err("Denying to re-use existing bitmap file of different size with no --clear-bitmap given.");
+				}
+			}
 		}
 
 		buf = mmap(NULL, buflen, mmap_flag, MAP_SHARED, fd, 0);
@@ -115,7 +127,9 @@ unsigned long *bitmap_open_file(const char *bitmapfile, unsigned long bits, size
 	if (!readonly) {
 		if (zeroclear) {
 			info("bitmap file %s zero-cleared", bitmapfile);
-			bzero(buf, buflen);
+			memset(buf, 0, buflen);
+		} else {
+			info("re-using previous state from bitmap file %s", bitmapfile);
 		}
 
 		/* get disk space for bitmap */
@@ -158,7 +172,7 @@ unsigned long *bitmap_create(char *bitmapfile, unsigned long bits, int *cbitmapf
 	if (buf == MAP_FAILED)
 		err("bitmap mapping failed");
 
-	bzero(buf, buflen);
+	memset(buf, 0, buflen);
 
 	/* get disk space for bitmap */
 	ret = msync(buf, buflen, MS_SYNC);

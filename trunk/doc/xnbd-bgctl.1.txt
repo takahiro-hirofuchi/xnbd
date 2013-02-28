@@ -14,18 +14,18 @@ SYNOPSIS
 --------
 *xnbd-bgctl* --query 'CONTROL_SOCKET'
 
-*xnbd-bgctl* --shutdown 'CONTROL_SOCKET'
+*xnbd-bgctl* [--force] --switch 'CONTROL_SOCKET'
 
-*xnbd-bgctl* --cache-all 'CONTROL_SOCKET'
+*xnbd-bgctl* [--progress] --cache-all 'CONTROL_SOCKET'
 
 *xnbd-bgctl* --cache-all2 'CONTROL_SOCKET'
 
-*xnbd-bgctl* --reconnect 'CONTROL_SOCKET' 'REMOTE_HOST' 'REMOTE_PORT'
+*xnbd-bgctl* [--exportname 'NAME'] --reconnect 'CONTROL_SOCKET' 'REMOTE_HOST' 'REMOTE_PORT'
 
 
 DESCRIPTION
 -----------
-With the xmbd-bgctl command you can connect to an xnbd-server control channel
+With the xnbd-bgctl command you can connect to an xnbd-server control channel
 and instruct it to act as directed. You may pass an argument to the control
 program which is then forwarded, on your behalf, to the server instance.
 
@@ -44,7 +44,7 @@ The following options are supported:
 *--cache-all2*::
     This command is identical to *--cache-all* but detaches the process from
     the terminal and is hence using a dedicated connection for data
-    transfer.
+    transfer. Not implemented fully yet.
 
 *--query*::
     This command retrieves completion statistics from the proxy server
@@ -56,9 +56,23 @@ The following options are supported:
     additional arguments, the 'REMOTE_HOST', and the 'REMOTE_PORT' you want
     to connect to, to recover from a disconnected session.
 
-*--shutdown*::
-    This command stops the proxy server and restarts the target server.
+*--switch*::
+    This command stops the proxy server and restarts in target mode.
     All client sessions are preserved.
+
+*--exportname* 'NAME'::
+    If the server supports to access devices by an identifier, use 'NAME'
+    to request access to a particular volume. This command is useful in
+    combination with an xnbd-wrapper, not a plain xnbd-server.
+
+*--progress*::
+    Enables display of a progress bar on stderr.  Disabled by default.
+
+*--force*::
+    Ignore risks, use with care.  Disabled by default.
+
+(*--shutdown*)::
+    Deprecated alias to *--switch*, please do not use.
 
 
 POSITIONAL ARGUMENTS
@@ -71,19 +85,11 @@ The following positional options are supported:
 
 SEE ALSO
 --------
-xnbd-server(8)
+xnbd-server(8), xnbd-wrapper(8), xnbd-wrapper-ctl(8)
 
 
 AUTHOR
 ------
-The NBD kernel module and the NBD tools have been written by
-Pavel Macheck (pavel@ucw.cz) and is now maintained by
-Paul Clements (Paul.Clements@steeleye.com).
+include::author_xnbd.txt[]
 
-The xNBD userland (client and server) have been written by Takahiro Hirofuchi
-(t.hirofuchi@aist.go.jp).
-
-This manual page was written by Arno Toell (debian@toell.net) for the Debian
-GNU/Linux system (but may be used by others). Permission is granted to copy,
-distribute and/or modify this document under the terms of the GNU General
-Public License, version 2, as published by the Free Software Foundation.
+include::author_toell.txt[]

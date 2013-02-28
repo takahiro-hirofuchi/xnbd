@@ -1,7 +1,7 @@
 /* 
  * xNBD - an enhanced Network Block Device program
  *
- * Copyright (C) 2008-2012 National Institute of Advanced Industrial Science
+ * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
  * and Technology
  *
  * Author: Takahiro Hirofuchi <t.hirofuchi _at_ aist.go.jp>
@@ -23,14 +23,6 @@
 
 #include "xnbd.h"
 #include "xnbd_common.h"
-
-/* IPTOS */
-#include <netinet/in.h>
-#include <netinet/ip.h>
-
-
-
-
 
 /* called once in the master process */
 void xnbd_initialize(struct xnbd_info *xnbd)
@@ -82,7 +74,7 @@ void xnbd_initialize(struct xnbd_info *xnbd)
 
 void xnbd_shutdown(struct xnbd_info *xnbd)
 {
-	info("xnbd_shutdowning ...");
+	info("xnbd shutting down...");
 
 	if (xnbd->cmd == xnbd_cmd_target)
 		close(xnbd->target_diskfd);
@@ -129,7 +121,7 @@ void do_service(struct xnbd_session *ses)
 	}
 
 
-	info("shutdown xnbd master done (cmd %d), ret %d", xnbd->cmd, ret);
+	info("xnbd master shutdown done (cmd %d), ret %d", xnbd->cmd, ret);
 }
 
 
@@ -200,7 +192,7 @@ static void set_sigactions()
 {
 	struct sigaction act;
 
-	bzero(&act, sizeof(act));
+	memset(&act, 0, sizeof(act));
 	//sigemptyset(&act.sa_mask);
 	act.sa_handler = signal_handler;
 
@@ -268,13 +260,6 @@ void invoke_new_session(struct xnbd_info *xnbd, int csockfd)
 		//}
 
 
-		if (xnbd->tos) {
-			const int val = IPTOS_THROUGHPUT;
-			int ret = setsockopt(csockfd, IPPROTO_IP, IP_TOS, (const void *) &val, sizeof(val));
-			if (ret < 0)
-				err("setsockopt, %m");
-		}
-
 		do_service(ses);
 
 		close(csockfd);
@@ -308,7 +293,7 @@ void shutdown_all_sessions(struct xnbd_info *xnbd)
 		info("notify worker (%d) of session termination", s->pid);
 		ssize_t ret = write(s->pipe_master_fd, "", 1);
 		if (ret < 0)
-			warn("notifiy failed");
+			warn("notify failed");
 
 		/* if everything goes well, we do not need to send SIGKILL */
 		ret = waitpid(s->pid, NULL, 0);
@@ -451,7 +436,7 @@ int master_server(int port, void *data, int connect_fd)
 		 * the next event comes.
 		 *
 		 * This means that ppoll() does not return -1 with errno ==
-		 * EINTR, for the signal that deliverred while the process was
+		 * EINTR, for the signal that delivered while the process was
 		 * running outside ppoll().
 		 *
 		 * For Debian's 2.6.26 kernels, it's ok.
@@ -508,8 +493,11 @@ int master_server(int port, void *data, int connect_fd)
 					info("   killed by signal=%d(%s)", WTERMSIG(status), sys_siglist[WTERMSIG(status)]);
 			}
 
-			if (connect_fd != -1) {
-				info("Using connect_fd. No need to wait for the next event");
+			const bool single_client_at_most = (connect_fd != -1);
+			const bool restart_in_progress = (restarting_for_mode_change || restarting_for_snapshot);
+			const bool sessions_running = (g_list_length(xnbd->sessions) > 0);
+			if (single_client_at_most && ! restart_in_progress && ! sessions_running) {
+				info("Using connect_fd. The only client/worker is done, starting to terminate altogether");
 				break;
 			}
 		}
@@ -702,15 +690,14 @@ static struct option longopts[] = {
 	{"version", no_argument, NULL, 'v'},
 	/* options */
 	{"lport", required_argument, NULL, 'l'},
-	{"gstatpath", required_argument, NULL, 'G'},
 	{"daemonize", no_argument, NULL, 'd'},
 	{"readonly", no_argument, NULL, 'r'},
 	{"logpath", required_argument, NULL, 'L'},
 	{"syslog", no_argument, NULL, 'S'},
-	{"tos", no_argument, NULL, 'T'},
 	{"connected-fd", required_argument, NULL, 'F'},
 	{"inetd", no_argument, NULL, 'i'},
 	{"target-exportname", required_argument, NULL, 'n'},
+	{"clear-bitmap", no_argument, NULL, 'z'},
 	{NULL, 0, NULL, 0},
 };
 
@@ -719,28 +706,31 @@ static const char *opt_string = "tpchvl:G:drL:STF:in";
 
 static const char *help_string = "\
 Usage: \n\
-  xnbd-server --target [options] disk_image\n\
-  xnbd-server --cow-target [options] base_disk_image\n\
-  xnbd-server --proxy [options] remote_host remort_port cache_disk_path cache_bitmap_path control_socket_path\n\
+  xnbd-server --target [options] DISK_IMAGE\n\
+  xnbd-server --cow-target [options] BASE_DISK_IMAGE\n\
+  xnbd-server --proxy [options] REMOTE_HOST REMORT_PORT CACHE_DISK_PATH CACHE_BITMAP_PATH CONTROL_SOCKET_PATH\n\
   xnbd-server --help\n\
   xnbd-server --version\n\
 \n\
 Options: \n\
-  --lport port   set the listen port (default: 8520)\n\
+  --lport PORT   set the listen port (default: 8520)\n\
   --daemonize    run as a daemon process\n\
   --readonly     export a disk as readonly\n\
-  --logpath path use the given path for logging (default: stderr)\n\
+  --logpath PATH use the given path for logging (default: stderr/syslog)\n\
   --syslog       use syslog for logging\n\
   --inetd        set the inetd mode (use fd 0 for TCP connection)\n\
+\n\
+Proxy mode only:\n\
   --target-exportname\n\
-                 set the export name to request from a xnbd-wrapper target (used with --proxy)\n\
+                 set the export name to request from a xnbd-wrapper target\n\
+  --clear-bitmap clear an existing bitmap file (default: re-use previous state)\n\
 ";
 
 
 
 static const char *version = "xNBD (version 0.1.0-pre)";
 static const char *copyright = "\
-Copyright (C) 2008-2012 National Institute of Advanced Industrial Science\n\
+Copyright (C) 2008-2013 National Institute of Advanced Industrial Science\n\
 and Technology\n\
 \n\
 This program is free software; you can redistribute it and/or modify it\n\
@@ -810,16 +800,16 @@ int main(int argc, char **argv) {
 	struct xnbd_info xnbd;
 	enum xnbd_cmd_type cmd = xnbd_cmd_unknown;
 	int lport = XNBD_PORT;
-	char *gstatpath = NULL;
 	int daemonize = 0;
 	int readonly = 0;
-	int tos = 0;
 	int connected_fd = -1;
 	const char *logpath = NULL;
 	int use_syslog = 0;
 	int inetd = 0;
 
-	bzero(&xnbd, sizeof(xnbd));
+	memset(&xnbd, 0, sizeof(xnbd));
+
+	set_process_name("xnbd-server");
 
 
 	/* First, scan the options that effect the way of logging. */
@@ -921,20 +911,9 @@ int main(int argc, char **argv) {
 				info("listen port %d", lport);
 				break;
 
-			case 'G':
-				gstatpath = optarg;
-				info("ext2 group I/O status %s", optarg);
-				err("not-yet-released feature");
-				break;
-
 			case 'r':
 				readonly = 1;
 				info("readonly enabled");
-				break;
-
-			case 'T':
-				tos = 1;
-				info("ToS enabled");
 				break;
 
 			case 'F':
@@ -962,6 +941,10 @@ int main(int argc, char **argv) {
 
 			case 'n':
 				xnbd.proxy_target_exportname = optarg;
+				break;
+
+			case 'z':
+				xnbd.proxy_clear_bitmap = true;
 				break;
 
 			case '?':
@@ -1034,7 +1017,6 @@ int main(int argc, char **argv) {
 
 	xnbd.cmd = cmd;
 	xnbd.readonly = readonly;
-	xnbd.tos = tos;
 	xnbd_initialize(&xnbd);
 
 	PAGESIZE = (unsigned int) getpagesize();

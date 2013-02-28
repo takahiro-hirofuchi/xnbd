@@ -1,7 +1,7 @@
 /* 
  * xNBD - an enhanced Network Block Device program
  *
- * Copyright (C) 2008-2012 National Institute of Advanced Industrial Science
+ * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
  * and Technology
  *
  * Author: Takahiro Hirofuchi <t.hirofuchi _at_ aist.go.jp>
@@ -164,6 +164,8 @@ void prepare_write_priv(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 	}
 
 	if (get_start_block) {
+		g_assert(priv->nreq + 1 <= MAXNBLOCK);
+
 		int cur_nreq = priv->nreq;
 		priv->req[cur_nreq].bindex_iofrom = block_index_start;
 		priv->req[cur_nreq].bindex_iolen  = 1;
@@ -175,6 +177,8 @@ void prepare_write_priv(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 	}
 
 	if (get_end_block) {
+		g_assert(priv->nreq + 1 <= MAXNBLOCK);
+
 		int cur_nreq = priv->nreq;
 		priv->req[cur_nreq].bindex_iofrom = block_index_end;
 		priv->req[cur_nreq].bindex_iolen  = 1;
@@ -186,19 +190,16 @@ void prepare_write_priv(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 	}
 
 
-	g_assert(priv->nreq < MAXNBLOCK);
-
-
 	/*
-	 * For a WRITE request, we recieved all write data from the client.
+	 * For a WRITE request, we received all write data from the client.
 	 * But, a reply must be sent later in the completion thread.
 	 * send(clientfd) may be blocked while holding send_lock.
 	 *
 	 * The completion threads holds send_lock, and unfortunately sometimes
 	 * becomes blocked due to a TCP flow control: A client is still
-	 * submitting the following requests, and not recieving replies from a
+	 * submitting the following requests, and not receiving replies from a
 	 * server.
-	 * The main thread is blocked for send_lock, and cannot recieve the
+	 * The main thread is blocked for send_lock, and cannot receive the
 	 * following requests anymore.
 	 *
 	 * Also, the reordering of request results should be avoided?
@@ -209,7 +210,7 @@ void prepare_write_priv(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 	 * Therefore, sending reply should be done in the completion thread.
 	 *
 	 * UPDATE: the main thread does not perform send() to the client
-	 * anymmore; send(clientfd) is only performed at the completion thread.
+	 * anymore; send(clientfd) is only performed at the completion thread.
 	 * So, we remove send_lock for clientfd.
 	 **/
 }
@@ -312,7 +313,7 @@ int forwarder_rx_thread_mainloop(struct xnbd_proxy *proxy)
 
 
 
-	/* large file support on 32bit architecutre */
+	/* large file support on 32bit architecture */
 	char *mmaped_buf = NULL;
 	size_t mmaped_len = 0;
 	off_t mmaped_offset = 0;
