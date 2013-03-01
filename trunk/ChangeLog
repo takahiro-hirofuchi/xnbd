@@ -13,6 +13,14 @@ xNBD Change Log
 
 Bugfixes
 ~~~~~~~~
+ * xnbd-register: Fix and improve --help usage output
+
+
+0.2.0-rc1
+---------
+
+Bugfixes
+~~~~~~~~
  * Fix false positives in network error detection
  * xnbd-server: By default, use syslog in daemon mode for logging, not /tmp/xnbd.log.
      This fixes the vulnerability to symlink attacks on /tmp/xnbd.log (CVE-2013-0265).
