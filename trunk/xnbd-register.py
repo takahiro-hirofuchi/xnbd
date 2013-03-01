@@ -156,12 +156,12 @@ def print_status(data):
 
 
 parser = argparse.ArgumentParser(description='xNBD helper to (un)register xNBD devices')
-parser.add_argument('-s', '--start', action='store_true', help='mount configured xNBD client connections')
-parser.add_argument('-r', '--restart', action='store_true', help='(re-)mount configured xNBD client connections')
-parser.add_argument('-t', '--stop', action='store_true', help='umount configured xNBD client connections')
-parser.add_argument('-a', '--status', action='store_true', help='umount configured xNBD client connections')
+parser.add_argument('-s', '--start', action='store_true', help='mount configured xNBD client connections and start configured xNBD wrapper')
+parser.add_argument('-r', '--restart', action='store_true', help='(re-)mount configured xNBD client connections and (re-)start configured xNBD wrapper')
+parser.add_argument('-t', '--stop', action='store_true', help='unmount configured xNBD client connections and stop configured xNBD wrapper')
+parser.add_argument('-a', '--status', action='store_true', help='show xNBD wrapper status')
 parser.add_argument('--config', dest='config_file', default='/etc/xnbd.conf', help='config file to use (default: /etc/xnbd.conf)')
-parser.add_argument('--quiet', action='store_true', help='don\'t give verbose output')
+parser.add_argument('--quiet', action='store_true', help='do not give verbose output')
 
 args = parser.parse_args()
 
