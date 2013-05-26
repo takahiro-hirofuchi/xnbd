@@ -14,6 +14,8 @@ xNBD Change Log
 Bugfixes
 ~~~~~~~~
  * xnbd-register: Fix and improve --help usage output
+ * xnbd-wrapper: Fix reporting of disk size 0 for non-empty, non-regular files
+     in target mode (issue #7)
 
 
 0.2.0-rc1
