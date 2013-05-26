@@ -1471,14 +1471,15 @@ int main(int argc, char **argv) {
 						}
 					} else {
 						/* target mode, stat local file */
-						struct stat sb;
-						if (stat(disk_data->disk_file_name, &sb) == -1) {
+						const int fd = open(disk_data->disk_file_name, O_RDONLY);
+						if (fd == -1) {
 							warn("stat failed: %s", disk_data->disk_file_name);
 							if(close(conn_sockfd))
 								warn("close(p1.2)");
 							_exit(EXIT_FAILURE);
 						}
-						disk_size_bytes = sb.st_size;
+						disk_size_bytes = get_disksize(fd);
+						close(fd);
 					}
 
 					info("disk_size_bytes: %ld", disk_size_bytes);
