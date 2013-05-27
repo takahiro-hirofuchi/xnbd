@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.67])
-AC_INIT([xNBD], [0.2.0-rc1], [t.hirofuchi@aist.go.jp], [xnbd], [https://bitbucket.org/hirofuchi/xnbd/])
+AC_INIT([xNBD], [0.2.0-rc2], [t.hirofuchi@aist.go.jp], [xnbd], [https://bitbucket.org/hirofuchi/xnbd/])
 AM_INIT_AUTOMAKE([foreign dist-bzip2 no-dist-gzip])
 AM_SILENT_RULES([yes])
 AC_CONFIG_SRCDIR([xnbd_proxy.c])
