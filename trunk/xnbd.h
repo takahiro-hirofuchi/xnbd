@@ -135,7 +135,6 @@ enum xnbd_cmd_type {
 struct xnbd_info {
 	enum xnbd_cmd_type cmd;
 
-	int port; /* listen port of the master server */
 	off_t disksize; /* size of the local/remote disk */
 	unsigned long nblocks;
 	int readonly;
