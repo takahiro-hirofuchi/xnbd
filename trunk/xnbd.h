@@ -153,6 +153,11 @@ struct xnbd_info {
 	int proxy_pid;
 	int proxy_sockpair_proxy_fd;  /* hold in the proxy server */
 	int proxy_sockpair_master_fd; /* hold in the master server (NOTE) */
+	/*
+	 * NOTE: when invoking a new thread, must close the master_fds of the
+	 * other sessions.
+	 **/
+
 	char *proxy_diskpath;   /* cache disk */
 	char *proxy_bmpath; /* cached bitmap file */
 	char *proxy_rhost;  /* remote nbd sever */
@@ -161,10 +166,6 @@ struct xnbd_info {
 	char *proxy_target_exportname;  /* export name to request from a xnbd-wrapper target */
 	bool proxy_clear_bitmap;
 
-	/* 
-	 * NOTE: when invoking a new thread, must close the master_fds of the
-	 * other sessions. 
-	 **/
 };
 
 
