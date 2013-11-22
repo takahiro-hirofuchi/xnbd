@@ -24,6 +24,16 @@
 #include "xnbd.h"
 #include "xnbd_common.h"
 
+
+#ifndef DEFAULT_QUEUE_SIZE_LIMIT
+# define DEFAULT_QUEUE_SIZE_LIMIT  1000
+#endif
+
+#define _XNBD_STR(v)  #v
+#define XNBD_STR(v)  _XNBD_STR(v)
+#define DEFAULT_QUEUE_SIZE_LIMIT_STR  XNBD_STR(DEFAULT_QUEUE_SIZE_LIMIT)
+
+
 /* called once in the master process */
 void xnbd_initialize(struct xnbd_info *xnbd)
 {
@@ -698,6 +708,7 @@ static struct option longopts[] = {
 	{"inetd", no_argument, NULL, 'i'},
 	{"target-exportname", required_argument, NULL, 'n'},
 	{"clear-bitmap", no_argument, NULL, 'z'},
+	{"queue-size", required_argument, NULL, 'q'},
 	{NULL, 0, NULL, 0},
 };
 
@@ -723,6 +734,8 @@ Options: \n\
 Proxy mode only:\n\
   --target-exportname\n\
                  set the export name to request from a xnbd-wrapper target\n\
+  --queue-size NUMBER\n\
+                 set the queue size limit (default: " DEFAULT_QUEUE_SIZE_LIMIT_STR " requests)\n\
   --clear-bitmap clear an existing bitmap file (default: re-use previous state)\n\
 ";
 
@@ -800,6 +813,7 @@ int main(int argc, char **argv) {
 	struct xnbd_info xnbd;
 	enum xnbd_cmd_type cmd = xnbd_cmd_unknown;
 	int lport = XNBD_PORT;
+	long long max_queue_len_sum = DEFAULT_QUEUE_SIZE_LIMIT;
 	int daemonize = 0;
 	int readonly = 0;
 	int connected_fd = -1;
@@ -911,6 +925,14 @@ int main(int argc, char **argv) {
 				info("listen port %d", lport);
 				break;
 
+			case 'q':
+				max_queue_len_sum = atol(optarg);
+				if (max_queue_len_sum < 1) {
+					err("queue size limit must be greate or equal to 1 (one), defaults to %lld", (long long)DEFAULT_QUEUE_SIZE_LIMIT);
+				}
+				info("queue size limit %lld", max_queue_len_sum);
+				break;
+
 			case 'r':
 				readonly = 1;
 				info("readonly enabled");
@@ -1017,6 +1039,7 @@ int main(int argc, char **argv) {
 
 	xnbd.cmd = cmd;
 	xnbd.readonly = readonly;
+	xnbd.max_queue_len_sum = max_queue_len_sum;
 	xnbd_initialize(&xnbd);
 
 	PAGESIZE = (unsigned int) getpagesize();

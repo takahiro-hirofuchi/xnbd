@@ -166,6 +166,7 @@ struct xnbd_info {
 	char *proxy_target_exportname;  /* export name to request from a xnbd-wrapper target */
 	bool proxy_clear_bitmap;
 
+	unsigned long long max_queue_len_sum;
 };
 
 
