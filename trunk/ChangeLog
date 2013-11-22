@@ -8,6 +8,16 @@ Line width is meant to be 90 characters.
 xNBD Change Log
 ===============
 
+0.3.0
+-----
+
+Improvements
+~~~~~~~~~~~~
+ * xnbd-server: Add --queue-size parameter and a default limit of 1000 queued
+     requests (for all queues in total) so that a slow disk and fast network
+     no longer force the host into swapping
+
+
 0.2.0
 -----
 

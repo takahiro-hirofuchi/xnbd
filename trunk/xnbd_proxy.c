@@ -72,6 +72,30 @@ void xnbd_proxy_control_cache_block(int ctl_fd, unsigned long index, unsigned lo
 }
 
 
+void wait_for_low_queue_load(struct proxy_session *ps) {
+	struct xnbd_proxy *proxy = ps->proxy;
+
+	for (;;) {
+		const gint len_fwd_tx_queue = g_async_queue_length(proxy->fwd_tx_queue);
+		const gint len_fwd_rx_queue = g_async_queue_length(proxy->fwd_rx_queue);
+		const gint len_fwd_retry_queue = g_async_queue_length(proxy->fwd_retry_queue);
+		const gint len_tx_queue = g_async_queue_length(ps->tx_queue);
+		const guint len_total = MAX(len_fwd_tx_queue, 0)
+				+ MAX(len_fwd_rx_queue, 0)
+				+ MAX(len_fwd_retry_queue, 0)
+				+ MAX(len_tx_queue, 0);
+
+		dbg("QUEUE SIZES: fwd_tx = %d, fwd_rx = %d, fwd_retry = %d, tx = %d / total = %d",
+				len_fwd_tx_queue, len_fwd_rx_queue, len_fwd_retry_queue, len_tx_queue,
+				len_total);
+
+		if (len_total < ps->proxy->xnbd->max_queue_len_sum) {
+			break;
+		}
+		sleep(1);
+	}
+}
+
 
 int recv_request(struct proxy_session *ps)
 {
@@ -167,6 +191,9 @@ int recv_request(struct proxy_session *ps)
 		warn("client bug: unknown iotype");
 		goto err_handle;
 	}
+
+
+	wait_for_low_queue_load(ps);
 
 	g_async_queue_push(proxy->fwd_tx_queue, priv);
 
