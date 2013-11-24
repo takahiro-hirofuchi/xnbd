@@ -194,7 +194,8 @@ int recv_request(struct proxy_session *ps)
 	}
 
 
-	wait_for_low_queue_load(ps);
+	if (proxy->xnbd->max_queue_len_sum != 0)
+		wait_for_low_queue_load(ps);
 
 	g_async_queue_push(proxy->fwd_tx_queue, priv);
 
