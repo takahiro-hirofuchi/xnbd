@@ -74,6 +74,7 @@ void xnbd_proxy_control_cache_block(int ctl_fd, unsigned long index, unsigned lo
 
 void wait_for_low_queue_load(struct proxy_session *ps) {
 	struct xnbd_proxy *proxy = ps->proxy;
+	struct timespec sleep_time = { 0, 20*1000*1000 };
 
 	for (;;) {
 		const gint len_fwd_tx_queue = g_async_queue_length(proxy->fwd_tx_queue);
@@ -92,7 +93,7 @@ void wait_for_low_queue_load(struct proxy_session *ps) {
 		if (len_total < ps->proxy->xnbd->max_queue_len_sum) {
 			break;
 		}
-		sleep(1);
+		nanosleep(&sleep_time, NULL);
 	}
 }
 
