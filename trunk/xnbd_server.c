@@ -26,7 +26,7 @@
 
 
 #ifndef DEFAULT_QUEUE_SIZE_LIMIT
-# define DEFAULT_QUEUE_SIZE_LIMIT  1000
+# define DEFAULT_QUEUE_SIZE_LIMIT  0
 #endif
 
 #define _XNBD_STR(v)  #v
@@ -735,7 +735,7 @@ Proxy mode only:\n\
   --target-exportname\n\
                  set the export name to request from a xnbd-wrapper target\n\
   --queue-size NUMBER\n\
-                 set the queue size limit (default: " DEFAULT_QUEUE_SIZE_LIMIT_STR " requests)\n\
+                 set the queue size limit (default: " DEFAULT_QUEUE_SIZE_LIMIT_STR "). 0 means disabling queue size check\n\
   --clear-bitmap clear an existing bitmap file (default: re-use previous state)\n\
 ";
 
