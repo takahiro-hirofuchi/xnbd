@@ -274,7 +274,8 @@ void *forwarder_tx_thread_main(void *arg)
 			}
 		}
 
-		/* this marking works if nreq == 0 */
+		/* Once sending failed, this marking works if nreq == 0. All
+		 * the following requests are enqueued to the retry queue. */
 		if (sending_failed)
 			priv->need_retry = 1;
 
