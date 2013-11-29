@@ -436,14 +436,14 @@ Commands:\n\
   --query       query current status of the proxy mode\n\
   --cache-all   cache all blocks\n\
   --cache-all2  cache all blocks with the background connection\n\
-  --switch      stops the proxy mode and restarts in target mode\n\
+  --switch      stop the proxy mode and restart the target mode\n\
   --reconnect   reconnect the forwarding session\n\
  (--shutdown)   alias to --switch, deprecated\n\
 \n\
 Options:\n\
-  --exportname  image to request from a wrapped server\n\
-  --progress    show progress bar on stderr (default: disabled)\n\
-  --force       ignore risks (default: disabled)\n\
+  --exportname NAME  reconnect to a given image\n\
+  --progress         show a progress bar on stderr (default: disabled)\n\
+  --force            ignore risks (default: disabled)\n\
 ";
 
 
