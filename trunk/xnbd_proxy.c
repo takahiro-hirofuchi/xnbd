@@ -620,10 +620,10 @@ int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
 			}
 		}
 
-		/* if there are no sessions, run clean up and bye */
-
-		if (proxy->mem_usage_curr == 0)
+		if (proxy->mem_usage_curr != 0)
 			warn("terminate pending requests");
+
+		/* if there are no sessions, run clean up and bye */
 
 		return -1;
 	}
