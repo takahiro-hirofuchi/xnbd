@@ -27,6 +27,8 @@
 
 
 struct progress_info {
+	bool enabled;
+
 	unsigned long blocks_total;
 	unsigned long blocks_from_cache;
 	unsigned long blocks_from_remote;
@@ -60,15 +62,14 @@ void reconnect(char *unix_path, char *rhost, char *rport, const char *exportname
 
 	int ret;
 	off_t size_dummy;
-	if (exportname) {
+	if (exportname)
 		ret = nbd_negotiate_with_server_new(fwd_fd, &size_dummy, NULL, strlen(exportname), exportname);
-	} else {
+	else
 		ret = nbd_negotiate_with_server2(fwd_fd, &size_dummy, NULL);
-	}
 
-	if (ret) {
+	if (ret)
 		err("negotiation failed");
-	}
+
 
 	enum xnbd_proxy_cmd_type cmd = XNBD_PROXY_CMD_REGISTER_FORWARDER_FD;
 	net_send_all_or_abort(fd, &cmd, sizeof(cmd));
@@ -241,7 +242,8 @@ void *cache_all_blocks_receiver_main(void *arg)
 }
 
 
-void refresh_progress(struct progress_info * p_progress, unsigned int columns) {
+void refresh_progress(struct progress_info * p_progress, unsigned int columns)
+{
 	const unsigned int overhead = 3 + 3 + 1; /* <percent> + "% [" + "]" */
 
 	if (columns < overhead + 1) {
@@ -326,6 +328,33 @@ void refresh_progress(struct progress_info * p_progress, unsigned int columns) {
 	p_progress->prev_int_percent = int_percent;
 }
 
+unsigned short int get_column_widths(void)
+{
+	struct winsize terminal_size;
+	int ret = ioctl(STDOUT_FILENO, TIOCGWINSZ, &terminal_size);
+	if (ret < 0) {
+		err("ioctl TIOCGWINSZ, %m");
+		return 0;
+	}
+
+	return terminal_size.ws_col;
+}
+
+struct progress_info *progress_setup(unsigned long nblocks)
+{
+	struct progress_info *p = g_malloc0(sizeof(struct progress_info));
+	p->blocks_total = nblocks;
+
+	return p;
+}
+
+void progress_refresh_draw(struct progress_info *p)
+{
+	if (p->enabled)
+		refresh_progress(p, get_column_widths());
+}
+
+/* TODO: move progress to receiver thread. */
 
 void cache_all_blocks_async(char *unix_path, unsigned long *bm, unsigned long nblocks, bool progress_enabled)
 {
@@ -338,26 +367,18 @@ void cache_all_blocks_async(char *unix_path, unsigned long *bm, unsigned long nb
 	pthread_t cache_rx_tid = pthread_create_or_abort(cache_all_blocks_receiver_main, &cache_rx);
 
 
-	struct progress_info progress;
-	memset(&progress, 0, sizeof(progress));
-	progress.blocks_total = nblocks;
-
-	struct winsize terminal_size;
-	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &terminal_size) != 0) {
-		terminal_size.ws_col = 0;
-	}
+	struct progress_info *progress = progress_setup(nblocks);
+	progress->enabled = progress_enabled;
 
 
 	for (unsigned long index = 0; index < nblocks; index++) {
-		if (progress_enabled) {
-			refresh_progress(&progress, terminal_size.ws_col);
-		}
+		progress_refresh_draw(progress);
+
 
 		if (!bitmap_test(bm, index)) {
-			progress.blocks_from_remote++;
+			progress->blocks_from_remote += 1;
 
 			off_t iofrom = (off_t) index * CBLOCKSIZE;
-			// size_t iolen = nblocks * CBLOCKSIZE;
 			size_t iolen = CBLOCKSIZE;
 
 			int ret = nbd_client_send_request_header(ctl_fd, NBD_CMD_BGCOPY, iofrom, iolen, (UINT64_MAX));
@@ -366,13 +387,13 @@ void cache_all_blocks_async(char *unix_path, unsigned long *bm, unsigned long nb
 
 			g_async_queue_push(cache_rx.q, &cache_rx_req_data);
 		} else {
-			progress.blocks_from_cache++;
+			progress->blocks_from_cache += 1;
 		}
 	}
 
-	if (progress_enabled) {
-		refresh_progress(&progress, terminal_size.ws_col);
-	}
+
+	progress_refresh_draw(progress);
+	g_free(progress);
 
 	g_async_queue_push(cache_rx.q, &cache_rx_req_eof);
 	pthread_join(cache_rx_tid, NULL);
@@ -493,7 +514,7 @@ int main(int argc, char **argv)
 		xnbd_bgctl_cmd_reconnect,
 	} cmd = xnbd_bgctl_cmd_unknown;
 
-	const char * exportname = NULL;
+	const char *exportname = NULL;
 	bool progress_enabled = false;
 	bool force_enabled = false;
 
