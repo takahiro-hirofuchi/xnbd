@@ -72,7 +72,11 @@ void xnbd_proxy_control_cache_block(int ctl_fd, unsigned long index, unsigned lo
 }
 
 
-void wait_for_low_queue_load(struct proxy_session *ps) {
+void wait_for_low_queue_load(struct proxy_session *ps)
+{
+	if (!ps->proxy->xnbd->proxy_max_queue_size)
+		return;
+
 	struct xnbd_proxy *proxy = ps->proxy;
 	struct timespec sleep_time = { 0, 20*1000*1000 };
 
@@ -90,11 +94,56 @@ void wait_for_low_queue_load(struct proxy_session *ps) {
 				len_fwd_tx_queue, len_fwd_rx_queue, len_fwd_retry_queue, len_tx_queue,
 				len_total);
 
-		if (len_total < ps->proxy->xnbd->max_queue_len_sum) {
+		if (len_total < ps->proxy->xnbd->proxy_max_queue_size) {
 			break;
 		}
 		nanosleep(&sleep_time, NULL);
 	}
+}
+
+
+static void mem_usage_add(struct xnbd_proxy *proxy, struct proxy_priv *priv)
+{
+	if (!proxy->xnbd->proxy_max_mem_size)
+		return;
+
+	ssize_t allocated = sizeof(struct proxy_priv);
+	if (priv->iotype == NBD_CMD_WRITE
+			|| priv->iotype == NBD_CMD_READ)
+		allocated += priv->iolen;
+
+	g_atomic_pointer_add(&proxy->mem_usage_curr, allocated);
+}
+
+#define likely(x)	__builtin_expect(!!(x), 1)
+static void mem_usage_wait(struct xnbd_proxy *proxy)
+{
+	if (!proxy->xnbd->proxy_max_mem_size)
+		return;
+
+	for (;;) {
+		size_t usage_curr = (size_t) g_atomic_pointer_get(&proxy->mem_usage_curr);
+
+		if (likely(usage_curr < proxy->xnbd->proxy_max_mem_size))
+			break;
+
+		warn("mem_usage %zu reached limit %zu (bytes). Temporally suspend receiving new requests.",
+				usage_curr, proxy->xnbd->proxy_max_mem_size);
+		usleep(200*1000);
+	}
+}
+
+static void mem_usage_del(struct xnbd_proxy *proxy, struct proxy_priv *priv)
+{
+	if (!proxy->xnbd->proxy_max_mem_size)
+		return;
+
+	ssize_t allocated = sizeof(struct proxy_priv);
+	if (priv->iotype == NBD_CMD_WRITE
+			|| priv->iotype == NBD_CMD_READ)
+		allocated += priv->iolen;
+
+	g_atomic_pointer_add(&proxy->mem_usage_curr, ((ssize_t) 0 - allocated));
 }
 
 
@@ -160,6 +209,8 @@ int recv_request(struct proxy_session *ps)
 	priv->block_index_end   = block_index_end;
 
 
+	mem_usage_add(proxy, priv);
+	mem_usage_wait(proxy);
 
 	if (iotype == NBD_CMD_WRITE) {
 		priv->write_buff = g_malloc(iolen);
@@ -194,8 +245,7 @@ int recv_request(struct proxy_session *ps)
 	}
 
 
-	if (proxy->xnbd->max_queue_len_sum != 0)
-		wait_for_low_queue_load(ps);
+	wait_for_low_queue_load(ps);
 
 	g_async_queue_push(proxy->fwd_tx_queue, priv);
 
@@ -264,6 +314,7 @@ void proxy_initialize(struct xnbd_info *xnbd, struct xnbd_proxy *proxy)
 	}
 
 	proxy->cachefd = cachefd;
+	proxy->mem_usage_curr = 0;
 }
 
 
@@ -378,6 +429,7 @@ void *tx_thread_main(void *arg)
 		if (priv->write_buff)
 			g_free(priv->write_buff);
 
+		mem_usage_del(ps->proxy, priv);
 		g_free(priv);
 
 		if (need_exit)
@@ -569,6 +621,9 @@ int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
 		}
 
 		/* if there are no sessions, run clean up and bye */
+
+		if (proxy->mem_usage_curr == 0)
+			warn("terminate pending requests");
 
 		return -1;
 	}

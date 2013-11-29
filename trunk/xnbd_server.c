@@ -25,13 +25,7 @@
 #include "xnbd_common.h"
 
 
-#ifndef DEFAULT_QUEUE_SIZE_LIMIT
-# define DEFAULT_QUEUE_SIZE_LIMIT  0
-#endif
 
-#define _XNBD_STR(v)  #v
-#define XNBD_STR(v)  _XNBD_STR(v)
-#define DEFAULT_QUEUE_SIZE_LIMIT_STR  XNBD_STR(DEFAULT_QUEUE_SIZE_LIMIT)
 
 
 /* called once in the master process */
@@ -708,11 +702,12 @@ static struct option longopts[] = {
 	{"inetd", no_argument, NULL, 'i'},
 	{"target-exportname", required_argument, NULL, 'n'},
 	{"clear-bitmap", no_argument, NULL, 'z'},
-	{"queue-size", required_argument, NULL, 'q'},
+	{"max-queue-size", required_argument, NULL, 'q'},
+	{"max-mem-size", required_argument, NULL, 'm'},
 	{NULL, 0, NULL, 0},
 };
 
-static const char *opt_string = "tpchvl:G:drL:STF:in";
+static const char *opt_string = "tpchvl:G:drL:STF:inq:m:";
 
 
 static const char *help_string = "\
@@ -731,11 +726,13 @@ Options: \n\
   --syslog       use syslog for logging\n\
   --inetd        set the inetd mode (use fd 0 for TCP connection)\n\
 \n\
-Proxy mode only:\n\
+Options (Proxy mode):\n\
   --target-exportname\n\
                  set the export name to request from a xnbd-wrapper target\n\
-  --queue-size NUMBER\n\
-                 set the queue size limit (default: " DEFAULT_QUEUE_SIZE_LIMIT_STR "). 0 means disabling queue size check\n\
+  --max-queue-size SIZE\n\
+                 set the limit of the request queue size (default: 0, no limit)\n\
+  --max-mem-size SIZE (bytes)\n\
+                 set the limit of maximum memory usage (default: 0, no limit)\n\
   --clear-bitmap clear an existing bitmap file (default: re-use previous state)\n\
 ";
 
@@ -813,7 +810,8 @@ int main(int argc, char **argv) {
 	struct xnbd_info xnbd;
 	enum xnbd_cmd_type cmd = xnbd_cmd_unknown;
 	int lport = XNBD_PORT;
-	long long max_queue_len_sum = DEFAULT_QUEUE_SIZE_LIMIT;
+	size_t proxy_max_queue_size = 0;
+	size_t proxy_max_mem_size = 0;
 	int daemonize = 0;
 	int readonly = 0;
 	int connected_fd = -1;
@@ -926,11 +924,17 @@ int main(int argc, char **argv) {
 				break;
 
 			case 'q':
-				max_queue_len_sum = atol(optarg);
-				if (max_queue_len_sum < 1) {
-					err("queue size limit must be greate or equal to 1 (one), defaults to %lld", (long long)DEFAULT_QUEUE_SIZE_LIMIT);
-				}
-				info("queue size limit %lld", max_queue_len_sum);
+				proxy_max_queue_size = (size_t) atol(optarg);
+				if (!(proxy_max_queue_size > 0))
+					err("max_queue_size must be greater than zero");
+				info("max_queue_size %zu", proxy_max_queue_size);
+				break;
+
+			case 'm':
+				proxy_max_mem_size = (size_t) atol(optarg);
+				if (!(proxy_max_mem_size > 0))
+					err("max_mem_size must be greater than zero");
+				info("max_mem_size %zu", proxy_max_mem_size);
 				break;
 
 			case 'r':
@@ -1038,9 +1042,26 @@ int main(int argc, char **argv) {
 	}
 
 	xnbd.cmd = cmd;
-	xnbd.readonly = readonly;
-	xnbd.max_queue_len_sum = max_queue_len_sum;
 	xnbd_initialize(&xnbd);
+
+	/* set system-wide options */
+	xnbd.readonly = readonly;
+
+	/* set mode-specific options */
+	if (proxy_max_queue_size > 0) {
+		if (xnbd.cmd == xnbd_cmd_proxy)
+			xnbd.proxy_max_queue_size = proxy_max_queue_size;
+		else
+			err("max_queue_size option is valid only for the proxy mode");
+	}
+
+	if (proxy_max_mem_size > 0) {
+		if (xnbd.cmd == xnbd_cmd_proxy)
+			xnbd.proxy_max_mem_size = proxy_max_mem_size;
+		else
+			err("max_mem_size option is valid only for the proxy mode");
+	}
+
 
 	PAGESIZE = (unsigned int) getpagesize();
 	if (CBLOCKSIZE % PAGESIZE != 0)
@@ -1049,6 +1070,7 @@ int main(int argc, char **argv) {
 	if (xnbd.cmd == xnbd_cmd_proxy)
 		cachestat_initialize(DEFAULT_CACHESTAT_PATH, xnbd.nblocks);
 
+	/* In any mode, daemonize must be done finally */
 	if (daemonize) {
 		if (inetd) 
 			err("--daemon cannot be specified with --inetd.");

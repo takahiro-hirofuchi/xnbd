@@ -97,6 +97,11 @@ struct xnbd_proxy {
 
 
 	char *shared_buff;
+
+
+	/* Count up the current memory usage of the proxy server. This is a
+	 * soft limit value. */
+	size_t mem_usage_curr;
 };
 
 enum xnbd_proxy_cmd_type {
