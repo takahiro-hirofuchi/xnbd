@@ -551,8 +551,24 @@ int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
 	if (eventfds[1].revents & (POLLRDNORM | POLLRDHUP)) {
 		info("mainloop exit is requested");
 
+		/* The master server requested the exit of the proxy server.
+		 * Before doing that, the master server terminated all the
+		 * worker processes. Thus, the proxy server should not have any
+		 * active connections at this moment. However, only the
+		 * exceptional case is that the proxy server has the connection
+		 * of xnbd-bgctl. For example, when "xnbd-bgctl --cache-all" is
+		 * being executed, invoking "xnbd-bgctl --switch --force" or
+		 * hitting CTRL-C for xnbd-server causes that exceptional case. */
+
+		{
+			unsigned int remaining_sessions = g_list_length(conn_list);
+			if (remaining_sessions > 0) {
+				/* If there is no xnbd-bgctl session, it's a bug. */
+				warn("terminate %u xnbd-bgctl session(s)", remaining_sessions);
+			}
+		}
+
 		/* if there are no sessions, run clean up and bye */
-		g_assert(g_list_length(conn_list) == 0);
 
 		return -1;
 	}
