@@ -213,10 +213,16 @@ void cache_all_blocks_with_dedicated_connection(char *unix_path, unsigned long *
 struct cache_rx_ctl {
 	int ctl_fd;
 	GAsyncQueue *q;
+
+	unsigned long nblocks;
+	bool progress_enabled;
 };
 
 char cache_rx_req_eof;
-char cache_rx_req_data;
+char cache_rx_req_remote;
+char cache_rx_req_cached;
+
+struct progress_info *progress_setup(unsigned long nblocks);
 
 void *cache_all_blocks_receiver_main(void *arg)
 {
@@ -226,15 +232,28 @@ void *cache_all_blocks_receiver_main(void *arg)
 	block_all_signals();
 	info("create cache_rx thread %lu", pthread_self());
 
+	struct progress_info *progress = progress_setup(cache_rx->nblocks);
+	progress->enabled = cache_rx->progress_enabled;
+	progress_refresh_draw(progress);
+
 	for (;;) {
 		char *data = g_async_queue_pop(cache_rx->q);
+
 		if (data == &cache_rx_req_eof)
 			break;
-
-		int ret = nbd_client_recv_header(cache_rx->ctl_fd);
-		if (ret < 0)
-			err("recv header, %m");
+		else if (data == &cache_rx_req_remote) {
+			int ret = nbd_client_recv_header(cache_rx->ctl_fd);
+			if (ret < 0)
+				err("recv header, %m");
+			progress->blocks_from_remote += 1;
+		} else {
+			progress->blocks_from_cache += 1;
+		}
+		progress_refresh_draw(progress);
 	}
+
+	//progress_refresh_draw(progress);
+	g_free(progress);
 
 	info("done cache_rx thread %lu", pthread_self());
 
@@ -250,6 +269,7 @@ void refresh_progress(struct progress_info * p_progress, unsigned int columns)
 		/* Terminal too small */
 		return;
 	}
+
 
 	assert(p_progress);
 	assert(p_progress->blocks_from_remote <= p_progress->blocks_total);
@@ -354,7 +374,6 @@ void progress_refresh_draw(struct progress_info *p)
 		refresh_progress(p, get_column_widths());
 }
 
-/* TODO: move progress to receiver thread. */
 
 void cache_all_blocks_async(char *unix_path, unsigned long *bm, unsigned long nblocks, bool progress_enabled)
 {
@@ -362,21 +381,17 @@ void cache_all_blocks_async(char *unix_path, unsigned long *bm, unsigned long nb
 	start_register_fd(unix_path, &unix_fd, &ctl_fd);
 
 	struct cache_rx_ctl cache_rx;
-	cache_rx.ctl_fd = ctl_fd;
-	cache_rx.q      = g_async_queue_new();
+	cache_rx.ctl_fd  = ctl_fd;
+	cache_rx.q       = g_async_queue_new();
+	cache_rx.nblocks = nblocks;
+	cache_rx.progress_enabled = progress_enabled;
+
 	pthread_t cache_rx_tid = pthread_create_or_abort(cache_all_blocks_receiver_main, &cache_rx);
 
 
-	struct progress_info *progress = progress_setup(nblocks);
-	progress->enabled = progress_enabled;
-
 
 	for (unsigned long index = 0; index < nblocks; index++) {
-		progress_refresh_draw(progress);
-
-
 		if (!bitmap_test(bm, index)) {
-			progress->blocks_from_remote += 1;
 
 			off_t iofrom = (off_t) index * CBLOCKSIZE;
 			size_t iolen = CBLOCKSIZE;
@@ -385,15 +400,12 @@ void cache_all_blocks_async(char *unix_path, unsigned long *bm, unsigned long nb
 			if (ret < 0)
 				err("send_read_request, %m");
 
-			g_async_queue_push(cache_rx.q, &cache_rx_req_data);
+			g_async_queue_push(cache_rx.q, &cache_rx_req_remote);
 		} else {
-			progress->blocks_from_cache += 1;
+			g_async_queue_push(cache_rx.q, &cache_rx_req_cached);
 		}
 	}
 
-
-	progress_refresh_draw(progress);
-	g_free(progress);
 
 	g_async_queue_push(cache_rx.q, &cache_rx_req_eof);
 	pthread_join(cache_rx_tid, NULL);
