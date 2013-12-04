@@ -26,6 +26,99 @@
 #include <sys/ioctl.h>
 
 
+
+struct _SizedAsyncQueue {
+	GMutex *mutex;
+	GCond  *cond_pop;  // pop-able
+	GCond  *cond_push; // push-able
+	GQueue *queue;
+
+	size_t max_size;
+	size_t size;
+};
+
+typedef struct _SizedAsyncQueue SizedAsyncQueue;
+
+SizedAsyncQueue *sized_async_queue_new(size_t max_size)
+{
+	SizedAsyncQueue* q = g_new(SizedAsyncQueue, 1);
+
+	q->mutex	= g_mutex_new();
+	q->cond_pop	= g_cond_new();
+	q->cond_push	= g_cond_new();
+	q->queue	= g_queue_new();
+
+	q->max_size = max_size;
+	q->size = 0;
+
+	return q;
+}
+
+void sized_async_queue_push(SizedAsyncQueue *queue, void *data)
+{
+	g_return_if_fail(queue);
+	g_return_if_fail(data);
+
+	g_mutex_lock(queue->mutex);
+	{
+		while (!(queue->size < queue->max_size)) {
+			g_cond_wait(queue->cond_push, queue->mutex);
+		}
+
+		// g_message("%zu < %zu", queue->size, queue->max_size);
+
+		g_queue_push_head(queue->queue, data);
+		queue->size += 1;
+
+		g_cond_signal(queue->cond_pop);
+	}
+	g_mutex_unlock(queue->mutex);
+}
+
+void *sized_async_queue_pop(SizedAsyncQueue *queue)
+{
+	void *data;
+
+	g_return_val_if_fail(queue, NULL);
+
+	g_mutex_lock(queue->mutex);
+	{
+		/* must check queue is poppable */
+		while (!g_queue_peek_tail_link(queue->queue)) {
+			g_cond_wait(queue->cond_pop, queue->mutex);
+		}
+
+		data = g_queue_pop_tail(queue->queue);
+		g_assert(data);
+
+		queue->size -= 1;
+		if (queue->size < queue->max_size) {
+			g_cond_signal(queue->cond_push);
+		}
+	}
+	g_mutex_unlock(queue->mutex);
+
+	return data;
+}
+
+void sized_async_queue_destroy(SizedAsyncQueue *q)
+{
+	g_return_if_fail(q);
+
+	if (q->size)
+		warn("destroy a queue with data");
+
+	g_mutex_clear(q->mutex);
+	g_cond_clear(q->cond_pop);
+	g_cond_clear(q->cond_push);
+	g_queue_clear(q->queue);
+
+	g_free(q);
+}
+
+
+
+
 struct progress_info {
 	bool enabled;
 
@@ -212,7 +305,7 @@ void cache_all_blocks_with_dedicated_connection(char *unix_path, unsigned long *
 
 struct cache_rx_ctl {
 	int ctl_fd;
-	GAsyncQueue *q;
+	SizedAsyncQueue *q;
 
 	unsigned long nblocks;
 	bool progress_enabled;
@@ -223,6 +316,7 @@ char cache_rx_req_remote;
 char cache_rx_req_cached;
 
 struct progress_info *progress_setup(unsigned long nblocks);
+void progress_refresh_draw(struct progress_info *p);
 
 void *cache_all_blocks_receiver_main(void *arg)
 {
@@ -237,7 +331,7 @@ void *cache_all_blocks_receiver_main(void *arg)
 	progress_refresh_draw(progress);
 
 	for (;;) {
-		char *data = g_async_queue_pop(cache_rx->q);
+		char *data = sized_async_queue_pop(cache_rx->q);
 
 		if (data == &cache_rx_req_eof)
 			break;
@@ -382,7 +476,7 @@ void cache_all_blocks_async(char *unix_path, unsigned long *bm, unsigned long nb
 
 	struct cache_rx_ctl cache_rx;
 	cache_rx.ctl_fd  = ctl_fd;
-	cache_rx.q       = g_async_queue_new();
+	cache_rx.q       = sized_async_queue_new(1000);
 	cache_rx.nblocks = nblocks;
 	cache_rx.progress_enabled = progress_enabled;
 
@@ -400,20 +494,19 @@ void cache_all_blocks_async(char *unix_path, unsigned long *bm, unsigned long nb
 			if (ret < 0)
 				err("send_read_request, %m");
 
-			g_async_queue_push(cache_rx.q, &cache_rx_req_remote);
+			sized_async_queue_push(cache_rx.q, &cache_rx_req_remote);
 		} else {
-			g_async_queue_push(cache_rx.q, &cache_rx_req_cached);
+			sized_async_queue_push(cache_rx.q, &cache_rx_req_cached);
 		}
 	}
 
 
-	g_async_queue_push(cache_rx.q, &cache_rx_req_eof);
+	sized_async_queue_push(cache_rx.q, &cache_rx_req_eof);
 	pthread_join(cache_rx_tid, NULL);
-	g_async_queue_unref(cache_rx.q);
+	sized_async_queue_destroy(cache_rx.q);
 
 	end_register_fd(unix_fd, ctl_fd);
 }
-
 
 
 
