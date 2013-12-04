@@ -71,7 +71,7 @@ void xnbd_proxy_control_cache_block(int ctl_fd, unsigned long index, unsigned lo
 		err("recv header, %m");
 }
 
-
+#if 0
 void wait_for_low_queue_load(struct proxy_session *ps)
 {
 	if (!ps->proxy->xnbd->proxy_max_queue_size)
@@ -100,6 +100,7 @@ void wait_for_low_queue_load(struct proxy_session *ps)
 		nanosleep(&sleep_time, NULL);
 	}
 }
+#endif
 
 
 static void mem_usage_add(struct xnbd_proxy *proxy, struct proxy_priv *priv)
@@ -113,6 +114,7 @@ static void mem_usage_add(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 		allocated += priv->iolen;
 
 	g_atomic_pointer_add(&proxy->mem_usage_curr, allocated);
+	g_atomic_int_inc(&proxy->queue_usage_curr);
 }
 
 #define likely(x)	__builtin_expect(!!(x), 1)
@@ -121,14 +123,29 @@ static void mem_usage_wait(struct xnbd_proxy *proxy)
 	if (!proxy->xnbd->proxy_max_mem_size)
 		return;
 
-	for (;;) {
-		size_t usage_curr = (size_t) g_atomic_pointer_get(&proxy->mem_usage_curr);
+	bool mem_is_full = false;
+	bool queue_is_full = false;
 
-		if (likely(usage_curr < proxy->xnbd->proxy_max_mem_size))
+	for (;;) {
+		size_t mem_usage_curr = (size_t) g_atomic_pointer_get(&proxy->mem_usage_curr);
+		int queue_usage_curr = g_atomic_int_get(&proxy->queue_usage_curr);
+
+		if (likely(mem_usage_curr > proxy->xnbd->proxy_max_mem_size))
+			mem_is_full = true;
+
+		if (likely(queue_usage_curr > proxy->xnbd->proxy_max_queue_size))
+			queue_is_full = true;
+
+		if (!(mem_is_full || queue_is_full))
 			break;
 
-		warn("mem_usage %zu reached limit %zu (bytes). Temporally suspend receiving new requests.",
-				usage_curr, proxy->xnbd->proxy_max_mem_size);
+		if (mem_is_full)
+			warn("mem_usage %zu reached limit %zu (bytes). Temporally suspend receiving new requests.",
+					mem_usage_curr, proxy->xnbd->proxy_max_mem_size);
+		if (queue_is_full)
+			warn("queue_usage %d reached limit %d. Temporally suspend receiving new requests.",
+					queue_usage_curr, proxy->xnbd->proxy_max_queue_size);
+
 		usleep(200*1000);
 	}
 }
@@ -144,6 +161,7 @@ static void mem_usage_del(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 		allocated += priv->iolen;
 
 	g_atomic_pointer_add(&proxy->mem_usage_curr, ((ssize_t) 0 - allocated));
+	g_atomic_int_dec_and_test(&proxy->queue_usage_curr);
 }
 
 
@@ -245,7 +263,7 @@ int recv_request(struct proxy_session *ps)
 	}
 
 
-	wait_for_low_queue_load(ps);
+	// wait_for_low_queue_load(ps);
 
 	g_async_queue_push(proxy->fwd_tx_queue, priv);
 
@@ -315,6 +333,7 @@ void proxy_initialize(struct xnbd_info *xnbd, struct xnbd_proxy *proxy)
 
 	proxy->cachefd = cachefd;
 	proxy->mem_usage_curr = 0;
+	proxy->queue_usage_curr = 0;
 }
 
 
@@ -620,7 +639,7 @@ int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
 			}
 		}
 
-		if (proxy->mem_usage_curr != 0)
+		if (proxy->mem_usage_curr != 0 || proxy->queue_usage_curr != 0)
 			warn("terminate pending requests");
 
 		/* if there are no sessions, run clean up and bye */
