@@ -102,6 +102,8 @@ struct xnbd_proxy {
 	/* Count up the current memory usage of the proxy server. Actual memory
 	 * usage will slightly exceed this value. */
 	size_t mem_usage_curr;
+	/* the number of pending requests in the proxy server */
+	int queue_usage_curr;
 };
 
 enum xnbd_proxy_cmd_type {
