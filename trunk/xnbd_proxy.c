@@ -111,6 +111,7 @@ static void mem_usage_add(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 				|| priv->iotype == NBD_CMD_READ)
 			allocated += priv->iolen;
 
+		/* g_atomic_pointer_add() requires glib 2.30 or later */
 		g_atomic_pointer_add(&proxy->mem_usage_curr, allocated);
 	}
 
