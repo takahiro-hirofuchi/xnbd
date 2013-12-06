@@ -108,10 +108,20 @@ OPTIONS (proxy mode only)
 *--clear-bitmap*::
     Clear an existing bitmap file.  By default, previous state is re-used.
 
-*--queue-size* 'NUMBER'::
-    Limit total number queued requests to 'NUMBER'.
-    By default, the limit is at 1000.
+*--max-queue-size* 'NUMBER'::
+    Limit the total number of queued requests to 'NUMBER'.
+    If the current number of queued requests reaches this limitation, the
+    server delays receiving new requests. By default, there is no limitation.
+    The option is only valid for the proxy mode.
     The higher the limit, the more RAM xnbd-server may use.
+    Beware that with a fast network, a slow disk and a high limit
+    xnbd-server could take enough RAM to force the host machine into swapping.
+
+*--max-mem-size* 'NUMBER'::
+    Limit the memory consumption of xnbd-server to approximately 'NUMBER' bytes.
+    If the current memory consumption reaches this limitation, the server
+    delays receiving new requests. By default, there is no limitation.
+    The option is only valid for the proxy mode.
     Beware that with a fast network, a slow disk and a high limit
     xnbd-server could take enough RAM to force the host machine into swapping.
 

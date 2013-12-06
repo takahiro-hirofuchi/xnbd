@@ -105,46 +105,56 @@ void wait_for_low_queue_load(struct proxy_session *ps)
 
 static void mem_usage_add(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 {
-	if (!proxy->xnbd->proxy_max_mem_size)
-		return;
+	if (proxy->xnbd->proxy_max_mem_size) {
+		ssize_t allocated = sizeof(struct proxy_priv);
+		if (priv->iotype == NBD_CMD_WRITE
+				|| priv->iotype == NBD_CMD_READ)
+			allocated += priv->iolen;
 
-	ssize_t allocated = sizeof(struct proxy_priv);
-	if (priv->iotype == NBD_CMD_WRITE
-			|| priv->iotype == NBD_CMD_READ)
-		allocated += priv->iolen;
+		g_atomic_pointer_add(&proxy->mem_usage_curr, allocated);
+	}
 
-	g_atomic_pointer_add(&proxy->mem_usage_curr, allocated);
-	g_atomic_int_inc(&proxy->queue_usage_curr);
+	if (proxy->xnbd->proxy_max_queue_size)
+		g_atomic_int_inc(&proxy->queue_usage_curr);
 }
 
+#ifdef __GNUC__
 #define likely(x)	__builtin_expect(!!(x), 1)
+#define unlikely(x)	__builtin_expect(!!(x), 0)
+#else
+#define likely(x)	(x)
+#define unlikely(x)	(x)
+#endif
+
 static void mem_usage_wait(struct xnbd_proxy *proxy)
 {
-	if (!proxy->xnbd->proxy_max_mem_size)
-		return;
-
-	bool mem_is_full = false;
-	bool queue_is_full = false;
-
 	for (;;) {
-		size_t mem_usage_curr = (size_t) g_atomic_pointer_get(&proxy->mem_usage_curr);
-		int queue_usage_curr = g_atomic_int_get(&proxy->queue_usage_curr);
+		bool mem_is_full = false;
+		bool queue_is_full = false;
+		size_t mem_usage_curr = 0;
+		int queue_usage_curr = 0;
 
-		if (likely(mem_usage_curr > proxy->xnbd->proxy_max_mem_size))
+		if (proxy->xnbd->proxy_max_mem_size)
+			mem_usage_curr = (size_t) g_atomic_pointer_get(&proxy->mem_usage_curr);
+
+		if (proxy->xnbd->proxy_max_queue_size)
+			queue_usage_curr = g_atomic_int_get(&proxy->queue_usage_curr);
+
+		if (unlikely(mem_usage_curr > proxy->xnbd->proxy_max_mem_size))
 			mem_is_full = true;
 
-		if (likely(queue_usage_curr > proxy->xnbd->proxy_max_queue_size))
+		if (unlikely(queue_usage_curr > proxy->xnbd->proxy_max_queue_size))
 			queue_is_full = true;
 
-		if (!(mem_is_full || queue_is_full))
+		if (!mem_is_full && !queue_is_full)
 			break;
 
 		if (mem_is_full)
-			warn("mem_usage %zu reached limit %zu (bytes). Temporally suspend receiving new requests.",
-					mem_usage_curr, proxy->xnbd->proxy_max_mem_size);
+			warn("mem_usage reached limit %zu (bytes). Temporally suspend receiving new requests.",
+					proxy->xnbd->proxy_max_mem_size);
 		if (queue_is_full)
-			warn("queue_usage %d reached limit %d. Temporally suspend receiving new requests.",
-					queue_usage_curr, proxy->xnbd->proxy_max_queue_size);
+			warn("queue_usage reached limit %d. Temporally suspend receiving new requests.",
+					proxy->xnbd->proxy_max_queue_size);
 
 		usleep(200*1000);
 	}
@@ -152,16 +162,17 @@ static void mem_usage_wait(struct xnbd_proxy *proxy)
 
 static void mem_usage_del(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 {
-	if (!proxy->xnbd->proxy_max_mem_size)
-		return;
+	if (proxy->xnbd->proxy_max_mem_size) {
+		ssize_t allocated = sizeof(struct proxy_priv);
+		if (priv->iotype == NBD_CMD_WRITE
+				|| priv->iotype == NBD_CMD_READ)
+			allocated += priv->iolen;
 
-	ssize_t allocated = sizeof(struct proxy_priv);
-	if (priv->iotype == NBD_CMD_WRITE
-			|| priv->iotype == NBD_CMD_READ)
-		allocated += priv->iolen;
+		g_atomic_pointer_add(&proxy->mem_usage_curr, ((ssize_t) 0 - allocated));
+	}
 
-	g_atomic_pointer_add(&proxy->mem_usage_curr, ((ssize_t) 0 - allocated));
-	g_atomic_int_dec_and_test(&proxy->queue_usage_curr);
+	if (proxy->xnbd->proxy_max_queue_size)
+		g_atomic_int_dec_and_test(&proxy->queue_usage_curr);
 }
 
 
@@ -185,7 +196,7 @@ int recv_request(struct proxy_session *ps)
 	priv->reply.error = 0;
 
 	ret = wait_until_readable(nbd_client_fd, ps->wrk_fd);
-	if (ret < 0) 
+	if (ret < 0)
 		goto err_handle;
 
 	ret = nbd_server_recv_request(nbd_client_fd, proxy->xnbd->disksize, &iotype, &iofrom, &iolen, &priv->reply);
@@ -235,7 +246,7 @@ int recv_request(struct proxy_session *ps)
 		/*
 		 * Receive write data to a temporary buffer.
 		 *
-		 * Cache disk I/O is allowed only in the completion thread. 
+		 * Cache disk I/O is allowed only in the completion thread.
 		 * This ensures all disk I/O is serialized.
 		 *
 		 * If the proxy server wrote data to the cache disk here,
@@ -321,7 +332,7 @@ void proxy_initialize(struct xnbd_info *xnbd, struct xnbd_proxy *proxy)
 	int cachefd = open(xnbd->proxy_diskpath, O_RDWR | O_CREAT | O_NOATIME, S_IRUSR | S_IWUSR);
 	if (cachefd < 0)
 		err("open");
-	
+
 	off_t size = get_disksize(cachefd);
 	if (size != xnbd->disksize) {
 		warn("cache disk size (%ju) != target disk size (%ju)", size, xnbd->disksize);

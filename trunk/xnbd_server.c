@@ -810,7 +810,7 @@ int main(int argc, char **argv) {
 	struct xnbd_info xnbd;
 	enum xnbd_cmd_type cmd = xnbd_cmd_unknown;
 	int lport = XNBD_PORT;
-	size_t proxy_max_queue_size = 0;
+	int proxy_max_queue_size = 0;
 	size_t proxy_max_mem_size = 0;
 	int daemonize = 0;
 	int readonly = 0;
@@ -924,10 +924,10 @@ int main(int argc, char **argv) {
 				break;
 
 			case 'q':
-				proxy_max_queue_size = (size_t) atol(optarg);
+				proxy_max_queue_size = atoi(optarg);
 				if (!(proxy_max_queue_size > 0))
 					err("max_queue_size must be greater than zero");
-				info("max_queue_size %zu", proxy_max_queue_size);
+				info("max_queue_size %d", proxy_max_queue_size);
 				break;
 
 			case 'm':
@@ -1041,10 +1041,8 @@ int main(int argc, char **argv) {
 			err("not reached");
 	}
 
-	xnbd.cmd = cmd;
-	xnbd_initialize(&xnbd);
-
 	/* set system-wide options */
+	xnbd.cmd = cmd;
 	xnbd.readonly = readonly;
 
 	/* set mode-specific options */
@@ -1062,6 +1060,10 @@ int main(int argc, char **argv) {
 			err("max_mem_size option is valid only for the proxy mode");
 	}
 
+	/* Note: necessary options must be initialized beforehand */
+	xnbd_initialize(&xnbd);
+
+
 
 	PAGESIZE = (unsigned int) getpagesize();
 	if (CBLOCKSIZE % PAGESIZE != 0)
@@ -1072,7 +1074,7 @@ int main(int argc, char **argv) {
 
 	/* In any mode, daemonize must be done finally */
 	if (daemonize) {
-		if (inetd) 
+		if (inetd)
 			err("--daemon cannot be specified with --inetd.");
 
 		int ret = daemon(0, 0);
