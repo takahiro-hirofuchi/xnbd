@@ -321,7 +321,10 @@ int forwarder_rx_thread_mainloop(struct xnbd_proxy *proxy)
 	off_t mmaped_offset = 0;
 	char *iobuf = NULL;
 
-	iobuf = mmap_iorange(xnbd, proxy->cachefd, priv->iofrom, priv->iolen, &mmaped_buf, &mmaped_len, &mmaped_offset);
+	/* Note: if the --readonly option is given to the proxy server, the
+	 * proxy server rejects write requests from clients, but accepts read
+	 * requests. The cache image file will be updated. */
+	iobuf = mmap_iorange(xnbd->disksize, 0, proxy->cachefd, priv->iofrom, priv->iolen, &mmaped_buf, &mmaped_len, &mmaped_offset);
 	dbg("#mmaped_buf %p iobuf %p mmaped_len %zu iolen %zu", mmaped_buf, iobuf, mmaped_len, priv->iolen);
 	dbg("#mapped %p -> %p", mmaped_buf, mmaped_buf + mmaped_len);
 
