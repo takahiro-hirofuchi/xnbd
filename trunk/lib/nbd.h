@@ -64,8 +64,12 @@ enum {
 	NBD_CMD_BGCOPY = 3,
 
 	NBD_CMD_READ_COMPRESS = 4,
-	NBD_CMD_READ_COMPRESS_LZO = 5
+	NBD_CMD_READ_COMPRESS_LZO = 5,
+
+	NBD_CMD_UNDEFINED = 6
 };
+
+const char *nbd_get_iotype_string(uint32_t iotype);
 
 
 int nbd_negotiate_with_client(int sockfd, off_t exportsize);

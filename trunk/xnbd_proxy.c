@@ -26,7 +26,7 @@
 
 
 /* special entry to let threads exit */
-struct proxy_priv priv_stop_forwarder = { .nreq = 0, .need_exit = 0, .iotype = -1 };
+struct proxy_priv priv_stop_forwarder = { .nreq = 0, .need_exit = 0, .iotype = NBD_CMD_UNDEFINED };
 
 struct proxy_session {
 	int nbd_fd;
@@ -203,15 +203,14 @@ int recv_request(struct proxy_session *ps)
 		goto err_handle;
 	}
 
+	dbg("++++ a new %s request received", nbd_get_iotype_string(iotype));
+
 	if (proxy->xnbd->readonly) {
 		if (iotype == NBD_CMD_WRITE) {
 			warn("write request to readonly cache");
 			goto err_handle;
 		}
 	}
-
-	dbg("++++recv new request");
-
 
 	unsigned long block_index_start;
 	unsigned long block_index_end;
@@ -274,6 +273,7 @@ int recv_request(struct proxy_session *ps)
 err_handle:
 	info("start terminating session (nbd_fd %d wrk_fd %d)", ps->nbd_fd, ps->wrk_fd);
 	priv->need_exit = 1;
+	priv->iotype = NBD_CMD_UNDEFINED;
 	g_async_queue_push(proxy->fwd_tx_queue, priv);
 
 	return -1;
