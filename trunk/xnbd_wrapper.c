@@ -1482,7 +1482,7 @@ int main(int argc, char **argv) {
 						close(fd);
 					}
 
-					info("disk_size_bytes: %ld", disk_size_bytes);
+					info("disk_size_bytes: %jd", disk_size_bytes);
 
 					if (nbd_negotiate_with_client_new_phase_1(conn_sockfd, disk_size_bytes, 0)) {
 						if(close(conn_sockfd))

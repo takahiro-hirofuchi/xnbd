@@ -387,7 +387,7 @@ static void xnbd_report_target_size(GList *dst_list, int max_retry, const char *
 	xnbd_connect_to_remote(dst_list, max_retry, exportname, NULL, &disksize, NULL);
 
 	assert(disksize >= 0);
-	printf("%ld\n", disksize);
+	printf("%jd\n", disksize);
 	fflush(stdout);
 }
 
