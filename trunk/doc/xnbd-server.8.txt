@@ -88,8 +88,11 @@ The following options are supported:
     not given, *xnbd-server* will listen on port 8520 by default.
 
 *--readonly*::
-    Export the image file as read-only. If a client sends a write
-    request, it will receive an error, but the connection will stay up.
+    Export the image file as read-only. If receiving a write request from a
+    client, the server disconnects the client immediately. If this option is
+    used in the proxy mode, *xnbd-server* rejects write requests from clients,
+    but accepts read requests and may cache new blocks. The cache image file is
+    updated if new blocks are cached.
 
 *--connected-fd* 'NUMBER'::
     Use file descriptor 'NUMBER' as a bi-directional, pre-negotiated channel to a

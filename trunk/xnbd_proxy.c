@@ -207,7 +207,7 @@ int recv_request(struct proxy_session *ps)
 
 	if (proxy->xnbd->readonly) {
 		if (iotype == NBD_CMD_WRITE) {
-			warn("write request to readonly cache");
+			warn("NBD_CMD_WRITE to a readonly server. disconnect.");
 			goto err_handle;
 		}
 	}
