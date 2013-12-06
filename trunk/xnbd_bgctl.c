@@ -469,6 +469,11 @@ void progress_refresh_draw(struct progress_info *p)
 }
 
 
+/* Increase this value if necessary. The enough number of requests should be
+ * being enqueued into the proxy server to get the maximum speed of of
+ * --cache-all. */
+#define XNBD_BGCTL_ASYNC_DEPTH 1000
+
 void cache_all_blocks_async(char *unix_path, unsigned long *bm, unsigned long nblocks, bool progress_enabled)
 {
 	int unix_fd, ctl_fd;
@@ -476,7 +481,7 @@ void cache_all_blocks_async(char *unix_path, unsigned long *bm, unsigned long nb
 
 	struct cache_rx_ctl cache_rx;
 	cache_rx.ctl_fd  = ctl_fd;
-	cache_rx.q       = sized_async_queue_new(1000);
+	cache_rx.q       = sized_async_queue_new(XNBD_BGCTL_ASYNC_DEPTH);
 	cache_rx.nblocks = nblocks;
 	cache_rx.progress_enabled = progress_enabled;
 
@@ -569,7 +574,7 @@ Commands:\n\
 Options:\n\
   --exportname NAME  reconnect to a given image\n\
   --progress         show a progress bar on stderr (default: disabled)\n\
-  --force            ignore risks (default: disabled)\n\
+  --force            force switch even if all blocks are not cached (default: disabled)\n\
 ";
 
 
@@ -635,7 +640,7 @@ int main(int argc, char **argv)
 			case 'q':
 				if (cmd != xnbd_bgctl_cmd_unknown)
 					show_help_and_exit("specify one mode");
-			
+
 				cmd = xnbd_bgctl_cmd_query;
 				break;
 
@@ -720,6 +725,13 @@ int main(int argc, char **argv)
 	}
 
 
+	if (exportname && cmd != xnbd_bgctl_cmd_reconnect)
+		warn("ignore --exportname");
+	if (force_enabled && cmd != xnbd_bgctl_cmd_switch)
+		warn("ignore --force");
+	if (progress_enabled)
+		if (cmd != xnbd_bgctl_cmd_cache_all && cmd != xnbd_bgctl_cmd_cache_all2)
+			warn("ignore --progress");
 
 
 	size_t bmlen;
