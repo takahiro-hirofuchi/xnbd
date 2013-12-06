@@ -27,6 +27,7 @@
 void proxy_priv_dump(struct proxy_priv *priv)
 {
 	dbg("priv %p", priv);
+	dbg(" iotype %s", nbd_get_iotype_string(priv->iotype));
 	dbg(" seqnum %lu", priv->seqnum);
 	dbg(" need_exit %d", priv->need_exit);
 	dbg(" need_retry %d", priv->need_retry);
