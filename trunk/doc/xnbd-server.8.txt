@@ -50,15 +50,21 @@ all changes are lost.
 
 *xnbd-server* *--proxy* provides the image server of the NBD protocol,
 but it actually works as a proxy to a remote *xnbd-server* specified with
-'REMOTE_HOST' and 'REMOTE_PORT'. All I/O requests from clients are intercepted,
-and redirected to the remote target server if needed. All updated blocks are
-cached at the proxy server, and read blocks are also cached. No write operation
-does not happen at the remote server. Cached blocks are saved in
-'CACHE_DISK_IMAGE'. The block numbers of cached blocks are saved in 'CACHE_BITMAP_IMAGE'.
-The proxy server is controlled by xnbd-bgctl(1) through
-'CONTROL_SOCKET_PATH'. The proxy server can be used for distributed copy-on-write
-NBD disks; one read-only disk image is shared among multiple clients. It is
-also useful for live storage migration of virtual machines.
+'REMOTE_HOST' and 'REMOTE_PORT'.
+
+The proxy server receives read/write requests from clients as a normal image
+server does. But, it locally caches disk blocks, and retrieves disk blocks from
+the remote server if necessary. No write operation does not happen at the
+remote server.
+
+Cached blocks are saved in 'CACHE_DISK_IMAGE'. The block numbers of cached
+blocks are saved in 'CACHE_BITMAP_IMAGE'. The proxy server is controlled by
+xnbd-bgctl(1) through 'CONTROL_SOCKET_PATH'.
+
+The proxy server can be used to speed up remote access, share a read-only disk
+image among multiple servers and clients, and replicate an exported image to
+another node transparently. It also works for live storage migration of
+virtual machines.
 
 WARNING: Multiple clients can concurrently access to a single server instance.
 Yet *xnbd-server* does not offer any locking or synchronization mechanism among
