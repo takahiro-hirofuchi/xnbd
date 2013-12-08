@@ -11,11 +11,22 @@ xNBD Change Log
 0.3.0
 -----
 
+Bugfixes:
+ * xnbd-server: Fix --readonly option for the proxy server. Reject write
+     requests from clients, but may update the cache image file.
+ * xnbd-server: Fix erroneous assertions caused by xnbd-bgctl (issue #fillme).
+
 Improvements
 ~~~~~~~~~~~~
  * xnbd-server: Add --queue-size parameter and a default limit of 1000 queued
      requests (for all queues in total) so that a slow disk and fast network
      no longer force the host into swapping
+ * xnbd-server: Add --max-queue-size and --max-mem-size parameters that limit
+     memory usage of xnbd-server.
+ * xnbd-bgctl: Limit the number of asynchronous requests to avoid huge memory
+     consumption of xnbd-server.
+ * xnbd-bgctl: Improve the progress bar to be more accurate. Go forward
+     according to the percentage of actually cached blocks.
 
 
 0.2.0-rc2
