@@ -5,6 +5,9 @@ File doc/Makefile.am installs an HTML rendering of this document.
 Line width is meant to be 90 characters.
 ///////////////////////////////////////////////////////////////////////////////////////
 
+:numbered!:
+
+
 xNBD Change Log
 ===============
 
