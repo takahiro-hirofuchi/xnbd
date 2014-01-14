@@ -646,7 +646,7 @@ int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
 		{
 			unsigned int remaining_sessions = g_list_length(conn_list);
 			if (remaining_sessions > 0) {
-				/* If there is no xnbd-bgctl session, it's a bug. */
+				/* If there is a non xnbd-bgctl session, it's a bug. */
 				warn("terminate %u xnbd-bgctl session(s)", remaining_sessions);
 			}
 		}
