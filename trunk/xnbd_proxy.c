@@ -671,7 +671,13 @@ int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
 			pthread_join(ps->tid_rx, NULL);
 			pthread_join(ps->tid_tx, NULL);
 
-			/* no in-flight request */
+			/* This assertion is called after we confirmed that
+			 * there are no other threads using ps->tx_queue. When
+			 * this proxy session was active, the tx thread (of the
+			 * thread ID ps->tid_tx) was waiting for this queue.
+			 * But, at this line, the code is in the cleanup phase.
+			 * The session is not active and the thread already
+			 * exited. If this assertion failed, it's a bug. */
 			g_assert(g_async_queue_length(ps->tx_queue) == 0);
 			g_async_queue_unref(ps->tx_queue);
 			close(ps->pipe_read_fd);
