@@ -35,7 +35,8 @@ const char *nbd_get_iotype_string(uint32_t iotype)
 		"NBD_CMD_UNDEFINED"
 	};
 
-	g_assert(iotype < sizeof(nbd_iotype_string_table));
+	if (iotype >= sizeof(nbd_iotype_string_table) / sizeof(nbd_iotype_string_table[0]))
+		return "NBD_CMD_UNDEFINED";
 
 	return nbd_iotype_string_table[iotype];
 }
