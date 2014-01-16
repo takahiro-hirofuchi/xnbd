@@ -26,6 +26,7 @@ Improvements
      no longer force the host into swapping
  * xnbd-server: Add --max-queue-size and --max-mem-size parameters that limit
      memory usage of xnbd-server.
+ * xnbd-server: Fix version output by --version
  * xnbd-bgctl: Limit the number of asynchronous requests to avoid huge memory
      consumption of xnbd-server.
  * xnbd-bgctl: Improve the progress bar to be more accurate. Go forward

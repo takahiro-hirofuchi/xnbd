@@ -23,6 +23,7 @@
 
 #include "xnbd.h"
 #include "xnbd_common.h"
+#include "config.h"
 
 
 
@@ -738,7 +739,6 @@ Options (Proxy mode):\n\
 
 
 
-static const char *version = "xNBD (version 0.1.0-pre)";
 static const char *copyright = "\
 Copyright (C) 2008-2013 National Institute of Advanced Industrial Science\n\
 and Technology\n\
@@ -990,7 +990,7 @@ int main(int argc, char **argv) {
 			show_help_and_exit(NULL);
 
 		case xnbd_cmd_version:
-			printf("%s\n\n", version);
+			printf("xNBD (version %s)\n\n", PACKAGE_VERSION);
 			printf("%s\n", copyright);
 			exit(EXIT_SUCCESS);
 
