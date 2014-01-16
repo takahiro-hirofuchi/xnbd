@@ -28,10 +28,10 @@
 
 
 struct _SizedAsyncQueue {
-	GMutex *mutex;
-	GCond  *cond_pop;  // pop-able
-	GCond  *cond_push; // push-able
-	GQueue *queue;
+	GMutex mutex;
+	GCond  cond_pop;  // pop-able
+	GCond  cond_push; // push-able
+	GQueue queue;
 
 	size_t max_size;
 	size_t size;
@@ -43,10 +43,10 @@ SizedAsyncQueue *sized_async_queue_new(size_t max_size)
 {
 	SizedAsyncQueue* q = g_new(SizedAsyncQueue, 1);
 
-	q->mutex	= g_mutex_new();
-	q->cond_pop	= g_cond_new();
-	q->cond_push	= g_cond_new();
-	q->queue	= g_queue_new();
+	g_mutex_init(&q->mutex);
+	g_cond_init(&q->cond_pop);
+	g_cond_init(&q->cond_push);
+	g_queue_init(&q->queue);
 
 	q->max_size = max_size;
 	q->size = 0;
@@ -54,49 +54,49 @@ SizedAsyncQueue *sized_async_queue_new(size_t max_size)
 	return q;
 }
 
-void sized_async_queue_push(SizedAsyncQueue *queue, void *data)
+void sized_async_queue_push(SizedAsyncQueue *q, void *data)
 {
-	g_return_if_fail(queue);
+	g_return_if_fail(q);
 	g_return_if_fail(data);
 
-	g_mutex_lock(queue->mutex);
+	g_mutex_lock(&q->mutex);
 	{
-		while (!(queue->size < queue->max_size)) {
-			g_cond_wait(queue->cond_push, queue->mutex);
+		while (!(q->size < q->max_size)) {
+			g_cond_wait(&q->cond_push, &q->mutex);
 		}
 
-		// g_message("%zu < %zu", queue->size, queue->max_size);
+		// g_message("%zu < %zu", q->size, q->max_size);
 
-		g_queue_push_head(queue->queue, data);
-		queue->size += 1;
+		g_queue_push_head(&q->queue, data);
+		q->size += 1;
 
-		g_cond_signal(queue->cond_pop);
+		g_cond_signal(&q->cond_pop);
 	}
-	g_mutex_unlock(queue->mutex);
+	g_mutex_unlock(&q->mutex);
 }
 
-void *sized_async_queue_pop(SizedAsyncQueue *queue)
+void *sized_async_queue_pop(SizedAsyncQueue *q)
 {
 	void *data;
 
-	g_return_val_if_fail(queue, NULL);
+	g_return_val_if_fail(q, NULL);
 
-	g_mutex_lock(queue->mutex);
+	g_mutex_lock(&q->mutex);
 	{
 		/* must check queue is poppable */
-		while (!g_queue_peek_tail_link(queue->queue)) {
-			g_cond_wait(queue->cond_pop, queue->mutex);
+		while (!g_queue_peek_tail_link(&q->queue)) {
+			g_cond_wait(&q->cond_pop, &q->mutex);
 		}
 
-		data = g_queue_pop_tail(queue->queue);
+		data = g_queue_pop_tail(&q->queue);
 		g_assert(data);
 
-		queue->size -= 1;
-		if (queue->size < queue->max_size) {
-			g_cond_signal(queue->cond_push);
+		q->size -= 1;
+		if (q->size < q->max_size) {
+			g_cond_signal(&q->cond_push);
 		}
 	}
-	g_mutex_unlock(queue->mutex);
+	g_mutex_unlock(&q->mutex);
 
 	return data;
 }
@@ -108,10 +108,10 @@ void sized_async_queue_destroy(SizedAsyncQueue *q)
 	if (q->size)
 		warn("destroy a queue with data");
 
-	g_mutex_clear(q->mutex);
-	g_cond_clear(q->cond_pop);
-	g_cond_clear(q->cond_push);
-	g_queue_clear(q->queue);
+	g_mutex_clear(&q->mutex);
+	g_cond_clear(&q->cond_pop);
+	g_cond_clear(&q->cond_push);
+	g_queue_clear(&q->queue);
 
 	g_free(q);
 }
