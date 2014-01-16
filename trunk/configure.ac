@@ -20,9 +20,7 @@ AC_PROG_LN_S
 AC_PROG_MAKE_SET
 
 # Checks for libraries.
-GLIB_MINIMUM_VERSION=2.24.2  # i.e. Debian stable as of 2013-01-23, i.e. squeeze
-GLIB_MINIMUM_VERSION=2.33.12  # i.e. Debian stable as of 2013-12-07, i.e. wheezy
-GLIB_MINIMUM_VERSION=2.30  # g_atomic_pointer_add()
+GLIB_MINIMUM_VERSION=2.32  # has g_atomic_pointer_add(), deprecate g_thread_init()
 PKG_CHECK_MODULES([GLIB], [glib-2.0 >= ${GLIB_MINIMUM_VERSION} gthread-2.0 >= ${GLIB_MINIMUM_VERSION}])
 AC_SUBST([GLIB_CFLAGS])
 AC_SUBST([GLIB_LIBS])

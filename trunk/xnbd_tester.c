@@ -664,7 +664,6 @@ int main(int argc, char **argv) {
 
 
 	set_sigactions();
-	g_thread_init(NULL);
 
 	/* @srcdisk: disk file for a direct mode, cache file for a redirect mode */
 	/* @dstdisk: temporary space */
