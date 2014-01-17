@@ -119,14 +119,6 @@ static void mem_usage_add(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 		g_atomic_int_inc(&proxy->queue_usage_curr);
 }
 
-#ifdef __GNUC__
-#define likely(x)	__builtin_expect(!!(x), 1)
-#define unlikely(x)	__builtin_expect(!!(x), 0)
-#else
-#define likely(x)	(x)
-#define unlikely(x)	(x)
-#endif
-
 static void mem_usage_wait(struct xnbd_proxy *proxy)
 {
 	for (;;) {
@@ -137,19 +129,19 @@ static void mem_usage_wait(struct xnbd_proxy *proxy)
 
 		if (proxy->xnbd->proxy_max_mem_size) {
 			mem_usage_curr = (size_t) g_atomic_pointer_get(&proxy->mem_usage_curr);
-			if (unlikely(mem_usage_curr > proxy->xnbd->proxy_max_mem_size)) {
+			if (G_UNLIKELY(mem_usage_curr > proxy->xnbd->proxy_max_mem_size)) {
 				mem_is_full = true;
 			}
 		}
 
 		if (proxy->xnbd->proxy_max_queue_size) {
 			queue_usage_curr = g_atomic_int_get(&proxy->queue_usage_curr);
-			if (unlikely(queue_usage_curr > proxy->xnbd->proxy_max_queue_size)) {
+			if (G_UNLIKELY(queue_usage_curr > proxy->xnbd->proxy_max_queue_size)) {
 				queue_is_full = true;
 			}
 		}
 
-		if (likely(!mem_is_full && !queue_is_full))
+		if (G_LIKELY(!mem_is_full && !queue_is_full))
 			break;
 
 		if (mem_is_full)
