@@ -129,7 +129,7 @@ void xnbd_target_open_disk(char *diskpath, struct xnbd_info *xnbd)
 
 	off_t disksize = get_disksize(diskfd);
 
-	check_disksize(diskpath, disksize);
+	check_disksize(diskpath, disksize, false);
 
 
 	/* multi-connections call this */
