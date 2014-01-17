@@ -135,19 +135,21 @@ static void mem_usage_wait(struct xnbd_proxy *proxy)
 		size_t mem_usage_curr = 0;
 		int queue_usage_curr = 0;
 
-		if (proxy->xnbd->proxy_max_mem_size)
+		if (proxy->xnbd->proxy_max_mem_size) {
 			mem_usage_curr = (size_t) g_atomic_pointer_get(&proxy->mem_usage_curr);
+			if (unlikely(mem_usage_curr > proxy->xnbd->proxy_max_mem_size)) {
+				mem_is_full = true;
+			}
+		}
 
-		if (proxy->xnbd->proxy_max_queue_size)
+		if (proxy->xnbd->proxy_max_queue_size) {
 			queue_usage_curr = g_atomic_int_get(&proxy->queue_usage_curr);
+			if (unlikely(queue_usage_curr > proxy->xnbd->proxy_max_queue_size)) {
+				queue_is_full = true;
+			}
+		}
 
-		if (unlikely(mem_usage_curr > proxy->xnbd->proxy_max_mem_size))
-			mem_is_full = true;
-
-		if (unlikely(queue_usage_curr > proxy->xnbd->proxy_max_queue_size))
-			queue_is_full = true;
-
-		if (!mem_is_full && !queue_is_full)
+		if (likely(!mem_is_full && !queue_is_full))
 			break;
 
 		if (mem_is_full)
