@@ -26,7 +26,13 @@
 
 
 /* special entry to let threads exit */
-struct proxy_priv priv_stop_forwarder = { .nreq = 0, .need_exit = 0, .iotype = NBD_CMD_UNDEFINED };
+struct proxy_priv priv_stop_forwarder = {
+	.nreq = 0,
+	.need_exit = 0,
+	.iotype = NBD_CMD_UNDEFINED,
+	.write_buff = NULL,
+	.read_buff = NULL,
+};
 
 struct proxy_session {
 	int nbd_fd;
@@ -105,18 +111,24 @@ void wait_for_low_queue_load(struct proxy_session *ps)
 
 static void mem_usage_add(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 {
-	if (proxy->xnbd->proxy_max_mem_size) {
-		ssize_t allocated = sizeof(struct proxy_priv);
-		if (priv->iotype == NBD_CMD_WRITE
-				|| priv->iotype == NBD_CMD_READ)
-			allocated += priv->iolen;
+	/* both buffers should be never allocated at the same time */
+	g_assert((priv->write_buff != NULL && priv->read_buff != NULL) == false);
 
-		/* g_atomic_pointer_add() requires glib 2.30 or later */
-		g_atomic_pointer_add(&proxy->mem_usage_curr, allocated);
+
+	g_mutex_lock(proxy->curr_use_mutex);
+
+	if (proxy->xnbd->proxy_max_buf_size) {
+		proxy->cur_use_buf += sizeof(struct proxy_priv);
+
+		/* need to look up buffers, not iotype */
+		if (priv->write_buff || priv->read_buff)
+			proxy->cur_use_buf += priv->iolen;
 	}
 
-	if (proxy->xnbd->proxy_max_queue_size)
-		g_atomic_int_inc(&proxy->queue_usage_curr);
+	if (proxy->xnbd->proxy_max_que_size)
+		proxy->cur_use_que += 1;
+
+	g_mutex_unlock(proxy->curr_use_mutex);
 }
 
 static void mem_usage_wait(struct xnbd_proxy *proxy)
@@ -124,32 +136,32 @@ static void mem_usage_wait(struct xnbd_proxy *proxy)
 	for (;;) {
 		bool mem_is_full = false;
 		bool queue_is_full = false;
-		size_t mem_usage_curr = 0;
-		int queue_usage_curr = 0;
 
-		if (proxy->xnbd->proxy_max_mem_size) {
-			mem_usage_curr = (size_t) g_atomic_pointer_get(&proxy->mem_usage_curr);
-			if (G_UNLIKELY(mem_usage_curr > proxy->xnbd->proxy_max_mem_size)) {
+		g_mutex_lock(proxy->curr_use_mutex);
+
+		if (proxy->xnbd->proxy_max_buf_size) {
+			if (G_UNLIKELY(proxy->cur_use_buf > proxy->xnbd->proxy_max_buf_size)) {
 				mem_is_full = true;
 			}
 		}
 
-		if (proxy->xnbd->proxy_max_queue_size) {
-			queue_usage_curr = g_atomic_int_get(&proxy->queue_usage_curr);
-			if (G_UNLIKELY(queue_usage_curr > proxy->xnbd->proxy_max_queue_size)) {
+		if (proxy->xnbd->proxy_max_que_size) {
+			if (G_UNLIKELY(proxy->cur_use_que > proxy->xnbd->proxy_max_que_size)) {
 				queue_is_full = true;
 			}
 		}
+
+		g_mutex_unlock(proxy->curr_use_mutex);
 
 		if (G_LIKELY(!mem_is_full && !queue_is_full))
 			break;
 
 		if (mem_is_full)
 			dbg("mem_usage reached limit %zu (bytes). Temporally suspend receiving new requests.",
-					proxy->xnbd->proxy_max_mem_size);
+					proxy->xnbd->proxy_max_buf_size);
 		if (queue_is_full)
 			dbg("queue_usage reached limit %d. Temporally suspend receiving new requests.",
-					proxy->xnbd->proxy_max_queue_size);
+					proxy->xnbd->proxy_max_que_size);
 
 		usleep(200*1000);
 	}
@@ -157,17 +169,20 @@ static void mem_usage_wait(struct xnbd_proxy *proxy)
 
 static void mem_usage_del(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 {
-	if (proxy->xnbd->proxy_max_mem_size) {
-		ssize_t allocated = sizeof(struct proxy_priv);
-		if (priv->iotype == NBD_CMD_WRITE
-				|| priv->iotype == NBD_CMD_READ)
-			allocated += priv->iolen;
+	g_mutex_lock(proxy->curr_use_mutex);
 
-		g_atomic_pointer_add(&proxy->mem_usage_curr, ((ssize_t) 0 - allocated));
+	if (proxy->xnbd->proxy_max_buf_size) {
+		proxy->cur_use_buf -= sizeof(struct proxy_priv);
+
+		/* need to look up buffers, not iotype */
+		if (priv->write_buff || priv->read_buff)
+			proxy->cur_use_buf -= priv->iolen;
 	}
 
-	if (proxy->xnbd->proxy_max_queue_size)
-		g_atomic_int_dec_and_test(&proxy->queue_usage_curr);
+	if (proxy->xnbd->proxy_max_que_size)
+		proxy->cur_use_que -= 1;
+
+	g_mutex_unlock(proxy->curr_use_mutex);
 }
 
 
@@ -232,9 +247,6 @@ int recv_request(struct proxy_session *ps)
 	priv->block_index_end   = block_index_end;
 
 
-	mem_usage_add(proxy, priv);
-	mem_usage_wait(proxy);
-
 	if (iotype == NBD_CMD_WRITE) {
 		priv->write_buff = g_malloc(iolen);
 
@@ -269,7 +281,9 @@ int recv_request(struct proxy_session *ps)
 
 
 	// wait_for_low_queue_load(ps);
+	mem_usage_wait(proxy);
 
+	mem_usage_add(proxy, priv);
 	g_async_queue_push(proxy->fwd_tx_queue, priv);
 
 
@@ -280,6 +294,8 @@ err_handle:
 	info("start terminating session (nbd_fd %d wrk_fd %d)", ps->nbd_fd, ps->wrk_fd);
 	priv->need_exit = 1;
 	priv->iotype = NBD_CMD_UNDEFINED;
+
+	mem_usage_add(proxy, priv);
 	g_async_queue_push(proxy->fwd_tx_queue, priv);
 
 	return -1;
@@ -299,6 +315,7 @@ void proxy_initialize_forwarder(struct xnbd_proxy *proxy, int remotefd)
 
 void proxy_shutdown_forwarder(struct xnbd_proxy *proxy)
 {
+	/* do not need mem_usage_add() here */
 	g_async_queue_push(proxy->fwd_tx_queue, &priv_stop_forwarder);
 
 	pthread_join(proxy->tid_fwd_tx, NULL);
@@ -335,13 +352,19 @@ void proxy_initialize(struct xnbd_info *xnbd, struct xnbd_proxy *proxy)
 	}
 
 	proxy->cachefd = cachefd;
-	proxy->mem_usage_curr = 0;
-	proxy->queue_usage_curr = 0;
+	proxy->curr_use_mutex = g_mutex_new();
+	proxy->cur_use_buf = 0;
+	proxy->cur_use_que = 0;
 }
 
 
 void proxy_shutdown(struct xnbd_proxy *proxy)
 {
+	/* safe to access the values because no other threads are alive */
+	g_mutex_free(proxy->curr_use_mutex);
+	if (proxy->cur_use_buf != 0 || proxy->cur_use_que != 0)
+		warn("cur_use_buf %zu cur_use_que %zu", proxy->cur_use_buf, proxy->cur_use_que);
+
 	g_async_queue_unref(proxy->fwd_retry_queue);
 	g_async_queue_unref(proxy->fwd_tx_queue);
 	g_async_queue_unref(proxy->fwd_rx_queue);
@@ -445,6 +468,8 @@ void *tx_thread_main(void *arg)
 			}
 		}
 
+		/* check the buffer pointer. Even if iotype is
+		 * NBD_CMD_UNDEFINED, the buffer may be allocated. */
 		if (priv->read_buff)
 			g_free(priv->read_buff);
 
@@ -537,6 +562,12 @@ int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
 					g_strlcpy(query.rhost, proxy->xnbd->proxy_rhost, sizeof(query.rhost));
 					g_strlcpy(query.rport, proxy->xnbd->proxy_rport, sizeof(query.rport));
 					query.master_pid = getppid();
+
+					query.max_use_buf = proxy->xnbd->proxy_max_buf_size;
+					query.cur_use_buf = proxy->cur_use_buf;
+					query.max_use_que = proxy->xnbd->proxy_max_que_size;
+					query.cur_use_que = proxy->cur_use_que;
+
 					info("send current status (wrk_fd %d)", wrk_fd);
 					net_send_all_or_error(wrk_fd, &query, sizeof(query));
 				}
@@ -642,7 +673,7 @@ int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
 			}
 		}
 
-		if (proxy->mem_usage_curr != 0 || proxy->queue_usage_curr != 0)
+		if (proxy->cur_use_buf != 0 || proxy->cur_use_que != 0)
 			warn("terminate pending requests");
 
 		/* if there are no sessions, run clean up and bye */

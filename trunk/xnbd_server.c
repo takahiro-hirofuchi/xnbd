@@ -810,8 +810,8 @@ int main(int argc, char **argv) {
 	struct xnbd_info xnbd;
 	enum xnbd_cmd_type cmd = xnbd_cmd_unknown;
 	int lport = XNBD_PORT;
-	int proxy_max_queue_size = 0;
-	size_t proxy_max_mem_size = 0;
+	size_t proxy_max_que_size = 0;
+	size_t proxy_max_buf_size = 0;
 	int daemonize = 0;
 	int readonly = 0;
 	int connected_fd = -1;
@@ -924,17 +924,13 @@ int main(int argc, char **argv) {
 				break;
 
 			case 'q':
-				proxy_max_queue_size = atoi(optarg);
-				if (!(proxy_max_queue_size > 0))
-					err("max_queue_size must be greater than zero");
-				info("max_queue_size %d", proxy_max_queue_size);
+				proxy_max_que_size = strtoul(optarg, NULL, 0);
+				info("max_queue_size %zu", proxy_max_que_size);
 				break;
 
 			case 'm':
-				proxy_max_mem_size = (size_t) atol(optarg);
-				if (!(proxy_max_mem_size > 0))
-					err("max_mem_size must be greater than zero");
-				info("max_mem_size %zu", proxy_max_mem_size);
+				proxy_max_buf_size = strtoul(optarg, NULL, 0);
+				info("max_mem_size %zu", proxy_max_buf_size);
 				break;
 
 			case 'r':
@@ -1046,16 +1042,16 @@ int main(int argc, char **argv) {
 	xnbd.readonly = readonly;
 
 	/* set mode-specific options */
-	if (proxy_max_queue_size > 0) {
+	if (proxy_max_que_size > 0) {
 		if (xnbd.cmd == xnbd_cmd_proxy)
-			xnbd.proxy_max_queue_size = proxy_max_queue_size;
+			xnbd.proxy_max_que_size = proxy_max_que_size;
 		else
 			err("max_queue_size option is valid only for the proxy mode");
 	}
 
-	if (proxy_max_mem_size > 0) {
+	if (proxy_max_buf_size > 0) {
 		if (xnbd.cmd == xnbd_cmd_proxy)
-			xnbd.proxy_max_mem_size = proxy_max_mem_size;
+			xnbd.proxy_max_buf_size = proxy_max_buf_size;
 		else
 			err("max_mem_size option is valid only for the proxy mode");
 	}
