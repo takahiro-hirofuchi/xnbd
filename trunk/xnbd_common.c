@@ -157,7 +157,7 @@ int poll_request_arrival(struct xnbd_session *ses)
 	return wait_until_readable(ses->clientfd, ses->pipe_worker_fd);
 }
 
-void check_disksize(char *diskpath, off_t disksize)
+void check_disksize(char *diskpath, off_t disksize, bool force_cblock)
 {
 	int pgsize = getpagesize();
 
@@ -169,9 +169,12 @@ void check_disksize(char *diskpath, off_t disksize)
 
 	/* A known issue is the end block of the disk; the size of which is not
 	 * a multiple of CBLOCKSIZE. */
-	if (disksize % CBLOCKSIZE)
-		err("disksize %jd is not a multiple of %d (xnbd's cache block size)",
+	if (disksize % CBLOCKSIZE) {
+		warn("disksize %jd is not a multiple of %d (xnbd's cache block size)",
 				disksize, CBLOCKSIZE);
+		if (force_cblock)
+			exit(EXIT_FAILURE);
+	}
 
 	/* off_t becomes 32bit singed integer when no large file support */
 	info("disk %s size %ju B (%ju MB)", diskpath, disksize, disksize /1024 /1024);
