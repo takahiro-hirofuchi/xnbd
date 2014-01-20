@@ -160,7 +160,7 @@ static void mem_usage_wait(struct xnbd_proxy *proxy)
 			dbg("mem_usage reached limit %zu (bytes). Temporally suspend receiving new requests.",
 					proxy->xnbd->proxy_max_buf_size);
 		if (queue_is_full)
-			dbg("queue_usage reached limit %d. Temporally suspend receiving new requests.",
+			dbg("queue_usage reached limit %zu. Temporally suspend receiving new requests.",
 					proxy->xnbd->proxy_max_que_size);
 
 		usleep(200*1000);
