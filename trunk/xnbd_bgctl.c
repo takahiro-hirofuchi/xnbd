@@ -742,8 +742,8 @@ int main(int argc, char **argv)
 	info("%s (%s): disksize %ju", query->diskpath, query->bmpath, query->disksize);
 	info("forwarded to %s:%s", query->rhost, query->rport);
 	info("cached blocks %lu / %lu (%.1f%%)", cached, nblocks, nblocks ? (cached * 100.0 / nblocks) : 0.0);
-	info("internal buffer usage: %zu bytes / %zu bytes", query->cur_use_buf, query->max_use_buf);
-	info("pending request count: %zu / %zu", query->cur_use_que, query->max_use_que);
+	info("internal buffer usage: %zu bytes / %zu bytes (%.1f%%)", query->cur_use_buf, query->max_use_buf, query->max_use_buf ? (query->cur_use_buf * 100.0 / query->max_use_buf) : 0.0);
+	info("pending request count: %zu / %zu (%.1f%%)", query->cur_use_que, query->max_use_que, query->max_use_que ? (query->cur_use_que * 100.0 / query->max_use_que) : 0.0);
 
 	switch (cmd) {
 		case xnbd_bgctl_cmd_unknown:
