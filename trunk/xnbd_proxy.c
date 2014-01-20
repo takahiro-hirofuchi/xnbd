@@ -115,7 +115,7 @@ static void mem_usage_add(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 	g_assert((priv->write_buff != NULL && priv->read_buff != NULL) == false);
 
 
-	g_mutex_lock(proxy->curr_use_mutex);
+	g_mutex_lock(&proxy->curr_use_mutex);
 
 	if (proxy->xnbd->proxy_max_buf_size) {
 		proxy->cur_use_buf += sizeof(struct proxy_priv);
@@ -128,7 +128,7 @@ static void mem_usage_add(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 	if (proxy->xnbd->proxy_max_que_size)
 		proxy->cur_use_que += 1;
 
-	g_mutex_unlock(proxy->curr_use_mutex);
+	g_mutex_unlock(&proxy->curr_use_mutex);
 }
 
 static void mem_usage_wait(struct xnbd_proxy *proxy)
@@ -137,7 +137,7 @@ static void mem_usage_wait(struct xnbd_proxy *proxy)
 		bool mem_is_full = false;
 		bool queue_is_full = false;
 
-		g_mutex_lock(proxy->curr_use_mutex);
+		g_mutex_lock(&proxy->curr_use_mutex);
 
 		if (proxy->xnbd->proxy_max_buf_size) {
 			if (G_UNLIKELY(proxy->cur_use_buf > proxy->xnbd->proxy_max_buf_size)) {
@@ -151,7 +151,7 @@ static void mem_usage_wait(struct xnbd_proxy *proxy)
 			}
 		}
 
-		g_mutex_unlock(proxy->curr_use_mutex);
+		g_mutex_unlock(&proxy->curr_use_mutex);
 
 		if (G_LIKELY(!mem_is_full && !queue_is_full))
 			break;
@@ -169,7 +169,7 @@ static void mem_usage_wait(struct xnbd_proxy *proxy)
 
 static void mem_usage_del(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 {
-	g_mutex_lock(proxy->curr_use_mutex);
+	g_mutex_lock(&proxy->curr_use_mutex);
 
 	if (proxy->xnbd->proxy_max_buf_size) {
 		proxy->cur_use_buf -= sizeof(struct proxy_priv);
@@ -182,7 +182,7 @@ static void mem_usage_del(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 	if (proxy->xnbd->proxy_max_que_size)
 		proxy->cur_use_que -= 1;
 
-	g_mutex_unlock(proxy->curr_use_mutex);
+	g_mutex_unlock(&proxy->curr_use_mutex);
 }
 
 
@@ -352,7 +352,7 @@ void proxy_initialize(struct xnbd_info *xnbd, struct xnbd_proxy *proxy)
 	}
 
 	proxy->cachefd = cachefd;
-	proxy->curr_use_mutex = g_mutex_new();
+	g_mutex_init(&proxy->curr_use_mutex);
 	proxy->cur_use_buf = 0;
 	proxy->cur_use_que = 0;
 }
@@ -361,7 +361,7 @@ void proxy_initialize(struct xnbd_info *xnbd, struct xnbd_proxy *proxy)
 void proxy_shutdown(struct xnbd_proxy *proxy)
 {
 	/* safe to access the values because no other threads are alive */
-	g_mutex_free(proxy->curr_use_mutex);
+	g_mutex_clear(&proxy->curr_use_mutex);
 	if (proxy->cur_use_buf != 0 || proxy->cur_use_que != 0)
 		warn("cur_use_buf %zu cur_use_que %zu", proxy->cur_use_buf, proxy->cur_use_que);
 
