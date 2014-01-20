@@ -99,7 +99,7 @@ struct xnbd_proxy {
 	char *shared_buff;
 
 
-	GMutex *curr_use_mutex;
+	GMutex curr_use_mutex;
 	/* the size of internal buffer use of the proxy server */
 	size_t cur_use_buf;
 	/* the number of pending requests in the proxy server */
