@@ -315,7 +315,19 @@ void proxy_initialize_forwarder(struct xnbd_proxy *proxy, int remotefd)
 
 void proxy_shutdown_forwarder(struct xnbd_proxy *proxy)
 {
-	/* do not need mem_usage_add() here */
+	/*
+	 * The purpose of the memory usage management is to avoid the situation
+	 * where the server consumes extraordinary memory. It is not intended
+	 * to accurately and strictly limit the memory use of the server.
+	 *
+	 * priv_stop_forwarder is a statically allocated object, and it is used
+	 * only when the shutdown or reconnect of the proxy is invoked. I think
+	 * it's okay that this object is out-of-scope of the memory usage
+	 * management.
+	 *
+	 * Actually, the current code does not have mem_usage_del() for
+	 * priv_stop_forwarder. See forwader_rx_thread_mainloop().
+	 */
 	g_async_queue_push(proxy->fwd_tx_queue, &priv_stop_forwarder);
 
 	pthread_join(proxy->tid_fwd_tx, NULL);
