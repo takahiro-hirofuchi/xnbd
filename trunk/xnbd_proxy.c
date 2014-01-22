@@ -190,7 +190,22 @@ int recv_request(struct proxy_session *ps)
 {
 	struct xnbd_proxy *proxy = ps->proxy;
 	int nbd_client_fd = ps->nbd_fd;
-	struct proxy_priv *priv = g_malloc0(sizeof(struct proxy_priv));
+	/* The proxy server may intensively allocates/frees a huge number of
+	 * proxy_priv objects. Use g_slice_ functions here because it is more
+	 * efficient than malloc(). Even though a client (or xnbd-bgctl)
+	 * queues a huge number of requests, the memory consumption of the
+	 * proxy server will not largely exceed proxy_max_buf_size.
+	 *
+	 * Contrarily, using malloc() may cause the proxy server to consume
+	 * huge memory beyond than proxy_max_buf_size.
+	 *
+	 * But, it should be noted that read_buff and write_buff are still
+	 * allocated by malloc() because the buffer size of each request will
+	 * be different. If proxy_max_buf_size is used, keep your eyes on
+	 * memory consumption of the proxy server when a client (not
+	 * xnbd-bgctl) intensively sends a large number of requests.
+	 **/
+	struct proxy_priv *priv = g_slice_new0(struct proxy_priv);
 
 
 	uint32_t iotype = 0;
@@ -489,7 +504,7 @@ void *tx_thread_main(void *arg)
 			g_free(priv->write_buff);
 
 		mem_usage_del(ps->proxy, priv);
-		g_free(priv);
+		g_slice_free(struct proxy_priv, priv);
 
 		if (need_exit)
 			break;
