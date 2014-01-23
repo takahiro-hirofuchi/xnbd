@@ -14,10 +14,11 @@ xNBD Change Log
 0.3.0
 -----
 
-Bugfixes:
+Bugfixes
+~~~~~~~~
  * xnbd-server: Fix --readonly option for the proxy server. Reject write
      requests from clients, but may update the cache image file.
- * xnbd-server: Fix erroneous assertions caused by xnbd-bgctl (issue #fillme).
+ * xnbd-server: Fix erroneous assertions caused by xnbd-bgctl (issues #6 and #8).
 
 Improvements
 ~~~~~~~~~~~~
