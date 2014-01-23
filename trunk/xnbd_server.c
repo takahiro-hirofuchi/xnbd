@@ -703,12 +703,12 @@ static struct option longopts[] = {
 	{"inetd", no_argument, NULL, 'i'},
 	{"target-exportname", required_argument, NULL, 'n'},
 	{"clear-bitmap", no_argument, NULL, 'z'},
-	{"max-queue-size", required_argument, NULL, 'q'},
-	{"max-mem-size", required_argument, NULL, 'm'},
+	{"max-queue-size", required_argument, NULL, 'Q'},
+	{"max-buf-size", required_argument, NULL, 'B'},
 	{NULL, 0, NULL, 0},
 };
 
-static const char *opt_string = "tpchvl:G:drL:STF:inq:m:";
+static const char *opt_string = "tpchvl:G:drL:STF:inQ:B:";
 
 
 static const char *help_string = "\
@@ -732,8 +732,8 @@ Options (Proxy mode):\n\
                  set the export name to request from a xnbd-wrapper target\n\
   --max-queue-size SIZE\n\
                  set the limit of the request queue size (default: 0, no limit)\n\
-  --max-mem-size SIZE (bytes)\n\
-                 set the limit of maximum memory usage (default: 0, no limit)\n\
+  --max-buf-size SIZE (bytes)\n\
+                 set the limit of internal buffer usage (default: 0, no limit)\n\
   --clear-bitmap clear an existing bitmap file (default: re-use previous state)\n\
 ";
 
@@ -923,14 +923,14 @@ int main(int argc, char **argv) {
 				info("listen port %d", lport);
 				break;
 
-			case 'q':
+			case 'Q':
 				proxy_max_que_size = strtoul(optarg, NULL, 0);
 				info("max_queue_size %zu", proxy_max_que_size);
 				break;
 
-			case 'm':
+			case 'B':
 				proxy_max_buf_size = strtoul(optarg, NULL, 0);
-				info("max_mem_size %zu", proxy_max_buf_size);
+				info("max_buf_size %zu", proxy_max_buf_size);
 				break;
 
 			case 'r':
@@ -1053,7 +1053,7 @@ int main(int argc, char **argv) {
 		if (xnbd.cmd == xnbd_cmd_proxy)
 			xnbd.proxy_max_buf_size = proxy_max_buf_size;
 		else
-			err("max_mem_size option is valid only for the proxy mode");
+			err("max_buf_size option is valid only for the proxy mode");
 	}
 
 	/* Note: necessary options must be initialized beforehand */
