@@ -33,6 +33,7 @@ Improvements
      according to the percentage of actually cached blocks.
  * xnbd-wrapper: Support passing custom --max-(buf|queue)-size to xnbd-server
  * xnbd-register: Add support for wrapper options max_buf_size and max_queue_size
+ * xnbd-register: Fix warning on unknown wrapper option keys
 
 
 0.2.0-rc2
