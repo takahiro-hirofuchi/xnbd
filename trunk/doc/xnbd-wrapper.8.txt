@@ -15,6 +15,7 @@ SYNOPSIS
 *xnbd-wrapper* [ --imgfile 'IMAGE' [--imgfile 'IMAGE' ...] ]
     [--laddr 'ADDRESS'] [--lport 'PORT'] [--socket 'PATH'] [--xnbd-server 'PATH']
     [--daemonize] [--logpath 'PATH']
+    [--max-mem-size 'NUMBER'] [--max-queue-size 'NUMBER']
 
 
 DESCRIPTION
@@ -95,6 +96,14 @@ The following options are supported:
 
 *--readonly*::
     Invoke xnbd-server(8) instances using parameter --readonly.
+
+*--max-queue-size* 'NUMBER'::
+    Parameter forwarded to proxy mode xnbd-server on invocation.
+    See *xnbd-server(8)* for details, please.
+
+*--max-mem-size* 'NUMBER'::
+    Parameter forwarded to proxy mode xnbd-server on invocation.
+    See *xnbd-server(8)* for details, please.
 
 
 SEE ALSO
