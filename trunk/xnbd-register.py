@@ -79,7 +79,7 @@ def check_syntax(data, config_file):
 
 			ukeys = config_keys - wrapper_keys
 			if (ukeys):
-				vprint("WARNING: Unknown wrapper option(s): %s\n" % reduce(lambda x,y: x + y,  ["%s"% (x) for x in ukeys]))
+				vprint("WARNING: Unknown wrapper option(s): %s\n" % ", ".join(ukeys))
 			continue
 
 		elif (key.startswith("nbd")):
