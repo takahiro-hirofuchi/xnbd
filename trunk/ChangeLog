@@ -32,6 +32,7 @@ Improvements
  * xnbd-bgctl: Improve the progress bar to be more accurate. Go forward
      according to the percentage of actually cached blocks.
  * xnbd-wrapper: Support passing custom --max-(buf|queue)-size to xnbd-server
+ * xnbd-register: Add support for wrapper options max_buf_size and max_queue_size
 
 
 0.2.0-rc2
