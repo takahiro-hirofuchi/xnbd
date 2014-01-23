@@ -24,7 +24,7 @@ Improvements
  * xnbd-server: Add --queue-size parameter and a default limit of 1000 queued
      requests (for all queues in total) so that a slow disk and fast network
      no longer force the host into swapping
- * xnbd-server: Add --max-queue-size and --max-mem-size parameters that limit
+ * xnbd-server: Add --max-queue-size and --max-buf-size parameters that limit
      memory usage of xnbd-server.
  * xnbd-server: Fix version output by --version
  * xnbd-bgctl: Limit the number of asynchronous requests to avoid huge memory
