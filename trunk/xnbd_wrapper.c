@@ -976,11 +976,13 @@ struct exec_params {
 	const char *target_mode;
 	int readonly;
 	int syslog;
+	const char *proxy_max_que_size_str;
+	const char *proxy_max_buf_size_str;
 };
 
 static void exec_xnbd_server(struct exec_params *params, char *fd_num, const t_disk_data * disk_data)
 {
-	char *args[8 + 4 + 2];
+	char *args[8 + 4 + 2 + 4];
 	int i = 0;
 	args[i] = (char *)params->binpath;
 
@@ -999,6 +1001,15 @@ static void exec_xnbd_server(struct exec_params *params, char *fd_num, const t_d
 
 	if (disk_data->proxy.target_host)
 	{
+		if (params->proxy_max_que_size_str) {
+			args[++i] = (char *)"--max-queue-size";
+			args[++i] = (char *)params->proxy_max_que_size_str;
+		}
+		if (params->proxy_max_buf_size_str) {
+			args[++i] = (char *)"--max-buf-size";
+			args[++i] = (char *)params->proxy_max_buf_size_str;
+		}
+
 		if (disk_data->proxy.target_exportname) {
 			args[++i] = (char *)"--target-exportname";
 			args[++i] = disk_data->proxy.target_exportname;
@@ -1109,26 +1120,30 @@ static void query_remote_disk_size(off_t * p_disk_size_bytes, const char * host,
 static const char help_string[] =
 	"\n\n"
 	"Usage: \n"
-	"  %s [--lport port] [--xnbd-server path-to-xnbdserver] [--imgfile disk-image-file] [--laddr listen-addr] [--socket socket-path]\n"
+	"  %s [options]\n"
 	"\n"
 	"Options: \n"
-	"  --daemonize   run wrapper as a daemon process\n"
-	"  --cow         run server instances as a cow target\n"
-	"  --readonly    run server instances as a readonly target.\n"
-	"  --lport       Listen port (default: 8520).\n"
-	" (--port)       Deprecated, please use --lport instead.\n"
-	"  --xnbd-bgctl  Path to xnbd-bgctl executable.\n"
-	"  --xnbd-server Path to xnbd-server executable.\n"
-	"  --imgfile     Path to disk image file. This options can be used multiple times.\n"
-	"                You can also use xnbd-wrapper-ctl to (de)register disk images dynamically.\n"
-	"  --logpath PATH Use the given path for logging (default: stderr/syslog)\n"
-	"  --laddr       Listen address.\n"
-	"  --socket      Unix socket path to listen on (default: /var/run/xnbd-wrapper.ctl).\n"
-	"  --syslog      use syslog for logging\n"
+	"  --daemonize    run wrapper as a daemon process\n"
+	"  --cow          run server instances as a cow target\n"
+	"  --readonly     run server instances as a readonly target\n"
+	"  --laddr        listening address\n"
+	"  --lport        listening port (default: 8520)\n"
+	" (--port)        deprecated, use --lport instead\n"
+	"  --xnbd-bgctl   path to the xnbd-bgctl executable\n"
+	"  --xnbd-server  path to the xnbd-server executable\n"
+	"  --imgfile      path to a disk image file. This options can be used multiple times.\n"
+	"                 Use also xnbd-wrapper-ctl to (de)register disk images dynamically.\n"
+	"  --logpath PATH use the given path for logging (default: stderr/syslog)\n"
+	"  --socket       unix socket path to listen on (default: /var/run/xnbd-wrapper.ctl).\n"
+	"  --syslog       use syslog for logging\n"
+	"  --max-queue-size SIZE\n"
+	"                 set the limit of the request queue size per xnbd-server process (default: 0, no limit)\n"
+	"  --max-buf-size SIZE (bytes)\n"
+	"                 set the limit of internal buffer usage per xnbd-server process (default: 0, no limit)\n"
 	"\n"
 	"Examples: \n"
 	"  xnbd-wrapper --imgfile /data/disk1\n"
-	"  xnbd-wrapper --imgfile /data/disk1 --imgfile /data/disk2 --xnbd-server /usr/local/bin/xnbd-server --laddr 127.0.0.1 --lport 18520 --socket /run/xnbd-wrapper-1.ctl\n";
+	"  xnbd-wrapper --imgfile /data/disk1 --imgfile /data/disk2 --xnbd-server /usr/local/bin/xnbd-server --xnbd-bgctl /usr/local/bin/xnbd-bgctl --laddr 127.0.0.1 --lport 18520 --socket /tmp/xnbd-wrapper.ctl\n";
 
 
 int main(int argc, char **argv) {
@@ -1183,6 +1198,8 @@ int main(int argc, char **argv) {
 		{"logpath",     required_argument, NULL, 'L'},
 		{"syslog",      no_argument,       NULL, 'S'},
 		{"help",        no_argument,       NULL, 'h'},
+		{"max-queue-size", required_argument, NULL, 'Q'},
+		{"max-buf-size",   required_argument, NULL, 'B'},
 		{ NULL,         0,                 NULL,  0 }
 	};
 
@@ -1203,7 +1220,7 @@ int main(int argc, char **argv) {
         // daemonize, logpath ...  stderr: off,  syslog: off,  lofgile: on  // syslog off !
         // daemonize, logpath, syslog  ...  stderr: off,  syslog: on,   logfile: on
 
-	while((ch = getopt_long(argc, argv, "b:f:hl:p:s:SdL:", longopts, NULL)) != -1) {
+	while((ch = getopt_long(argc, argv, "b:f:hl:p:s:SdL:Q:B:", longopts, NULL)) != -1) {
 		switch (ch) {
 			case 'L':
 				logpath = optarg;
@@ -1260,6 +1277,21 @@ int main(int argc, char **argv) {
 				//log_params.use_syslog = 1;
 				syslog = 1;
 				break;
+			case 'Q':
+			{
+				/* passing 0 is acceptable */
+				const size_t proxy_max_que_size = strtoul(optarg, NULL, 0);
+				info("max_queue_size %zu", proxy_max_que_size);
+				exec_srv_params.proxy_max_que_size_str = optarg;
+				break;
+			}
+			case 'B':
+			{
+				const size_t proxy_max_buf_size = strtoul(optarg, NULL, 0);
+				info("max_buf_size %zu", proxy_max_buf_size);
+				exec_srv_params.proxy_max_buf_size_str = optarg;
+				break;
+			}
 			case 'h':
 				log_params.fd = fileno(stdout);
 				g_log_set_default_handler(custom_log_handler, (void *)&log_params);
@@ -1482,7 +1514,7 @@ int main(int argc, char **argv) {
 						close(fd);
 					}
 
-					info("disk_size_bytes: %ld", disk_size_bytes);
+					info("disk_size_bytes: %jd", disk_size_bytes);
 
 					if (nbd_negotiate_with_client_new_phase_1(conn_sockfd, disk_size_bytes, 0)) {
 						if(close(conn_sockfd))

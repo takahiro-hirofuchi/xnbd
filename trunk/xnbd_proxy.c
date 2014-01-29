@@ -26,7 +26,13 @@
 
 
 /* special entry to let threads exit */
-struct proxy_priv priv_stop_forwarder = { .nreq = 0, .need_exit = 0, .iotype = -1 };
+struct proxy_priv priv_stop_forwarder = {
+	.nreq = 0,
+	.need_exit = 0,
+	.iotype = NBD_CMD_UNDEFINED,
+	.write_buff = NULL,
+	.read_buff = NULL,
+};
 
 struct proxy_session {
 	int nbd_fd;
@@ -71,13 +77,135 @@ void xnbd_proxy_control_cache_block(int ctl_fd, unsigned long index, unsigned lo
 		err("recv header, %m");
 }
 
+#if 0
+void wait_for_low_queue_load(struct proxy_session *ps)
+{
+	if (!ps->proxy->xnbd->proxy_max_queue_size)
+		return;
+
+	struct xnbd_proxy *proxy = ps->proxy;
+	struct timespec sleep_time = { 0, 20*1000*1000 };
+
+	for (;;) {
+		const gint len_fwd_tx_queue = g_async_queue_length(proxy->fwd_tx_queue);
+		const gint len_fwd_rx_queue = g_async_queue_length(proxy->fwd_rx_queue);
+		const gint len_fwd_retry_queue = g_async_queue_length(proxy->fwd_retry_queue);
+		const gint len_tx_queue = g_async_queue_length(ps->tx_queue);
+		const guint len_total = MAX(len_fwd_tx_queue, 0)
+				+ MAX(len_fwd_rx_queue, 0)
+				+ MAX(len_fwd_retry_queue, 0)
+				+ MAX(len_tx_queue, 0);
+
+		dbg("QUEUE SIZES: fwd_tx = %d, fwd_rx = %d, fwd_retry = %d, tx = %d / total = %d",
+				len_fwd_tx_queue, len_fwd_rx_queue, len_fwd_retry_queue, len_tx_queue,
+				len_total);
+
+		if (len_total < ps->proxy->xnbd->proxy_max_queue_size) {
+			break;
+		}
+		nanosleep(&sleep_time, NULL);
+	}
+}
+#endif
+
+
+static void mem_usage_add(struct xnbd_proxy *proxy, struct proxy_priv *priv)
+{
+	/* both buffers should be never allocated at the same time */
+	g_assert((priv->write_buff != NULL && priv->read_buff != NULL) == false);
+
+
+	g_mutex_lock(&proxy->curr_use_mutex);
+
+	if (proxy->xnbd->proxy_max_buf_size) {
+		proxy->cur_use_buf += sizeof(struct proxy_priv);
+
+		/* need to look up buffers, not iotype */
+		if (priv->write_buff || priv->read_buff)
+			proxy->cur_use_buf += priv->iolen;
+	}
+
+	if (proxy->xnbd->proxy_max_que_size)
+		proxy->cur_use_que += 1;
+
+	g_mutex_unlock(&proxy->curr_use_mutex);
+}
+
+static void mem_usage_wait(struct xnbd_proxy *proxy)
+{
+	for (;;) {
+		bool mem_is_full = false;
+		bool queue_is_full = false;
+
+		g_mutex_lock(&proxy->curr_use_mutex);
+
+		if (proxy->xnbd->proxy_max_buf_size) {
+			if (G_UNLIKELY(proxy->cur_use_buf > proxy->xnbd->proxy_max_buf_size)) {
+				mem_is_full = true;
+			}
+		}
+
+		if (proxy->xnbd->proxy_max_que_size) {
+			if (G_UNLIKELY(proxy->cur_use_que > proxy->xnbd->proxy_max_que_size)) {
+				queue_is_full = true;
+			}
+		}
+
+		g_mutex_unlock(&proxy->curr_use_mutex);
+
+		if (G_LIKELY(!mem_is_full && !queue_is_full))
+			break;
+
+		if (mem_is_full)
+			dbg("mem_usage reached limit %zu (bytes). Temporally suspend receiving new requests.",
+					proxy->xnbd->proxy_max_buf_size);
+		if (queue_is_full)
+			dbg("queue_usage reached limit %zu. Temporally suspend receiving new requests.",
+					proxy->xnbd->proxy_max_que_size);
+
+		usleep(200*1000);
+	}
+}
+
+static void mem_usage_del(struct xnbd_proxy *proxy, struct proxy_priv *priv)
+{
+	g_mutex_lock(&proxy->curr_use_mutex);
+
+	if (proxy->xnbd->proxy_max_buf_size) {
+		proxy->cur_use_buf -= sizeof(struct proxy_priv);
+
+		/* need to look up buffers, not iotype */
+		if (priv->write_buff || priv->read_buff)
+			proxy->cur_use_buf -= priv->iolen;
+	}
+
+	if (proxy->xnbd->proxy_max_que_size)
+		proxy->cur_use_que -= 1;
+
+	g_mutex_unlock(&proxy->curr_use_mutex);
+}
 
 
 int recv_request(struct proxy_session *ps)
 {
 	struct xnbd_proxy *proxy = ps->proxy;
 	int nbd_client_fd = ps->nbd_fd;
-	struct proxy_priv *priv = g_malloc0(sizeof(struct proxy_priv));
+	/* The proxy server may intensively allocates/frees a huge number of
+	 * proxy_priv objects. Use g_slice_ functions here because it is more
+	 * efficient than malloc(). Even though a client (or xnbd-bgctl)
+	 * queues a huge number of requests, the memory consumption of the
+	 * proxy server will not largely exceed proxy_max_buf_size.
+	 *
+	 * Contrarily, using malloc() may cause the proxy server to consume
+	 * huge memory beyond than proxy_max_buf_size.
+	 *
+	 * But, it should be noted that read_buff and write_buff are still
+	 * allocated by malloc() because the buffer size of each request will
+	 * be different. If proxy_max_buf_size is used, keep your eyes on
+	 * memory consumption of the proxy server when a client (not
+	 * xnbd-bgctl) intensively sends a large number of requests.
+	 **/
+	struct proxy_priv *priv = g_slice_new0(struct proxy_priv);
 
 
 	uint32_t iotype = 0;
@@ -93,7 +221,7 @@ int recv_request(struct proxy_session *ps)
 	priv->reply.error = 0;
 
 	ret = wait_until_readable(nbd_client_fd, ps->wrk_fd);
-	if (ret < 0) 
+	if (ret < 0)
 		goto err_handle;
 
 	ret = nbd_server_recv_request(nbd_client_fd, proxy->xnbd->disksize, &iotype, &iofrom, &iolen, &priv->reply);
@@ -111,15 +239,14 @@ int recv_request(struct proxy_session *ps)
 		goto err_handle;
 	}
 
+	dbg("++++ a new %s request received", nbd_get_iotype_string(iotype));
+
 	if (proxy->xnbd->readonly) {
 		if (iotype == NBD_CMD_WRITE) {
-			warn("write request to readonly cache");
+			warn("NBD_CMD_WRITE to a readonly server. disconnect.");
 			goto err_handle;
 		}
 	}
-
-	dbg("++++recv new request");
-
 
 	unsigned long block_index_start;
 	unsigned long block_index_end;
@@ -135,14 +262,13 @@ int recv_request(struct proxy_session *ps)
 	priv->block_index_end   = block_index_end;
 
 
-
 	if (iotype == NBD_CMD_WRITE) {
 		priv->write_buff = g_malloc(iolen);
 
 		/*
 		 * Receive write data to a temporary buffer.
 		 *
-		 * Cache disk I/O is allowed only in the completion thread. 
+		 * Cache disk I/O is allowed only in the completion thread.
 		 * This ensures all disk I/O is serialized.
 		 *
 		 * If the proxy server wrote data to the cache disk here,
@@ -168,6 +294,11 @@ int recv_request(struct proxy_session *ps)
 		goto err_handle;
 	}
 
+
+	// wait_for_low_queue_load(ps);
+	mem_usage_wait(proxy);
+
+	mem_usage_add(proxy, priv);
 	g_async_queue_push(proxy->fwd_tx_queue, priv);
 
 
@@ -177,6 +308,9 @@ int recv_request(struct proxy_session *ps)
 err_handle:
 	info("start terminating session (nbd_fd %d wrk_fd %d)", ps->nbd_fd, ps->wrk_fd);
 	priv->need_exit = 1;
+	priv->iotype = NBD_CMD_UNDEFINED;
+
+	mem_usage_add(proxy, priv);
 	g_async_queue_push(proxy->fwd_tx_queue, priv);
 
 	return -1;
@@ -196,6 +330,19 @@ void proxy_initialize_forwarder(struct xnbd_proxy *proxy, int remotefd)
 
 void proxy_shutdown_forwarder(struct xnbd_proxy *proxy)
 {
+	/*
+	 * The purpose of the memory usage management is to avoid the situation
+	 * where the server consumes extraordinary memory. It is not intended
+	 * to accurately and strictly limit the memory use of the server.
+	 *
+	 * priv_stop_forwarder is a statically allocated object, and it is used
+	 * only when the shutdown or reconnect of the proxy is invoked. I think
+	 * it's okay that this object is out-of-scope of the memory usage
+	 * management.
+	 *
+	 * Actually, the current code does not have mem_usage_del() for
+	 * priv_stop_forwarder. See forwader_rx_thread_mainloop().
+	 */
 	g_async_queue_push(proxy->fwd_tx_queue, &priv_stop_forwarder);
 
 	pthread_join(proxy->tid_fwd_tx, NULL);
@@ -207,9 +354,6 @@ void proxy_shutdown_forwarder(struct xnbd_proxy *proxy)
 /* called in a proxy process */
 void proxy_initialize(struct xnbd_info *xnbd, struct xnbd_proxy *proxy)
 {
-	g_thread_init(NULL);
-
-
 	proxy->xnbd  = xnbd;
 
 	/* keep reference count! */
@@ -224,7 +368,7 @@ void proxy_initialize(struct xnbd_info *xnbd, struct xnbd_proxy *proxy)
 	int cachefd = open(xnbd->proxy_diskpath, O_RDWR | O_CREAT | O_NOATIME, S_IRUSR | S_IWUSR);
 	if (cachefd < 0)
 		err("open");
-	
+
 	off_t size = get_disksize(cachefd);
 	if (size != xnbd->disksize) {
 		warn("cache disk size (%ju) != target disk size (%ju)", size, xnbd->disksize);
@@ -235,11 +379,19 @@ void proxy_initialize(struct xnbd_info *xnbd, struct xnbd_proxy *proxy)
 	}
 
 	proxy->cachefd = cachefd;
+	g_mutex_init(&proxy->curr_use_mutex);
+	proxy->cur_use_buf = 0;
+	proxy->cur_use_que = 0;
 }
 
 
 void proxy_shutdown(struct xnbd_proxy *proxy)
 {
+	/* safe to access the values because no other threads are alive */
+	g_mutex_clear(&proxy->curr_use_mutex);
+	if (proxy->cur_use_buf != 0 || proxy->cur_use_que != 0)
+		warn("cur_use_buf %zu cur_use_que %zu", proxy->cur_use_buf, proxy->cur_use_que);
+
 	g_async_queue_unref(proxy->fwd_retry_queue);
 	g_async_queue_unref(proxy->fwd_tx_queue);
 	g_async_queue_unref(proxy->fwd_rx_queue);
@@ -343,13 +495,16 @@ void *tx_thread_main(void *arg)
 			}
 		}
 
+		/* check the buffer pointer. Even if iotype is
+		 * NBD_CMD_UNDEFINED, the buffer may be allocated. */
 		if (priv->read_buff)
 			g_free(priv->read_buff);
 
 		if (priv->write_buff)
 			g_free(priv->write_buff);
 
-		g_free(priv);
+		mem_usage_del(ps->proxy, priv);
+		g_slice_free(struct proxy_priv, priv);
 
 		if (need_exit)
 			break;
@@ -434,6 +589,12 @@ int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
 					g_strlcpy(query.rhost, proxy->xnbd->proxy_rhost, sizeof(query.rhost));
 					g_strlcpy(query.rport, proxy->xnbd->proxy_rport, sizeof(query.rport));
 					query.master_pid = getppid();
+
+					query.max_use_buf = proxy->xnbd->proxy_max_buf_size;
+					query.cur_use_buf = proxy->cur_use_buf;
+					query.max_use_que = proxy->xnbd->proxy_max_que_size;
+					query.cur_use_que = proxy->cur_use_que;
+
 					info("send current status (wrk_fd %d)", wrk_fd);
 					net_send_all_or_error(wrk_fd, &query, sizeof(query));
 				}
@@ -534,10 +695,13 @@ int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
 		{
 			unsigned int remaining_sessions = g_list_length(conn_list);
 			if (remaining_sessions > 0) {
-				/* If there is no xnbd-bgctl session, it's a bug. */
+				/* If there is a non xnbd-bgctl session, it's a bug. */
 				warn("terminate %u xnbd-bgctl session(s)", remaining_sessions);
 			}
 		}
+
+		if (proxy->cur_use_buf != 0 || proxy->cur_use_que != 0)
+			warn("terminate pending requests");
 
 		/* if there are no sessions, run clean up and bye */
 
@@ -556,7 +720,13 @@ int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
 			pthread_join(ps->tid_rx, NULL);
 			pthread_join(ps->tid_tx, NULL);
 
-			/* no in-flight request */
+			/* This assertion is called after we confirmed that
+			 * there are no other threads using ps->tx_queue. When
+			 * this proxy session was active, the tx thread (of the
+			 * thread ID ps->tid_tx) was waiting for this queue.
+			 * But, at this line, the code is in the cleanup phase.
+			 * The session is not active and the thread already
+			 * exited. If this assertion failed, it's a bug. */
 			g_assert(g_async_queue_length(ps->tx_queue) == 0);
 			g_async_queue_unref(ps->tx_queue);
 			close(ps->pipe_read_fd);

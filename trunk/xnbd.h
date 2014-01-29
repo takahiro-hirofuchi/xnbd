@@ -166,6 +166,8 @@ struct xnbd_info {
 	char *proxy_target_exportname;  /* export name to request from a xnbd-wrapper target */
 	bool proxy_clear_bitmap;
 
+	size_t proxy_max_buf_size;
+	size_t proxy_max_que_size;
 };
 
 
@@ -233,9 +235,9 @@ int cachestat_shutdown(void);
 
 
 void get_io_range_index(off_t iofrom, size_t iolen, unsigned long *index_start, unsigned long *index_end);
-void *mmap_iorange(struct xnbd_info *xnbd, int fd, off_t iofrom, size_t iolen, char **mmaped_buf, size_t *mmaped_len, off_t *mmaped_offset);
+void *mmap_iorange(const off_t disksize, const bool readonly, const int fd, const off_t iofrom, const size_t iolen, char **mmaped_buf, size_t *mmaped_len, off_t *mmaped_offset);
 int poll_request_arrival(struct xnbd_session *ses);
-void check_disksize(char *diskpath, off_t disksize);
+void check_disksize(char *diskpath, off_t disksize, bool force_cblock);
 unsigned long get_disk_nblocks(off_t disksize);
 
 

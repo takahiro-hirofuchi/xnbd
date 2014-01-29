@@ -23,6 +23,11 @@
 
 #include "xnbd.h"
 #include "xnbd_common.h"
+#include "config.h"
+
+
+
+
 
 /* called once in the master process */
 void xnbd_initialize(struct xnbd_info *xnbd)
@@ -698,10 +703,12 @@ static struct option longopts[] = {
 	{"inetd", no_argument, NULL, 'i'},
 	{"target-exportname", required_argument, NULL, 'n'},
 	{"clear-bitmap", no_argument, NULL, 'z'},
+	{"max-queue-size", required_argument, NULL, 'Q'},
+	{"max-buf-size", required_argument, NULL, 'B'},
 	{NULL, 0, NULL, 0},
 };
 
-static const char *opt_string = "tpchvl:G:drL:STF:in";
+static const char *opt_string = "tpchvl:G:drL:STF:inQ:B:";
 
 
 static const char *help_string = "\
@@ -720,15 +727,18 @@ Options: \n\
   --syslog       use syslog for logging\n\
   --inetd        set the inetd mode (use fd 0 for TCP connection)\n\
 \n\
-Proxy mode only:\n\
+Options (Proxy mode):\n\
   --target-exportname\n\
                  set the export name to request from a xnbd-wrapper target\n\
+  --max-queue-size SIZE\n\
+                 set the limit of the request queue size (default: 0, no limit)\n\
+  --max-buf-size SIZE (bytes)\n\
+                 set the limit of internal buffer usage (default: 0, no limit)\n\
   --clear-bitmap clear an existing bitmap file (default: re-use previous state)\n\
 ";
 
 
 
-static const char *version = "xNBD (version 0.1.0-pre)";
 static const char *copyright = "\
 Copyright (C) 2008-2013 National Institute of Advanced Industrial Science\n\
 and Technology\n\
@@ -800,6 +810,8 @@ int main(int argc, char **argv) {
 	struct xnbd_info xnbd;
 	enum xnbd_cmd_type cmd = xnbd_cmd_unknown;
 	int lport = XNBD_PORT;
+	size_t proxy_max_que_size = 0;
+	size_t proxy_max_buf_size = 0;
 	int daemonize = 0;
 	int readonly = 0;
 	int connected_fd = -1;
@@ -911,6 +923,16 @@ int main(int argc, char **argv) {
 				info("listen port %d", lport);
 				break;
 
+			case 'Q':
+				proxy_max_que_size = strtoul(optarg, NULL, 0);
+				info("max_queue_size %zu", proxy_max_que_size);
+				break;
+
+			case 'B':
+				proxy_max_buf_size = strtoul(optarg, NULL, 0);
+				info("max_buf_size %zu", proxy_max_buf_size);
+				break;
+
 			case 'r':
 				readonly = 1;
 				info("readonly enabled");
@@ -964,7 +986,7 @@ int main(int argc, char **argv) {
 			show_help_and_exit(NULL);
 
 		case xnbd_cmd_version:
-			printf("%s\n\n", version);
+			printf("xNBD (version %s)\n\n", PACKAGE_VERSION);
 			printf("%s\n", copyright);
 			exit(EXIT_SUCCESS);
 
@@ -1015,9 +1037,29 @@ int main(int argc, char **argv) {
 			err("not reached");
 	}
 
+	/* set system-wide options */
 	xnbd.cmd = cmd;
 	xnbd.readonly = readonly;
+
+	/* set mode-specific options */
+	if (proxy_max_que_size > 0) {
+		if (xnbd.cmd == xnbd_cmd_proxy)
+			xnbd.proxy_max_que_size = proxy_max_que_size;
+		else
+			err("max_queue_size option is valid only for the proxy mode");
+	}
+
+	if (proxy_max_buf_size > 0) {
+		if (xnbd.cmd == xnbd_cmd_proxy)
+			xnbd.proxy_max_buf_size = proxy_max_buf_size;
+		else
+			err("max_buf_size option is valid only for the proxy mode");
+	}
+
+	/* Note: necessary options must be initialized beforehand */
 	xnbd_initialize(&xnbd);
+
+
 
 	PAGESIZE = (unsigned int) getpagesize();
 	if (CBLOCKSIZE % PAGESIZE != 0)
@@ -1026,8 +1068,9 @@ int main(int argc, char **argv) {
 	if (xnbd.cmd == xnbd_cmd_proxy)
 		cachestat_initialize(DEFAULT_CACHESTAT_PATH, xnbd.nblocks);
 
+	/* In any mode, daemonize must be done finally */
 	if (daemonize) {
-		if (inetd) 
+		if (inetd)
 			err("--daemon cannot be specified with --inetd.");
 
 		int ret = daemon(0, 0);

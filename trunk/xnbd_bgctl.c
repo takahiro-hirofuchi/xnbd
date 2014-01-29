@@ -26,7 +26,102 @@
 #include <sys/ioctl.h>
 
 
+
+struct _SizedAsyncQueue {
+	GMutex mutex;
+	GCond  cond_pop;  // pop-able
+	GCond  cond_push; // push-able
+	GQueue queue;
+
+	size_t max_size;
+	size_t size;
+};
+
+typedef struct _SizedAsyncQueue SizedAsyncQueue;
+
+SizedAsyncQueue *sized_async_queue_new(size_t max_size)
+{
+	SizedAsyncQueue* q = g_new(SizedAsyncQueue, 1);
+
+	g_mutex_init(&q->mutex);
+	g_cond_init(&q->cond_pop);
+	g_cond_init(&q->cond_push);
+	g_queue_init(&q->queue);
+
+	q->max_size = max_size;
+	q->size = 0;
+
+	return q;
+}
+
+void sized_async_queue_push(SizedAsyncQueue *q, void *data)
+{
+	g_return_if_fail(q);
+	g_return_if_fail(data);
+
+	g_mutex_lock(&q->mutex);
+	{
+		while (!(q->size < q->max_size)) {
+			g_cond_wait(&q->cond_push, &q->mutex);
+		}
+
+		// g_message("%zu < %zu", q->size, q->max_size);
+
+		g_queue_push_head(&q->queue, data);
+		q->size += 1;
+
+		g_cond_signal(&q->cond_pop);
+	}
+	g_mutex_unlock(&q->mutex);
+}
+
+void *sized_async_queue_pop(SizedAsyncQueue *q)
+{
+	void *data;
+
+	g_return_val_if_fail(q, NULL);
+
+	g_mutex_lock(&q->mutex);
+	{
+		/* must check queue is poppable */
+		while (!g_queue_peek_tail_link(&q->queue)) {
+			g_cond_wait(&q->cond_pop, &q->mutex);
+		}
+
+		data = g_queue_pop_tail(&q->queue);
+		g_assert(data);
+
+		q->size -= 1;
+		if (q->size < q->max_size) {
+			g_cond_signal(&q->cond_push);
+		}
+	}
+	g_mutex_unlock(&q->mutex);
+
+	return data;
+}
+
+void sized_async_queue_destroy(SizedAsyncQueue *q)
+{
+	g_return_if_fail(q);
+
+	if (q->size)
+		warn("destroy a queue with data");
+
+	g_mutex_clear(&q->mutex);
+	g_cond_clear(&q->cond_pop);
+	g_cond_clear(&q->cond_push);
+	g_queue_clear(&q->queue);
+
+	g_free(q);
+}
+
+
+
+
 struct progress_info {
+	bool enabled;
+
 	unsigned long blocks_total;
 	unsigned long blocks_from_cache;
 	unsigned long blocks_from_remote;
@@ -60,15 +155,14 @@ void reconnect(char *unix_path, char *rhost, char *rport, const char *exportname
 
 	int ret;
 	off_t size_dummy;
-	if (exportname) {
+	if (exportname)
 		ret = nbd_negotiate_with_server_new(fwd_fd, &size_dummy, NULL, strlen(exportname), exportname);
-	} else {
+	else
 		ret = nbd_negotiate_with_server2(fwd_fd, &size_dummy, NULL);
-	}
 
-	if (ret) {
+	if (ret)
 		err("negotiation failed");
-	}
+
 
 	enum xnbd_proxy_cmd_type cmd = XNBD_PROXY_CMD_REGISTER_FORWARDER_FD;
 	net_send_all_or_abort(fd, &cmd, sizeof(cmd));
@@ -211,11 +305,18 @@ void cache_all_blocks_with_dedicated_connection(char *unix_path, unsigned long *
 
 struct cache_rx_ctl {
 	int ctl_fd;
-	GAsyncQueue *q;
+	SizedAsyncQueue *q;
+
+	unsigned long nblocks;
+	bool progress_enabled;
 };
 
 char cache_rx_req_eof;
-char cache_rx_req_data;
+char cache_rx_req_remote;
+char cache_rx_req_cached;
+
+struct progress_info *progress_setup(unsigned long nblocks);
+void progress_refresh_draw(struct progress_info *p);
 
 void *cache_all_blocks_receiver_main(void *arg)
 {
@@ -225,15 +326,28 @@ void *cache_all_blocks_receiver_main(void *arg)
 	block_all_signals();
 	info("create cache_rx thread %lu", pthread_self());
 
+	struct progress_info *progress = progress_setup(cache_rx->nblocks);
+	progress->enabled = cache_rx->progress_enabled;
+	progress_refresh_draw(progress);
+
 	for (;;) {
-		char *data = g_async_queue_pop(cache_rx->q);
+		char *data = sized_async_queue_pop(cache_rx->q);
+
 		if (data == &cache_rx_req_eof)
 			break;
-
-		int ret = nbd_client_recv_header(cache_rx->ctl_fd);
-		if (ret < 0)
-			err("recv header, %m");
+		else if (data == &cache_rx_req_remote) {
+			int ret = nbd_client_recv_header(cache_rx->ctl_fd);
+			if (ret < 0)
+				err("recv header, %m");
+			progress->blocks_from_remote += 1;
+		} else {
+			progress->blocks_from_cache += 1;
+		}
+		progress_refresh_draw(progress);
 	}
+
+	//progress_refresh_draw(progress);
+	g_free(progress);
 
 	info("done cache_rx thread %lu", pthread_self());
 
@@ -241,13 +355,15 @@ void *cache_all_blocks_receiver_main(void *arg)
 }
 
 
-void refresh_progress(struct progress_info * p_progress, unsigned int columns) {
+void refresh_progress(struct progress_info * p_progress, unsigned int columns)
+{
 	const unsigned int overhead = 3 + 3 + 1; /* <percent> + "% [" + "]" */
 
 	if (columns < overhead + 1) {
 		/* Terminal too small */
 		return;
 	}
+
 
 	assert(p_progress);
 	assert(p_progress->blocks_from_remote <= p_progress->blocks_total);
@@ -326,6 +442,37 @@ void refresh_progress(struct progress_info * p_progress, unsigned int columns) {
 	p_progress->prev_int_percent = int_percent;
 }
 
+unsigned short int get_column_widths(void)
+{
+	struct winsize terminal_size;
+	int ret = ioctl(STDOUT_FILENO, TIOCGWINSZ, &terminal_size);
+	if (ret < 0) {
+		err("ioctl TIOCGWINSZ, %m");
+		return 0;
+	}
+
+	return terminal_size.ws_col;
+}
+
+struct progress_info *progress_setup(unsigned long nblocks)
+{
+	struct progress_info *p = g_malloc0(sizeof(struct progress_info));
+	p->blocks_total = nblocks;
+
+	return p;
+}
+
+void progress_refresh_draw(struct progress_info *p)
+{
+	if (p->enabled)
+		refresh_progress(p, get_column_widths());
+}
+
+
+/* Increase this value if necessary. The enough number of requests should be
+ * being enqueued into the proxy server to get the maximum speed of of
+ * --cache-all. */
+#define XNBD_BGCTL_ASYNC_DEPTH 1000
 
 void cache_all_blocks_async(char *unix_path, unsigned long *bm, unsigned long nblocks, bool progress_enabled)
 {
@@ -333,54 +480,38 @@ void cache_all_blocks_async(char *unix_path, unsigned long *bm, unsigned long nb
 	start_register_fd(unix_path, &unix_fd, &ctl_fd);
 
 	struct cache_rx_ctl cache_rx;
-	cache_rx.ctl_fd = ctl_fd;
-	cache_rx.q      = g_async_queue_new();
+	cache_rx.ctl_fd  = ctl_fd;
+	cache_rx.q       = sized_async_queue_new(XNBD_BGCTL_ASYNC_DEPTH);
+	cache_rx.nblocks = nblocks;
+	cache_rx.progress_enabled = progress_enabled;
+
 	pthread_t cache_rx_tid = pthread_create_or_abort(cache_all_blocks_receiver_main, &cache_rx);
 
 
-	struct progress_info progress;
-	memset(&progress, 0, sizeof(progress));
-	progress.blocks_total = nblocks;
-
-	struct winsize terminal_size;
-	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &terminal_size) != 0) {
-		terminal_size.ws_col = 0;
-	}
-
 
 	for (unsigned long index = 0; index < nblocks; index++) {
-		if (progress_enabled) {
-			refresh_progress(&progress, terminal_size.ws_col);
-		}
-
 		if (!bitmap_test(bm, index)) {
-			progress.blocks_from_remote++;
 
 			off_t iofrom = (off_t) index * CBLOCKSIZE;
-			// size_t iolen = nblocks * CBLOCKSIZE;
 			size_t iolen = CBLOCKSIZE;
 
 			int ret = nbd_client_send_request_header(ctl_fd, NBD_CMD_BGCOPY, iofrom, iolen, (UINT64_MAX));
 			if (ret < 0)
 				err("send_read_request, %m");
 
-			g_async_queue_push(cache_rx.q, &cache_rx_req_data);
+			sized_async_queue_push(cache_rx.q, &cache_rx_req_remote);
 		} else {
-			progress.blocks_from_cache++;
+			sized_async_queue_push(cache_rx.q, &cache_rx_req_cached);
 		}
 	}
 
-	if (progress_enabled) {
-		refresh_progress(&progress, terminal_size.ws_col);
-	}
 
-	g_async_queue_push(cache_rx.q, &cache_rx_req_eof);
+	sized_async_queue_push(cache_rx.q, &cache_rx_req_eof);
 	pthread_join(cache_rx_tid, NULL);
-	g_async_queue_unref(cache_rx.q);
+	sized_async_queue_destroy(cache_rx.q);
 
 	end_register_fd(unix_fd, ctl_fd);
 }
-
 
 
 
@@ -436,14 +567,14 @@ Commands:\n\
   --query       query current status of the proxy mode\n\
   --cache-all   cache all blocks\n\
   --cache-all2  cache all blocks with the background connection\n\
-  --switch      stops the proxy mode and restarts in target mode\n\
+  --switch      stop the proxy mode and restart the target mode\n\
   --reconnect   reconnect the forwarding session\n\
  (--shutdown)   alias to --switch, deprecated\n\
 \n\
 Options:\n\
-  --exportname  image to request from a wrapped server\n\
-  --progress    show progress bar on stderr (default: disabled)\n\
-  --force       ignore risks (default: disabled)\n\
+  --exportname NAME  reconnect to a given image\n\
+  --progress         show a progress bar on stderr (default: disabled)\n\
+  --force            force switch even if all blocks are not cached (default: disabled)\n\
 ";
 
 
@@ -482,8 +613,6 @@ static void wait_for_target_mode(int monitor_fd) {
 
 int main(int argc, char **argv)
 {
-	g_thread_init(NULL);
-
 	enum xnbd_bgctl_cmd_type {
 		xnbd_bgctl_cmd_unknown,
 		xnbd_bgctl_cmd_query,
@@ -493,7 +622,7 @@ int main(int argc, char **argv)
 		xnbd_bgctl_cmd_reconnect,
 	} cmd = xnbd_bgctl_cmd_unknown;
 
-	const char * exportname = NULL;
+	const char *exportname = NULL;
 	bool progress_enabled = false;
 	bool force_enabled = false;
 
@@ -509,7 +638,7 @@ int main(int argc, char **argv)
 			case 'q':
 				if (cmd != xnbd_bgctl_cmd_unknown)
 					show_help_and_exit("specify one mode");
-			
+
 				cmd = xnbd_bgctl_cmd_query;
 				break;
 
@@ -594,6 +723,13 @@ int main(int argc, char **argv)
 	}
 
 
+	if (exportname && cmd != xnbd_bgctl_cmd_reconnect)
+		warn("ignore --exportname");
+	if (force_enabled && cmd != xnbd_bgctl_cmd_switch)
+		warn("ignore --force");
+	if (progress_enabled)
+		if (cmd != xnbd_bgctl_cmd_cache_all && cmd != xnbd_bgctl_cmd_cache_all2)
+			warn("ignore --progress");
 
 
 	size_t bmlen;
@@ -606,6 +742,8 @@ int main(int argc, char **argv)
 	info("%s (%s): disksize %ju", query->diskpath, query->bmpath, query->disksize);
 	info("forwarded to %s:%s", query->rhost, query->rport);
 	info("cached blocks %lu / %lu (%.1f%%)", cached, nblocks, nblocks ? (cached * 100.0 / nblocks) : 0.0);
+	info("internal buffer usage: %zu bytes / %zu bytes (%.1f%%)", query->cur_use_buf, query->max_use_buf, query->max_use_buf ? (query->cur_use_buf * 100.0 / query->max_use_buf) : 0.0);
+	info("pending request count: %zu / %zu (%.1f%%)", query->cur_use_que, query->max_use_que, query->max_use_que ? (query->cur_use_que * 100.0 / query->max_use_que) : 0.0);
 
 	switch (cmd) {
 		case xnbd_bgctl_cmd_unknown:

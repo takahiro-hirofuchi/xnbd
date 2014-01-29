@@ -71,7 +71,7 @@ def check_syntax(data, config_file):
 			sys.exit(1)
 
 		if (key == WRAPPER_KEY):
-			wrapper_keys = set(["address", "port", "socket",	"volumes", "logpath"])
+			wrapper_keys = set(["address", "port", "socket", "volumes", "logpath", "max_buf_size", "max_queue_size"])
 			config_keys = set(data[key].keys())
 			if (config_keys < wrapper_keys):
 				vprint("Incomplete wrapper configuration. Was expecting `address', `port', `socket' and `volumes' in configuration file `%s'"  % config_file)
@@ -79,7 +79,7 @@ def check_syntax(data, config_file):
 
 			ukeys = config_keys - wrapper_keys
 			if (ukeys):
-				vprint("WARNING: Unknown wrapper option(s): %s\n" % reduce(lambda x,y: x + y,  ["%s"% (x) for x in ukeys]))
+				vprint("WARNING: Unknown wrapper option(s): %s\n" % ", ".join(ukeys))
 			continue
 
 		elif (key.startswith("nbd")):
@@ -129,6 +129,16 @@ def stop_client(device, data):
 def start_wrapper(data):
 	start_cmd = [XNBD_WRAPPER, "--daemonize", "--logpath", data['logpath'],
 		"--laddr", data['address'], "--port", str(data['port']), "--socket", data['socket']]
+
+	for parameter, config_key in (
+			('--max-queue-size', 'max_queue_size'),
+			('--max-buf-size',   'max_buf_size'),
+			):
+		number = int(data.get(config_key, 0))
+		if number > 0:
+			start_cmd.append(parameter)
+			start_cmd.append(str(number))
+
 	if call(start_cmd, "Starting `%s' ..." % (XNBD_WRAPPER)):
 		sys.exit(1)
 

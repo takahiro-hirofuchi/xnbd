@@ -104,7 +104,7 @@ void get_io_range_index(off_t iofrom, size_t iolen, unsigned long *index_start, 
 
 
 
-void *mmap_iorange(struct xnbd_info *xnbd, int fd, off_t iofrom, size_t iolen, char **mmaped_buf, size_t *mmaped_len, off_t *mmaped_offset)
+void *mmap_iorange(const off_t disksize, const bool readonly, const int fd, const off_t iofrom, const size_t iolen, char **mmaped_buf, size_t *mmaped_len, off_t *mmaped_offset)
 {
 	unsigned long index_start, index_end;
 	char *buf;
@@ -123,7 +123,7 @@ void *mmap_iorange(struct xnbd_info *xnbd, int fd, off_t iofrom, size_t iolen, c
 	//		mapping_start, mapping_start + mapping_length,
 	//		mapping_length);
 
-	if ((mapping_start + (off_t) mapping_length) > xnbd->disksize)
+	if ((mapping_start + (off_t) mapping_length) > disksize)
 		err("exceed disksize");
 
 
@@ -133,7 +133,7 @@ void *mmap_iorange(struct xnbd_info *xnbd, int fd, off_t iofrom, size_t iolen, c
 	 * 64-bit environments, 32 bit in 32-bit environments.
 	 **/
 
-	if (xnbd->readonly)
+	if (readonly)
 		buf = mmap(NULL, mapping_length, PROT_READ, MAP_SHARED,
 				fd, mapping_start);
 	else
@@ -157,7 +157,7 @@ int poll_request_arrival(struct xnbd_session *ses)
 	return wait_until_readable(ses->clientfd, ses->pipe_worker_fd);
 }
 
-void check_disksize(char *diskpath, off_t disksize)
+void check_disksize(char *diskpath, off_t disksize, bool force_cblock)
 {
 	int pgsize = getpagesize();
 
@@ -169,9 +169,12 @@ void check_disksize(char *diskpath, off_t disksize)
 
 	/* A known issue is the end block of the disk; the size of which is not
 	 * a multiple of CBLOCKSIZE. */
-	if (disksize % CBLOCKSIZE)
-		err("disksize %jd is not a multiple of %d (xnbd's cache block size)",
+	if (disksize % CBLOCKSIZE) {
+		warn("disksize %jd is not a multiple of %d (xnbd's cache block size)",
 				disksize, CBLOCKSIZE);
+		if (force_cblock)
+			exit(EXIT_FAILURE);
+	}
 
 	/* off_t becomes 32bit singed integer when no large file support */
 	info("disk %s size %ju B (%ju MB)", diskpath, disksize, disksize /1024 /1024);
