@@ -1,4 +1,4 @@
-/* 
+/*
  * xNBD - an enhanced Network Block Device program
  *
  * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
@@ -725,7 +725,7 @@ static void *start_filemgr_thread(void * pointer)
 {
 	t_thread_data * const p_thread_data = (t_thread_data *)pointer;
 	const int rbufsize = 128 * 8;
-	
+
 	char buf[rbufsize];
 	char cmd[rbufsize];
 	char arg[rbufsize];

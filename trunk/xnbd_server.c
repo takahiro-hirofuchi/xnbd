@@ -1,4 +1,4 @@
-/* 
+/*
  * xNBD - an enhanced Network Block Device program
  *
  * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
@@ -103,7 +103,7 @@ void do_service(struct xnbd_session *ses)
 {
 	int ret;
 	struct xnbd_info *xnbd = ses->xnbd;
-	
+
 
 	switch (xnbd->cmd) {
 		case xnbd_cmd_target:
@@ -227,7 +227,7 @@ void invoke_new_session(struct xnbd_info *xnbd, int csockfd)
 
 	info("negotiations done");
 
-	pid_t pid = fork_or_abort(); 
+	pid_t pid = fork_or_abort();
 
 	if (pid == 0) {
 		/* worker child does not need master_fd */
@@ -236,7 +236,7 @@ void invoke_new_session(struct xnbd_info *xnbd, int csockfd)
 		if (xnbd->cmd == xnbd_cmd_proxy)
 			close(xnbd->proxy_sockpair_master_fd);
 
-		for (nfds_t j = 0; j < ppoll_neventfds; j++) 
+		for (nfds_t j = 0; j < ppoll_neventfds; j++)
 			close(ppoll_eventfds[j].fd);
 
 		/* worker child does not need descriptors of the other sessions */
@@ -534,7 +534,7 @@ int master_server(int port, void *data, int connect_fd)
 				invoke_new_session(xnbd, csockfd);
 			}
 
-			
+
 			/* must be reinitialized with NULL */
 			g_list_free(socklist);
 			socklist = NULL;
@@ -625,7 +625,7 @@ skip_restarting:
 		//raise(SIGCHLD);
 
 		info("start polling");
-		nready = ppoll(ppoll_eventfds, ppoll_neventfds, NULL, &orig_sigmask); 
+		nready = ppoll(ppoll_eventfds, ppoll_neventfds, NULL, &orig_sigmask);
 		//printf("poll ready %d\n", nready);
 		if (nready == -1) {
 			/* signal catched */
@@ -642,7 +642,7 @@ skip_restarting:
 			if (sockfd < 0)
 				continue;
 
-			if (ppoll_eventfds[i].revents & (POLLHUP | POLLNVAL)) 
+			if (ppoll_eventfds[i].revents & (POLLHUP | POLLNVAL))
 				err("unknown events, %x", ppoll_eventfds[i].revents);
 
 			if (ppoll_eventfds[i].revents & (POLLIN | POLLERR)) {
@@ -753,7 +753,7 @@ Development of xNBD was partially sponsored by Wavecon GmbH <www.wavecon.de>.\n\
 
 
 
-		
+
 
 
 static void show_help_and_exit(const char *msg)
@@ -765,7 +765,7 @@ static void show_help_and_exit(const char *msg)
 	exit(EXIT_SUCCESS);
 }
 
-  
+
 
 static void unset_nonblock(int fd)
 {
@@ -789,7 +789,7 @@ static void deny_multiple_mode_changes(enum xnbd_cmd_type cmd)
 		show_help_and_exit("specify one mode");
 }
 
-/* 
+/*
  * If the case of the --inetd/--daemon mode, xnbd-server uses syslog in the default. If
  * --logpath is specified, the given path, instead of syslog, is used for logging.
  *
@@ -944,7 +944,7 @@ int main(int argc, char **argv) {
 					err("--connected-fd cannot to be specified with --inetd.");
 				connected_fd = atoi(optarg);
 				info("connected fd %d", connected_fd);
-				/* 
+				/*
 				 * In this case, a file descriptor is given in
 				 * the command line. The TCP connection has
 				 * been established in the outside of

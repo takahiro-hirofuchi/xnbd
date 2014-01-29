@@ -1,4 +1,4 @@
-/* 
+/*
  * xNBD - an enhanced Network Block Device program
  *
  * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
@@ -119,7 +119,7 @@ void *mmap_iorange(const off_t disksize, const bool readonly, const int fd, cons
 	size_t mapping_length = (index_end - index_start + 1) * CBLOCKSIZE;
 
 
-	//dbg("mmapping_start %llu mapping_end %llu mapping_length %u", 
+	//dbg("mmapping_start %llu mapping_end %llu mapping_length %u",
 	//		mapping_start, mapping_start + mapping_length,
 	//		mapping_length);
 

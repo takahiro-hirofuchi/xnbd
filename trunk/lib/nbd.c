@@ -1,4 +1,4 @@
-/* 
+/*
  * xNBD - an enhanced Network Block Device program
  *
  * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
@@ -348,8 +348,8 @@ struct nbd_negotiate_pdu_new_2 {
  *
  * From the viewpoint of the client, the new protocol is summarized as follows:
  *
- *    recv pdu_new_0 
- *    send pdu_new_1   
+ *    recv pdu_new_0
+ *    send pdu_new_1
  *    send target_name (any size ok!?)
  *    recv pdu_new_2
  *
@@ -433,14 +433,14 @@ int nbd_negotiate_with_client_new_phase_1(int sockfd, off_t exportsize, int read
 	ret = net_send_all_or_error(sockfd, &pdu2, sizeof(pdu2));
 	if (ret < 0)
 		goto err_out;
-	
+
 
 	dbg("negotiate done");
 
 	return 0;
 
 err_out:
-	warn("negotiation failed"); 
+	warn("negotiation failed");
 	return -1;
 }
 
@@ -551,7 +551,7 @@ static int nbd_negotiate_with_client_common(int sockfd, off_t exportsize, int re
 	pdu.magic  = htonll(NBD_NEGOTIATE_MAGIC_OLD);
 	pdu.size   = htonll(exportsize);
 	pdu.flags  = htonl(flags);
-	
+
 	ret = net_send_all_or_error(sockfd, &pdu, sizeof(pdu));
 	if (ret < 0)
 		goto err_out;
@@ -561,7 +561,7 @@ static int nbd_negotiate_with_client_common(int sockfd, off_t exportsize, int re
 	return 0;
 
 err_out:
-	warn("negotiation failed"); 
+	warn("negotiation failed");
 	return -1;
 }
 

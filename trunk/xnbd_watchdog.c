@@ -1,4 +1,4 @@
-/* 
+/*
  * xNBD - an enhanced Network Block Device program
  *
  * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
@@ -52,7 +52,7 @@ static void nbddev_watchdog(const char *devpath, unsigned int timeout)
 		err("sigaction %m");
 
 	uintptr_t modulo = (uintptr_t) buf % 512;
-	if (modulo) 
+	if (modulo)
 		buf = (char *) ((uintptr_t) buf + (512 - modulo));
 
 
@@ -102,7 +102,7 @@ static int watchdog_main(const char *devpath, int notify, unsigned int polling_i
 
 	/* direct I/O buffer is aligned to a 512-byte boundary */
 	uintptr_t modulo = (uintptr_t) buf % 512;
-	if (modulo) 
+	if (modulo)
 		buf = (char *) ((uintptr_t) buf + (512 - modulo));
 #endif
 
