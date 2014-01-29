@@ -1,7 +1,7 @@
 /*
  * xNBD - an enhanced Network Block Device program
  *
- * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
+ * Copyright (C) 2008-2014 National Institute of Advanced Industrial Science
  * and Technology
  *
  * Author: Takahiro Hirofuchi <t.hirofuchi _at_ aist.go.jp>
@@ -740,7 +740,7 @@ Options (Proxy mode):\n\
 
 
 static const char *copyright = "\
-Copyright (C) 2008-2013 National Institute of Advanced Industrial Science\n\
+Copyright (C) 2008-2014 National Institute of Advanced Industrial Science\n\
 and Technology\n\
 \n\
 This program is free software; you can redistribute it and/or modify it\n\
