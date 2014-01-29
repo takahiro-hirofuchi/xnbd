@@ -1,4 +1,4 @@
-/* 
+/*
  * xNBD - an enhanced Network Block Device program
  *
  * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
@@ -55,7 +55,7 @@ void bitmap_close_file(unsigned long *bitmap, size_t bitmaplen)
 {
 	dbg("msync bitmap %p", bitmap);
 	int ret = msync(bitmap, bitmaplen, MS_SYNC);
-	if (ret < 0) 
+	if (ret < 0)
 		err("msync bitmap failed");
 
 	munmap_or_abort(bitmap, bitmaplen);
@@ -76,7 +76,7 @@ unsigned long *bitmap_open_file(const char *bitmapfile, unsigned long bits, size
 		struct stat st;
 		int ret = stat(bitmapfile, &st);
 		if (ret < 0) {
-			if (errno == ENOENT) 
+			if (errno == ENOENT)
 				open_flag |= O_NOATIME;
 			else
 				err("stat %s, %m", bitmapfile);
@@ -123,7 +123,7 @@ unsigned long *bitmap_open_file(const char *bitmapfile, unsigned long bits, size
 
 	info("bitmap file %s (%zu bytes = %lu arrays of %zu bytes), %lu nbits",
 			bitmapfile, buflen, narrays, sizeof(unsigned long), bits);
-		
+
 	if (!readonly) {
 		if (zeroclear) {
 			info("bitmap file %s zero-cleared", bitmapfile);
@@ -162,7 +162,7 @@ unsigned long *bitmap_create(char *bitmapfile, unsigned long bits, int *cbitmapf
 		off_t ret = lseek(fd, (off_t) buflen-1, SEEK_SET);
 		if (ret < 0)
 			err("lseek");
-		
+
 		ret = write(fd, "\0", 1);
 		if (ret < 0)
 			err("write");
@@ -197,7 +197,7 @@ int bitmap_test(unsigned long *bitmap_array, unsigned long block_index)
 
 	unsigned long val = *bitmap & (1UL << (block_index % BITS_PER_LONG));
 
-	//dbg("val %08x, bitmap %p block_index mod 32 %u, bitmap %08x", 
+	//dbg("val %08x, bitmap %p block_index mod 32 %u, bitmap %08x",
 	//		val, bitmap, block_index % 32, *bitmap);
 
 	if (val > 0)

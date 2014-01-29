@@ -1,4 +1,4 @@
-/* 
+/*
  * xNBD - an enhanced Network Block Device program
  *
  * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
@@ -52,7 +52,7 @@ void block_all_signals(void)
 {
 	sigset_t sig;
 	int ret = sigfillset(&sig);
-	if (ret < 0) 
+	if (ret < 0)
 		err("sigfillset");
 
 	ret = pthread_sigmask(SIG_SETMASK, &sig, NULL);
@@ -536,7 +536,7 @@ int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
 	int ret;
 	struct pollfd eventfds[2 + g_list_length(conn_list)];
 	nfds_t neventfds = 0;
-	
+
 	eventfds[neventfds].fd = unix_listen_fd;
 	eventfds[neventfds].events = POLLRDNORM | POLLRDHUP;
 	neventfds += 1;
@@ -575,7 +575,7 @@ int main_loop(struct xnbd_proxy *proxy, int unix_listen_fd, int master_fd)
 		int close_wrk_fd = 1;
 		enum xnbd_proxy_cmd_type cmd;
 		ret = net_recv_all_or_error(wrk_fd, &cmd, sizeof(cmd));
-		if (ret < 0) 
+		if (ret < 0)
 			cmd = XNBD_PROXY_CMD_UNKNOWN;
 
 		switch (cmd) {
@@ -847,7 +847,7 @@ void xnbd_proxy_start(struct xnbd_info *xnbd)
 
 		for (;;) {
 			ret = main_loop(proxy, unix_listen_fd, xnbd->proxy_sockpair_proxy_fd);
-			if (ret < 0) { 
+			if (ret < 0) {
 				break;
 			}
 		}
@@ -901,7 +901,7 @@ int xnbd_proxy_session_server(struct xnbd_session *ses)
 	int ret;
 	struct pollfd eventfds[2];
 	nfds_t neventfds = 0;
-	
+
 	eventfds[neventfds].fd = unix_fd;
 	eventfds[neventfds].events = POLLRDNORM | POLLRDHUP;
 	neventfds += 1;

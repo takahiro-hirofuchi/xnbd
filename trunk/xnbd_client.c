@@ -1,4 +1,4 @@
-/* 
+/*
  * xNBD - an enhanced Network Block Device program
  *
  * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
@@ -416,7 +416,7 @@ static int xnbd_setup_client(const char *devpath, unsigned long blocksize, unsig
 	nbddev_set_timeout(nbd, timeout);
 
 	/*
-	 * signal(7) says the default disposition of SIGCHLD is "Ignore". 
+	 * signal(7) says the default disposition of SIGCHLD is "Ignore".
 	 * Here, make sure the parent does not ignore SIGCHLD.
 	 */
 	sigset_t set, oldset;
@@ -608,7 +608,7 @@ int main(int argc, char *argv[]) {
 			case 'C':
 				if (cmd != cmd_unknown)
 					show_help_and_exit("specify one mode");
-			
+
 				cmd = cmd_connect;
 				break;
 
@@ -653,7 +653,7 @@ int main(int argc, char *argv[]) {
 				 * Moreover, 2.6.32.1 kernel fails to create
 				 * partition device files of a connected
 				 * device.
-				 * 
+				 *
 				 **/
 				err("--timeout is currently disabled due to kernel bug. Use xnbd-watchdog instead!");
 				break;
@@ -695,7 +695,7 @@ int main(int argc, char *argv[]) {
 			int matched;
 
 			matched = sscanf(argv[i], "bs=%lu", &blocksize);
-			if (matched) 
+			if (matched)
 				continue;
 
 			matched = sscanf(argv[i], "timeout=%u", &timeout);

@@ -1,4 +1,4 @@
-/* 
+/*
  * xNBD - an enhanced Network Block Device program
  *
  * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
@@ -57,7 +57,7 @@ void cachestat_dump(char *path)
 	buf = mmap(NULL, logsize, PROT_READ, MAP_SHARED, fd, 0);
 	if (buf == MAP_FAILED)
 		err("disk mapping failed, %s", strerror(errno));
-	
+
 	struct cachestat *st = (struct cachestat *) buf;
 
 	printf("nblocks %lu\n", st->nblocks);
@@ -93,7 +93,7 @@ void cachestat_dump_loop(char *path, unsigned int interval)
 	buf = mmap(NULL, logsize, PROT_READ, MAP_SHARED, fd, 0);
 	if (buf == MAP_FAILED)
 		err("disk mapping failed, %s", strerror(errno));
-	
+
 	struct cachestat *st = (struct cachestat *) buf;
 
 	printf("#time nblocks ");
@@ -154,7 +154,7 @@ void cachestat_dump_loop(char *path, unsigned int interval)
 		cache_hit_prev = st->cache_hit;
 		cache_miss_prev = st->cache_miss;
 		transferred_blocks_prev = transferred_blocks;
-		
+
 
 		fflush(stdout);
 		sleep(interval);
@@ -215,7 +215,7 @@ int cachestat_initialize(const char *path, unsigned long nblocks)
 	if (cachestfd < 0) {
 		err("open cachestfd  %s, %s", path, strerror(errno));
 	}
-	
+
 	info("cachest file %s size %llu B\n", path, (off64_t) logsize);
 
 	cachestbuf = mmap(NULL, logsize, PROT_READ | PROT_WRITE, MAP_SHARED, cachestfd, 0);
@@ -238,7 +238,7 @@ int cachestat_shutdown(void)
 		return 0;
 
 	ret = msync(cachestbuf, logsize, MS_SYNC);
-	if (ret < 0) 
+	if (ret < 0)
 		warn("msync failed");
 
 	munmap_or_abort(cachestbuf, logsize);

@@ -1,4 +1,4 @@
-/* 
+/*
  * xNBD - an enhanced Network Block Device program
  *
  * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
@@ -76,7 +76,7 @@ struct xnbd_proxy {
 	pthread_t tid_fwd_tx, tid_fwd_rx;
 
 
-	/* queue between rx threads and forwarder_tx thread */ 
+	/* queue between rx threads and forwarder_tx thread */
 	GAsyncQueue *fwd_tx_queue;
 
 	/* queue between forwarder_tx and forwarder_rx */

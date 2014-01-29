@@ -1,4 +1,4 @@
-/* 
+/*
  * xNBD - an enhanced Network Block Device program
  *
  * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
@@ -271,7 +271,7 @@ void sigmask_all(void)
 {
 	sigset_t sig;
 	int ret = sigfillset(&sig);
-	if (ret < 0) 
+	if (ret < 0)
 		err("sigfillset");
 
 	ret = pthread_sigmask(SIG_SETMASK, &sig, NULL);

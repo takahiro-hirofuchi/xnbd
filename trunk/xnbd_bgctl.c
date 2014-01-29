@@ -1,4 +1,4 @@
-/* 
+/*
  * xNBD - an enhanced Network Block Device program
  *
  * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
@@ -206,7 +206,7 @@ void *setup_shared_buffer(char *unix_path)
 	size_t len = XNBD_SHARED_BUFF_SIZE;
 
 	int buf_fd = mkstemp(tmppath);
-	if (buf_fd < 0) 
+	if (buf_fd < 0)
 		err("mkstemp, %m");
 
 	unlink(tmppath);

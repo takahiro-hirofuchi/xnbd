@@ -1,4 +1,4 @@
-/* 
+/*
  * xNBD - an enhanced Network Block Device program
  *
  * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
@@ -30,7 +30,7 @@
  * Upon success, return 0.  Otherwise, return -1 and set errno.  */
 static int clone_file_by_reflink(int dstfd, int srcfd)
 {
-#ifdef __linux__ 
+#ifdef __linux__
 #undef BTRFS_IOCTL_MAGIC
 #define BTRFS_IOCTL_MAGIC 0x94
 #undef BTRFS_IOC_CLONE
@@ -103,7 +103,7 @@ void xnbd_target_make_snapshot(struct xnbd_info *xnbd)
 	ret = unlink(tmpdstpath);
 	if (ret < 0)
 		err("unlink, %m");
-	
+
 	info("snapshot: %s", dstpath);
 err:
 	g_free(dstpath);
@@ -135,7 +135,7 @@ void xnbd_target_open_disk(char *diskpath, struct xnbd_info *xnbd)
 	/* multi-connections call this */
 	//if (posix_fallocate(diskfd, 0, disksize))
 	//	warn("maybe no enough space in a local file system");
-	
+
 
 
 
@@ -222,7 +222,7 @@ int target_mode_main_mmap(struct xnbd_session *ses)
 
 
 	//ret = msync(mmaped_buf, mmaped_len, MS_SYNC);
-	//if (ret < 0) 
+	//if (ret < 0)
 	//	warn("msync failed");
 	munmap_or_abort(mmaped_buf, mmaped_len);
 

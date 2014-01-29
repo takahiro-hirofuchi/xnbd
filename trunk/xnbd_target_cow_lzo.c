@@ -1,4 +1,4 @@
-/* 
+/*
  * xNBD - an enhanced Network Block Device program
  *
  * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
@@ -93,7 +93,7 @@ void setup_debug_buf(struct disk_stack *ds)
 	off_t len = ds->disksize;
 
 	int fd = open(path, O_RDONLY, 0600);
-	if (fd < 0) 
+	if (fd < 0)
 		err("open, %m");
 
 	char *buf = mmap(NULL, len, PROT_READ, MAP_SHARED, fd, 0);
@@ -145,7 +145,7 @@ void compare_iov_and_buf(struct iovec *iov, int iov_size, char *buf, int buflen)
 		offset += iov[i].iov_len;
 	}
 
-	if (offset != buflen) 
+	if (offset != buflen)
 		err("mismatch");
 }
 
@@ -159,7 +159,7 @@ void copy_buf_to_iov(struct iovec *iov, int iov_size, char *buf, size_t buflen)
 		offset += iov[i].iov_len;
 	}
 
-	if (offset != buflen) 
+	if (offset != buflen)
 		err("mismatch");
 }
 #endif
@@ -307,7 +307,7 @@ void disk_stack_add_image(struct disk_stack *ds, char *diskpath, int newfile)
 
 	if (newfile)
 		di->bm = bitmap_open_file(di->bmpath, get_disk_nblocks(ds->disksize), &di->bmlen, 0, 1);
-	else 
+	else
 		di->bm = bitmap_open_file(di->bmpath, get_disk_nblocks(ds->disksize), &di->bmlen, 1, 0);
 
 
@@ -347,7 +347,7 @@ static void update_block_with_found(struct disk_stack *ds, struct disk_stack_io 
 struct disk_stack *xnbd_cow_target_open_disk(char *diskpath, int newfile, int cowid)
 {
 	struct disk_stack *ds = create_disk_stack(diskpath);
-	
+
 	char *cowpath;
 
 	if (newfile) {
@@ -365,7 +365,7 @@ struct disk_stack *xnbd_cow_target_open_disk(char *diskpath, int newfile, int co
 				break;
 			}
 		}
-	} else 
+	} else
 		cowpath = g_strdup_printf("%s.cow%d.layer%d", diskpath, cowid, ds->nlayers - 1);
 
 
@@ -430,7 +430,7 @@ struct disk_stack_io *disk_stack_mmap(struct disk_stack *ds, off_t iofrom, size_
 
 	//dbg("%u * %u = %llu", index_start, CBLOCKSIZE, mapping_start);
 
-	dbg("mmapping_start %ju mapping_end %ju mapping_length %zu", 
+	dbg("mmapping_start %ju mapping_end %ju mapping_length %zu",
 			mapping_start, mapping_start + mapping_length,
 			mapping_length);
 
@@ -490,7 +490,7 @@ struct disk_stack_io *disk_stack_mmap(struct disk_stack *ds, off_t iofrom, size_
 			}
 
 
-			
+
 			dbg("index %lu, iofrom_inbuf %lu iolen_inbuf %lu", index, iofrom_inbuf, iolen_inbuf);
 
 			int found = 0;
@@ -531,7 +531,7 @@ struct disk_stack_io *disk_stack_mmap(struct disk_stack *ds, off_t iofrom, size_
 		int get_end_block   = 0;
 
 		if (iofrom % CBLOCKSIZE)
-			if (!bitmap_test(ds->image[ds->nlayers-1]->bm, index_start)) 
+			if (!bitmap_test(ds->image[ds->nlayers-1]->bm, index_start))
 				get_start_block = 1;
 
 
@@ -543,7 +543,7 @@ struct disk_stack_io *disk_stack_mmap(struct disk_stack *ds, off_t iofrom, size_
 			 */
 			if ((index_end > index_start) ||
 					((index_end == index_start) && !get_start_block))
-				if (!bitmap_test(ds->image[ds->nlayers-1]->bm, index_end)) 
+				if (!bitmap_test(ds->image[ds->nlayers-1]->bm, index_end))
 					get_end_block = 1;
 
 			/* bitmap_on() is performed in the below forloop */

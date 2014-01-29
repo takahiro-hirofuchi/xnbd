@@ -1,4 +1,4 @@
-/* 
+/*
  * xNBD - an enhanced Network Block Device program
  *
  * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
@@ -139,7 +139,7 @@ void prepare_write_priv(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 			 */
 			if ((block_index_end > block_index_start) ||
 					((block_index_end == block_index_start) && !get_start_block))
-				if (!bitmap_test(proxy->cbitmap, block_index_end)) 
+				if (!bitmap_test(proxy->cbitmap, block_index_end))
 					get_end_block = 1;
 
 			/* bitmap_on() is performed in the below forloop */

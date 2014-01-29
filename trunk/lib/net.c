@@ -1,4 +1,4 @@
-/* 
+/*
  * xNBD - an enhanced Network Block Device program
  *
  * Copyright (C) 2008-2013 National Institute of Advanced Industrial Science
@@ -176,14 +176,14 @@ int net_accept(int lsock)
 	if (ret)
 		warn("getnameinfo failed, %s", gai_strerror(ret));
 
-	if (ss.ss_family == AF_INET) 
+	if (ss.ss_family == AF_INET)
 		info("connected from %s:%s", host, port);
-	else if (ss.ss_family == AF_INET6) 
+	else if (ss.ss_family == AF_INET6)
 		info("connected from [%s]:%s", host, port);
-	else if (ss.ss_family == AF_UNIX) 
+	else if (ss.ss_family == AF_UNIX)
 		// info("connected at %s", ((struct sockaddr_un *) &ss)->sun_path);
 		info("connected (unix)");
-	else 
+	else
 		info("connected (unknown pf)");
 
 	return csock;
@@ -288,7 +288,7 @@ int net_connect(const char *hostname, const char *service, int socktype, int pro
 cleanup:
 		g_free(nameinfo);
 
-		if (found) 
+		if (found)
 			break;
 		/* continue if not found */
 	}
@@ -327,7 +327,7 @@ cleanup:
  * In the case of read, a caller can detect FIN or EOF; a return code is less
  * than a request size (the total of iov[i].iov_len). If a request size is
  * zero, a caller cannot detect FIN or EOF.
- */  
+ */
 static int net_iov_all(int fd, struct iovec *iov, int count, int reading)
 {
 	int next_count = count;
@@ -375,9 +375,9 @@ static int net_iov_all(int fd, struct iovec *iov, int count, int reading)
 		for (int i = 0; i < next_count; i++) {
 			if (iov_org[i].iov_base != next_iov[i].iov_base ||
 				iov_org[i].iov_len != next_iov[i].iov_len) {
-				warn("iov_org[%d].iov_base %p, next_iov[%d].iov_base %p", 
+				warn("iov_org[%d].iov_base %p, next_iov[%d].iov_base %p",
 						i, iov_org[i].iov_base, i, next_iov[i].iov_base);
-				warn("iov_org[%d].iov_len %zd, next_iov[%d].iov_len %zd", 
+				warn("iov_org[%d].iov_len %zd, next_iov[%d].iov_len %zd",
 						i, iov_org[i].iov_len, i, next_iov[i].iov_len);
 			}
 		}
@@ -389,7 +389,7 @@ static int net_iov_all(int fd, struct iovec *iov, int count, int reading)
 			info("%s() returned 0 (fd %d)", mode, fd);
 			/* writev returns 0,
 			 *   if an I/O size is zero
-			 * readv returns 0, 
+			 * readv returns 0,
 			 *   if and I/O size is zero
 			 *   if it got FIN
 			 *   if it is EOF
@@ -402,7 +402,7 @@ static int net_iov_all(int fd, struct iovec *iov, int count, int reading)
 				info("received TCP_RST (fd %d)", fd);
 			else if (errno == EPIPE)
 				info("raised EPIPE (fd %d)", fd);
-			else 
+			else
 				warn("%s error %s (%d) (fd %d)", mode, strerror(errno), errno, fd);
 
 			return -1;
@@ -539,7 +539,7 @@ int check_fin(int ret, int errcode, size_t len)
 			return 0;  // requested size was performed
 		else
 			err("len mismatch");
-	} 
+	}
 
 
 	err("not reached");
@@ -700,7 +700,7 @@ int unix_recv_fd(int socket)
 	iov[0].iov_len = sizeof(buf);
 	msg.msg_iov = iov;
 	msg.msg_iovlen = 1;
-	
+
 	char data_buf[CMSG_SPACE(sizeof(fd))];
 
 	msg.msg_control = data_buf;
@@ -711,20 +711,20 @@ int unix_recv_fd(int socket)
 		err("recv_fd, %m");
 	else if (ret == 0)
 		err("recv_fd, peer closed");
-	
+
 
 	struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
 	if (!cmsg)
 		err("no cmsghdr");
 
-	if (cmsg->cmsg_len == CMSG_LEN(sizeof(fd)) 
+	if (cmsg->cmsg_len == CMSG_LEN(sizeof(fd))
 		&& cmsg->cmsg_level == SOL_SOCKET
 		&& cmsg->cmsg_type == SCM_RIGHTS) {
 		int *fdptr = (int *) CMSG_DATA(cmsg);
 		fd = *fdptr;
 	} else
 		err("no descriptor");
-		
+
 
 	info("fd %d received", fd);
 
