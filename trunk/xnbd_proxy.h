@@ -97,6 +97,13 @@ struct xnbd_proxy {
 
 
 	char *shared_buff;
+
+
+	GMutex curr_use_mutex;
+	/* the size of internal buffer use of the proxy server */
+	size_t cur_use_buf;
+	/* the number of pending requests in the proxy server */
+	size_t cur_use_que;
 };
 
 enum xnbd_proxy_cmd_type {
@@ -117,6 +124,11 @@ struct xnbd_proxy_query {
 
 	char rhost[PATH_MAX];  /* FIXME: PATH_MAX is fine? */
 	char rport[PATH_MAX];
+
+	size_t max_use_buf;
+	size_t max_use_que;
+	size_t cur_use_buf;
+	size_t cur_use_que;
 };
 
 

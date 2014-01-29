@@ -129,7 +129,7 @@ void xnbd_target_open_disk(char *diskpath, struct xnbd_info *xnbd)
 
 	off_t disksize = get_disksize(diskfd);
 
-	check_disksize(diskpath, disksize);
+	check_disksize(diskpath, disksize, false);
 
 
 	/* multi-connections call this */
@@ -186,7 +186,7 @@ int target_mode_main_mmap(struct xnbd_session *ses)
 	char *iobuf = NULL;
 
 
-	iobuf = mmap_iorange(xnbd, xnbd->target_diskfd, iofrom, iolen, &mmaped_buf, &mmaped_len, &mmaped_offset);
+	iobuf = mmap_iorange(xnbd->disksize, xnbd->readonly, xnbd->target_diskfd, iofrom, iolen, &mmaped_buf, &mmaped_len, &mmaped_offset);
 	dbg("mmaped_buf %p iobuf %p mmaped_len %zu iolen %zu", mmaped_buf, iobuf, mmaped_len, iolen);
 
 

@@ -11,6 +11,30 @@ Line width is meant to be 90 characters.
 xNBD Change Log
 ===============
 
+0.3.0
+-----
+
+Bugfixes
+~~~~~~~~
+ * xnbd-server: Fix --readonly option for the proxy server. Reject write
+     requests from clients, but may update the cache image file.
+ * xnbd-server: Fix erroneous assertions caused by xnbd-bgctl (issues #6 and #8).
+
+Improvements
+~~~~~~~~~~~~
+ * xnbd-server: Add --max-queue-size and --max-buf-size parameters that limit
+     memory usage of xnbd-server so that a slow disk and fast network no longer may
+     force the host into swapping
+ * xnbd-server: Fix version output by --version
+ * xnbd-bgctl: Limit the number of asynchronous requests to avoid huge memory
+     consumption of xnbd-server.
+ * xnbd-bgctl: Improve the progress bar to be more accurate. Go forward
+     according to the percentage of actually cached blocks.
+ * xnbd-wrapper: Support passing custom --max-(buf|queue)-size to xnbd-server
+ * xnbd-register: Add support for wrapper options max_buf_size and max_queue_size
+ * xnbd-register: Fix warning on unknown wrapper option keys
+
+
 0.2.0-rc2
 ---------
 

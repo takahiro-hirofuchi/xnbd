@@ -23,6 +23,24 @@
 
 #include "nbd.h"
 
+const char *nbd_get_iotype_string(uint32_t iotype)
+{
+	const char *nbd_iotype_string_table[] = {
+		"NBD_CMD_READ",
+		"NBD_CMD_WRITE",
+		"NBD_CMD_DISC",
+		"NBD_CMD_BGCOPY",
+		"NBD_CMD_READ_COMPRESS",
+		"NBD_CMD_READ_COMPRESS_LZO",
+		"NBD_CMD_UNDEFINED"
+	};
+
+	if (iotype >= sizeof(nbd_iotype_string_table) / sizeof(nbd_iotype_string_table[0]))
+		return "NBD_CMD_UNDEFINED";
+
+	return nbd_iotype_string_table[iotype];
+}
+
 
 void nbd_request_dump(struct nbd_request *request)
 {
@@ -254,8 +272,7 @@ int nbd_server_recv_request(int clientfd, off_t disksize, uint32_t *iotype_arg, 
 		return -2;
 	}
 
-
-	dbg("%s from %ju (%ju) len %u, ", iotype ? "WRITE" : "READ", iofrom, iofrom / 512U, iolen);
+	dbg("%s from %ju (%ju) len %u, ", nbd_get_iotype_string(iotype), iofrom, iofrom / 512U, iolen);
 
 	/* do not touch the handle value at the server side */
 	reply->handle = request.handle;

@@ -231,7 +231,7 @@ void *sender_thread_main(void *data)
 		req->iolen  = (size_t) MIN((off_t) tmp_iolen, params->disksize - req->iofrom);
 
 		g_message("index %d req %p iotype %s iofrom %ju iolen %zu", index, req,
-				(req->iotype == NBD_CMD_READ) ? "read" : "write",
+				nbd_get_iotype_string(req->iotype),
 				req->iofrom, req->iolen);
 
 		g_assert(req->iofrom + req->iolen <= (unsigned long)params->disksize);
@@ -360,7 +360,7 @@ int check_consistency_by_partial_mmap_for_cowdisk(char *srcdisk, int tgtdiskfd, 
 #if 0
 	if (ret) {
 		g_warning("mismatch index %d iotype %s iofrom %ju iolen %u",
-				req->index, (req->iotype == NBD_CMD_READ) ? "read" : "write",
+				req->index, nbd_get_iotype_string(req->iotype),
 				req->iofrom, req->iolen);
 
 		unsigned long block_index_start;
@@ -427,7 +427,7 @@ int check_consistency_by_partial_mmap(char *srcdisk, int tgtdiskfd, struct crequ
 
 	if (ret) {
 		g_warning("mismatch index %d iotype %s iofrom %ju iolen %zu",
-				req->index, (req->iotype == NBD_CMD_READ) ? "read" : "write",
+				req->index, nbd_get_iotype_string(req->iotype),
 				req->iofrom, req->iolen);
 
 		unsigned long block_index_start;
@@ -664,7 +664,6 @@ int main(int argc, char **argv) {
 
 
 	set_sigactions();
-	g_thread_init(NULL);
 
 	/* @srcdisk: disk file for a direct mode, cache file for a redirect mode */
 	/* @dstdisk: temporary space */

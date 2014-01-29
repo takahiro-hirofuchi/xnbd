@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.67])
-AC_INIT([xNBD], [0.2.0-rc2], [t.hirofuchi@aist.go.jp], [xnbd], [https://bitbucket.org/hirofuchi/xnbd/])
+AC_INIT([xNBD], [0.3.0], [t.hirofuchi@aist.go.jp], [xnbd], [https://bitbucket.org/hirofuchi/xnbd/])
 AM_INIT_AUTOMAKE([foreign dist-bzip2 no-dist-gzip])
 AM_SILENT_RULES([yes])
 AC_CONFIG_SRCDIR([xnbd_proxy.c])
@@ -20,7 +20,7 @@ AC_PROG_LN_S
 AC_PROG_MAKE_SET
 
 # Checks for libraries.
-GLIB_MINIMUM_VERSION=2.24.2  # i.e. Debian stable as of 2013-01-23, i.e. squeeze
+GLIB_MINIMUM_VERSION=2.32  # has g_atomic_pointer_add(), deprecate g_thread_init()
 PKG_CHECK_MODULES([GLIB], [glib-2.0 >= ${GLIB_MINIMUM_VERSION} gthread-2.0 >= ${GLIB_MINIMUM_VERSION}])
 AC_SUBST([GLIB_CFLAGS])
 AC_SUBST([GLIB_LIBS])

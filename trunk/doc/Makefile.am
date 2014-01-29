@@ -46,7 +46,7 @@ define TEMPLATE
 		--attribute="manual_package=$$(_MANUAL_PACKAGE)" \
 		--attribute="manual_title=$$(_MANUAL_TITLE)" \
 		--attribute="manual_version=$$(_MANUAL_VERSION)" \
-		--format=$(2) -D . \
+		--format=$(2) \
 		"$$<"
 endef
 
