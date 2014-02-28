@@ -12,7 +12,8 @@ sbin_PROGRAMS = \
 
 noinst_PROGRAMS = \
 	xnbd-cachestatdump \
-	xnbd-tester
+	xnbd-tester \
+	xnbd-speedtest
 
 lib_LTLIBRARIES = \
 	libxnbd_internal.la
@@ -62,6 +63,10 @@ xnbd_cachestatdump_SOURCES = xnbd_cachestatdump.c
 
 xnbd_tester_LDADD = libxnbd_internal.la
 xnbd_tester_SOURCES = xnbd_tester.c
+
+
+xnbd_speedtest_LDADD = libxnbd_internal.la
+xnbd_speedtest_SOURCES = xnbd_speedtest.c
 
 
 dist_sysconf_DATA = xnbd.conf
