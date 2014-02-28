@@ -126,7 +126,7 @@ void *bgctl_thread_main(void *data)
 
 	close(bgctlfd);
 
-	g_message("bgthread bye");
+	info("bgthread bye");
 
 	return NULL;
 }
@@ -145,7 +145,7 @@ void bgctl_thread_create(off_t disksize, const char *bgctlpath)
 	if (!bginfo->ctlpath)
 		return;
 
-	g_message("bgctl is on");
+	info("bgctl is on");
 	// unlink(bginfo->ctlpath);
 
 
@@ -160,7 +160,7 @@ void bgctl_thread_create(off_t disksize, const char *bgctlpath)
 	pthread_cond_wait(&bginfo->init_done, &bginfo->lock);
 	pthread_mutex_unlock(&bginfo->lock);
 
-	g_message("bgthread creation done");
+	info("bgthread creation done");
 }
 
 void bgctl_wait_shutdown(void)
@@ -171,9 +171,9 @@ void bgctl_wait_shutdown(void)
 		return;
 
 
-	g_message("wait bgctl");
+	info("wait bgctl");
 	pthread_join(bginfo->tid, NULL);
-	g_message("wait done, count %d done", bginfo->count);
+	info("wait done, count %d done", bginfo->count);
 
 	pthread_mutex_destroy(&bginfo->lock);
 	pthread_cond_destroy(&bginfo->init_done);
@@ -230,7 +230,7 @@ void *sender_thread_main(void *data)
 		 **/
 		req->iolen  = (size_t) MIN((off_t) tmp_iolen, params->disksize - req->iofrom);
 
-		g_message("index %d req %p iotype %s iofrom %ju iolen %zu", index, req,
+		info("index %d req %p iotype %s iofrom %ju iolen %zu", index, req,
 				nbd_get_iotype_string(req->iotype),
 				req->iofrom, req->iolen);
 
@@ -254,7 +254,7 @@ void *sender_thread_main(void *data)
 
 	g_async_queue_push(reply_pendings, &eofmarker);
 
-	g_message("%d requests were sent", params->nreq);
+	info("%d requests were sent", params->nreq);
 
 	return NULL;
 }
@@ -301,18 +301,18 @@ void *receiver_thread_main(void *data)
 		struct mmap_partial *tgtmp = mmap_partial_map(params->tgtdiskfd, req->iofrom, req->iolen, 0);
 
 		if (req->iotype == NBD_CMD_WRITE) {
-			g_message("index %d req %p write done", req->index, req);
+			info("index %d req %p write done", req->index, req);
 			memcpy(tgtmp->iobuf, req->write_buff, req->iolen);
 
 
 		} else if (req->iotype == NBD_CMD_READ) {
 			net_recv_all_or_abort(params->remotefd, tgtmp->iobuf, req->iolen);
-			g_message("index %d req %p read done", req->index, req);
+			info("index %d req %p read done", req->index, req);
 
 		} else
 			err("bug");
 
-		mmap_partial_unmap(tgtmp);
+		mmap_region_free(tgtmp);
 
 
 		g_async_queue_push(check_pendings, req);
@@ -320,7 +320,7 @@ void *receiver_thread_main(void *data)
 
 	g_async_queue_push(check_pendings, &eofmarker);
 
-	g_message("io finished");
+	info("io finished");
 
 	return NULL;
 }
@@ -367,20 +367,20 @@ int check_consistency_by_partial_mmap_for_cowdisk(char *srcdisk, int tgtdiskfd, 
 		unsigned long block_index_end;
 		get_io_range_index(req->iofrom, req->iolen, &block_index_start, &block_index_end);
 
-		g_message("iofrom %ju (%ju KB), block_index_start %lu offset_in_start_block %ju",
+		info("iofrom %ju (%ju KB), block_index_start %lu offset_in_start_block %ju",
 				req->iofrom, req->iofrom / 1024,
 				block_index_start, req->iofrom % CBLOCKSIZE);
 
-		g_message("ioend %ju (%ju KB), block_index_end %lu offset_in_end_block %ju",
+		info("ioend %ju (%ju KB), block_index_end %lu offset_in_end_block %ju",
 				req->iofrom + req->iolen, (req->iofrom + req->iolen) / 1024,
 				block_index_end, (req->iofrom + req->iolen) % CBLOCKSIZE);
 
-		g_message("srcbuf ...");
+		info("srcbuf ...");
 		dump_buffer_all(srciobuf, req->iolen);
-		g_message("tgtbuf ...");
+		info("tgtbuf ...");
 		dump_buffer_all(tgtiobuf, req->iolen);
 		if (req->iotype == NBD_CMD_WRITE) {
-			g_message("req->write_buff");
+			info("req->write_buff");
 			dump_buffer_all(req->write_buff, req->iolen);
 		}
 
@@ -390,13 +390,13 @@ int check_consistency_by_partial_mmap_for_cowdisk(char *srcdisk, int tgtdiskfd, 
 			char x0 = *(srciobuf + j);
 			char x1 = *(tgtiobuf + j);
 			if (x0 != x1) {
-				g_message("mismatch at %d byte, %c %c", j, x0, x1);
+				info("mismatch at %d byte, %c %c", j, x0, x1);
 				found = 1;
 				break;
 			}
 		}
 		if (!found)
-			g_message("not mismatched !?");
+			info("not mismatched !?");
 
 		result = -1;
 	}
@@ -434,20 +434,20 @@ int check_consistency_by_partial_mmap(char *srcdisk, int tgtdiskfd, struct crequ
 		unsigned long block_index_end;
 		get_io_range_index(req->iofrom, req->iolen, &block_index_start, &block_index_end);
 
-		g_message("iofrom %ju (%ju KB), block_index_start %lu offset_in_start_block %ju",
+		info("iofrom %ju (%ju KB), block_index_start %lu offset_in_start_block %ju",
 				req->iofrom, req->iofrom / 1024,
 				block_index_start, req->iofrom % CBLOCKSIZE);
 
-		g_message("ioend %ju (%ju KB), block_index_end %lu offset_in_end_block %ju",
+		info("ioend %ju (%ju KB), block_index_end %lu offset_in_end_block %ju",
 				req->iofrom + req->iolen, (req->iofrom + req->iolen) / 1024,
 				block_index_end, (req->iofrom + req->iolen) % CBLOCKSIZE);
 
-		g_message("srcbuf ...");
+		info("srcbuf ...");
 		dump_buffer_all(srciobuf, req->iolen);
-		g_message("tgtbuf ...");
+		info("tgtbuf ...");
 		dump_buffer_all(tgtiobuf, req->iolen);
 		if (req->iotype == NBD_CMD_WRITE) {
-			g_message("req->write_buff");
+			info("req->write_buff");
 			dump_buffer_all(req->write_buff, req->iolen);
 		}
 
@@ -457,13 +457,13 @@ int check_consistency_by_partial_mmap(char *srcdisk, int tgtdiskfd, struct crequ
 			char x0 = *(srciobuf + j);
 			char x1 = *(tgtiobuf + j);
 			if (x0 != x1) {
-				g_message("mismatch at %d byte, %c %c", j, x0, x1);
+				info("mismatch at %d byte, %c %c", j, x0, x1);
 				found = 1;
 				break;
 			}
 		}
 		if (!found)
-			g_message("not mismatched !?");
+			info("not mismatched !?");
 
 		result = -1;
 	}
@@ -491,7 +491,7 @@ int test_direct_mode(char *srcdisk, char *tgtdisk, int remotefd, int cowmode, en
 	check_pendings = g_async_queue_new();
 
 	off_t disksize = nbd_negotiate_with_server(remotefd);
-	g_message("remote disk size %ju", disksize);
+	info("remote disk size %ju", disksize);
 
 	sleep(3);
 
@@ -522,7 +522,7 @@ int test_direct_mode(char *srcdisk, char *tgtdisk, int remotefd, int cowmode, en
 
 
 	for (int loop_per_session = 0; loop_per_session < 100; loop_per_session++) {
-		g_message("io start");
+		info("io start");
 
 		bgctl_thread_create(disksize, bgctlpath);
 
@@ -540,10 +540,10 @@ int test_direct_mode(char *srcdisk, char *tgtdisk, int remotefd, int cowmode, en
 		bgctl_wait_shutdown();
 
 
-		g_message("sender and receiver finished");
+		info("sender and receiver finished");
 		/* wait here. make sure the last write is committed to the disk */
 		//sleep(1);
-		g_message("checking start ...");
+		info("checking start ...");
 
 
 		for (;;) {
@@ -565,9 +565,9 @@ int test_direct_mode(char *srcdisk, char *tgtdisk, int remotefd, int cowmode, en
 
 
 
-		g_message("checking done");
+		info("checking done");
 
-		g_message("## test %ju done", testcount);
+		info("## test %ju done", testcount);
 		sleep(1);
 		testcount +=1;
 	}
@@ -667,7 +667,7 @@ int main(int argc, char **argv) {
 
 	/* @srcdisk: disk file for a direct mode, cache file for a redirect mode */
 	/* @dstdisk: temporary space */
-	g_message("srcdisk %s dstdisk %s", srcpath, dstpath);
+	info("srcdisk %s dstdisk %s", srcpath, dstpath);
 
 
 
