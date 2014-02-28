@@ -795,6 +795,7 @@ void xnbd_proxy_start(struct xnbd_info *xnbd)
 		err("negotiation with %s:%s failed", xnbd->proxy_rhost, xnbd->proxy_rport);
 	}
 
+	check_disksize(xnbd->disksize);
 	xnbd->nblocks = get_disk_nblocks(xnbd->disksize);
 
 	make_sockpair(&xnbd->proxy_sockpair_master_fd, &xnbd->proxy_sockpair_proxy_fd);
