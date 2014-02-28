@@ -99,26 +99,26 @@ int nbd_client_recv_reply_header(int remotefd, uint64_t handle)
 
 	int ret = net_recv_all_or_error(remotefd, &reply, sizeof(reply));
 	if (ret < 0) {
-		warn("proxy error: redirect tcp down");
+		warn("recv header");
 		return -EPIPE;
 	}
 
 	//nbd_reply_dump(&reply);
 
 	if (ntohl(reply.magic) != NBD_REPLY_MAGIC) {
-		warn("proxy error: unknown reply magic, %x %x", reply.magic, ntohl(reply.magic));
+		warn("unknown reply magic, %x %x", reply.magic, ntohl(reply.magic));
 		return -EPIPE;
 	}
 
 	/* check reply handle here */
-	if (reply.handle != ntohll(myhandle)) {
-		warn("proxy error: unknown reply handle, %ju %ju", reply.handle, ntohll(myhandle));
+	if (reply.handle != ntohll(handle)) {
+		warn("unknown reply handle, %ju %ju", reply.handle, ntohll(handle));
 		return -EPIPE;
 	}
 
 	uint32_t error = ntohl(reply.error);
 	if (error) {
-		warn("proxy error: remote internal, reply state %d", error);
+		warn("error in remote internal, reply state %d", error);
 		return -error;
 	}
 
