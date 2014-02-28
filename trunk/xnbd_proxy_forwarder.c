@@ -315,6 +315,7 @@ int forwarder_rx_thread_mainloop(struct xnbd_proxy *proxy)
 
 
 
+#if 0
 	/* large file support on 32bit architecture */
 	char *mmaped_buf = NULL;
 	size_t mmaped_len = 0;
@@ -327,6 +328,10 @@ int forwarder_rx_thread_mainloop(struct xnbd_proxy *proxy)
 	iobuf = mmap_iorange(xnbd->disksize, 0, proxy->cachefd, priv->iofrom, priv->iolen, &mmaped_buf, &mmaped_len, &mmaped_offset);
 	dbg("#mmaped_buf %p iobuf %p mmaped_len %zu iolen %zu", mmaped_buf, iobuf, mmaped_len, priv->iolen);
 	dbg("#mapped %p -> %p", mmaped_buf, mmaped_buf + mmaped_len);
+#endif
+
+	struct mmap_block_region *mbr = mmap_block_region_create(proxy->cachefd, priv->iofrom, priv->iolen, 0);
+	char *iobuf = mbr->iobuf;
 
 
 	for (int i = 0; i < priv->nreq; i++) {
@@ -335,7 +340,10 @@ int forwarder_rx_thread_mainloop(struct xnbd_proxy *proxy)
 		size_t block_iolen  = priv->req[i].bindex_iolen  * CBLOCKSIZE;
 		char *iobuf_partial = NULL;
 
-		iobuf_partial = mmaped_buf + (block_iofrom - mmaped_offset);
+//		iobuf_partial = mmaped_buf + (block_iofrom - mmaped_offset);
+
+		iobuf_partial = (char *) mbr->ba_iobuf + (block_iofrom - mbr->ba_iofrom);
+
 
 		dbg("i %u block_iofrom %ju iobuf_partial %p", i, block_iofrom, iobuf_partial);
 
@@ -379,7 +387,8 @@ int forwarder_rx_thread_mainloop(struct xnbd_proxy *proxy)
 		}
 	}
 
-	munmap_or_abort(mmaped_buf, mmaped_len);
+//	munmap_or_abort(mmaped_buf, mmaped_len);
+	mmap_block_region_free(mbr);
 
 
 	if (priv->need_retry) {

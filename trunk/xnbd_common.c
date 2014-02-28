@@ -77,6 +77,7 @@ void mmap_block_region_free(struct mmap_block_region *mbr)
 	g_slice_free(struct mmap_block_region, mbr);
 }
 
+#if 0
 void *mmap_iorange(const off_t disksize, const bool readonly, const int fd, const off_t iofrom, const size_t iolen, char **mmaped_buf, size_t *mmaped_len, off_t *mmaped_offset)
 {
 	unsigned long index_start, index_end;
@@ -123,6 +124,7 @@ void *mmap_iorange(const off_t disksize, const bool readonly, const int fd, cons
 
 	return iobuf;
 }
+#endif
 
 
 int poll_request_arrival(struct xnbd_session *ses)
