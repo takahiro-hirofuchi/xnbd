@@ -33,7 +33,6 @@
  * 1024 or 8192, which is different from the page size, is also possible, but not well tested.
  **/
 const unsigned int CBLOCKSIZE = 4096;
-unsigned int PAGESIZE = 4096;
 
 const int XNBD_PORT = 8520;
 

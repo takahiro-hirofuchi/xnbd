@@ -189,7 +189,6 @@ struct xnbd_session {
 
 
 extern const unsigned int CBLOCKSIZE;
-extern unsigned int PAGESIZE;
 
 
 
