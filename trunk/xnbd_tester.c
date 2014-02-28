@@ -357,53 +357,6 @@ int check_consistency_by_partial_mmap_for_cowdisk(char *srcdisk, int tgtdiskfd, 
 
 	mmap_region_free(tgtmp);
 
-#if 0
-	if (ret) {
-		g_warning("mismatch index %d iotype %s iofrom %ju iolen %u",
-				req->index, nbd_get_iotype_string(req->iotype),
-				req->iofrom, req->iolen);
-
-		unsigned long block_index_start;
-		unsigned long block_index_end;
-		get_io_range_index(req->iofrom, req->iolen, &block_index_start, &block_index_end);
-
-		info("iofrom %ju (%ju KB), block_index_start %lu offset_in_start_block %ju",
-				req->iofrom, req->iofrom / 1024,
-				block_index_start, req->iofrom % CBLOCKSIZE);
-
-		info("ioend %ju (%ju KB), block_index_end %lu offset_in_end_block %ju",
-				req->iofrom + req->iolen, (req->iofrom + req->iolen) / 1024,
-				block_index_end, (req->iofrom + req->iolen) % CBLOCKSIZE);
-
-		info("srcbuf ...");
-		dump_buffer_all(srciobuf, req->iolen);
-		info("tgtbuf ...");
-		dump_buffer_all(tgtiobuf, req->iolen);
-		if (req->iotype == NBD_CMD_WRITE) {
-			info("req->write_buff");
-			dump_buffer_all(req->write_buff, req->iolen);
-		}
-
-
-		int found = 0;
-		for (uint32_t j = 0; j < req->iolen; j++) {
-			char x0 = *(srciobuf + j);
-			char x1 = *(tgtiobuf + j);
-			if (x0 != x1) {
-				info("mismatch at %d byte, %c %c", j, x0, x1);
-				found = 1;
-				break;
-			}
-		}
-		if (!found)
-			info("not mismatched !?");
-
-		result = -1;
-	}
-#endif
-
-
-
 
 	return result;
 }
