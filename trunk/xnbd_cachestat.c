@@ -26,7 +26,7 @@
 
 
 /* A PAGESIZE is plused to include a header */
-#define logsize ((size_t) PAGESIZE)
+#define logsize (getpagesize())
 
 
 struct cachestat {

@@ -33,66 +33,6 @@ const int XNBD_PORT = 8520;
 
 
 
-/* target file size must be a multiple of PAGESIZE, for the last block handling */
-
-struct mmap_partial *mmap_partial_map(int fd, off_t iofrom, const size_t iolen_in, int readonly)
-{
-	const ssize_t iolen = (const ssize_t) iolen_in;  /* avoid warnings in x86_64 */
-	size_t mmap_length;
-
-	off_t iofrom_fraction = iofrom % PAGESIZE;
-	off_t mmap_offset = iofrom - iofrom_fraction;
-
-
-	off_t ioend_fraction = (iofrom + iolen) % PAGESIZE;
-	if (ioend_fraction)
-		mmap_length = (size_t) ((iofrom + iolen) - ioend_fraction + PAGESIZE - mmap_offset);
-	else
-		mmap_length = (size_t) ((iofrom + iolen) - mmap_offset);
-
-	//off_t index_end   = DIV_ROUND_UP(iofrom + iolen, PAGESIZE);
-
-	{
-		unsigned long inds, inde;
-		calc_block_index(PAGESIZE, iofrom, iolen_in, &inds, &inde);
-		if ((off_t) inds * PAGESIZE != mmap_offset)
-			err("check failed 0: %ju, %ju", (off_t) inds * PAGESIZE, mmap_offset);
-
-		size_t mmap_len2 = (inde - inds + 1) * (unsigned) PAGESIZE;
-
-		if (mmap_len2 != mmap_length)
-			err("check failed 1: %zu, %zu", mmap_len2, mmap_length);
-	}
-
-
-	char *buf = NULL;
-
-	if (readonly)
-		buf = mmap(NULL, mmap_length, PROT_READ, MAP_SHARED, fd, mmap_offset);
-	else
-		buf = mmap(NULL, mmap_length, PROT_READ | PROT_WRITE, MAP_SHARED, fd, mmap_offset);
-	if (buf == MAP_FAILED)
-		err("disk mapping failed (iofrom %ju iolen %zu), %m", iofrom, iolen);
-
-
-	struct mmap_partial *mpinfo = g_malloc(sizeof(struct mmap_partial));
-
-	mpinfo->buf = buf;
-	mpinfo->len = mmap_length;
-	mpinfo->offset = mmap_offset;
-
-	mpinfo->iobuf = buf + iofrom_fraction;
-
-	return mpinfo;
-}
-
-void mmap_partial_unmap(struct mmap_partial *mpinfo)
-{
-	munmap_or_abort(mpinfo->buf, mpinfo->len);
-
-	g_free(mpinfo);
-}
-
 
 
 void get_io_range_index(off_t iofrom, size_t iolen, unsigned long *index_start, unsigned long *index_end)
