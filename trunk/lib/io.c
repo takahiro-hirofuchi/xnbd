@@ -346,9 +346,50 @@ void get_event_connecter(int *notifier, int *listener)
 	make_pipe(notifier, listener);
 }
 
+void *mmap_or_abort(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
+{
+	void *buf = mmap(addr, length, prot, flags, fd, offset);
+	if (buf == MAP_FAILED)
+		err("mmap %m");
+
+	return buf;
+}
+
 void munmap_or_abort(void *addr, size_t len)
 {
 	int ret = munmap(addr, len);
 	if (ret < 0)
 		err("munmap %m");
+}
+
+/* mr->iobuf points to iofrom */
+struct mmap_region *mmap_region_create(int fd, off_t iofrom, size_t iolen, int readonly)
+{
+	/* page-aligned offset for mmap() */
+	off_t pa_iofrom = iofrom & ~(getpagesize() - 1);
+	size_t mmap_len = iolen + iofrom - pa_iofrom;
+	void *mmap_buf = NULL;
+
+	if (readonly)
+		mmap_buf = mmap(NULL, mmap_len, PROT_READ, MAP_SHARED, fd, pa_iofrom);
+	else
+		mmap_buf = mmap(NULL, mmap_len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, pa_iofrom);
+	if (mmap_buf == MAP_FAILED)
+		err("disk mapping failed (iofrom %ju iolen %zu), %m", iofrom, iolen);
+
+
+	struct mmap_region *mr = g_slice_new(struct mmap_region);
+
+	mr->mmap_buf = mmap_buf;
+	mr->mmap_len = mmap_len;
+
+	mr->iobuf = (char *) mmap_buf + iofrom - pa_iofrom;
+
+	return mr;
+}
+
+void mmap_region_free(struct mmap_region *mr)
+{
+	munmap_or_abort(mr->mmap_buf, mr->mmap_len);
+	g_slice_free(struct mmap_region, mr);
 }
