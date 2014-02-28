@@ -205,18 +205,6 @@ extern const int XNBD_PORT;
 
 
 
-struct mmap_partial {
-	void *iobuf;
-
-	void *buf;
-	size_t len;
-	off_t offset;
-};
-
-struct mmap_partial *mmap_partial_map(int fd, off_t iofrom, size_t iolen, int readonly);
-void mmap_partial_unmap(struct mmap_partial *mpinfo);
-
-
 
 #define DEFAULT_CACHESTAT_PATH "/tmp/xnbd_cachestat"
 void cachestat_dump(char *path);
