@@ -1060,10 +1060,9 @@ int main(int argc, char **argv) {
 	xnbd_initialize(&xnbd);
 
 
+	/* must be a power of 2 */
+	g_assert((CBLOCKSIZE & (CBLOCKSIZE - 1)) == 0);
 
-	PAGESIZE = (unsigned int) getpagesize();
-	if (CBLOCKSIZE % PAGESIZE != 0)
-		warn("CBLOCKSIZE %u PAGESIZE %u", CBLOCKSIZE, PAGESIZE);
 
 	if (xnbd.cmd == xnbd_cmd_proxy)
 		cachestat_initialize(DEFAULT_CACHESTAT_PATH, xnbd.nblocks);
