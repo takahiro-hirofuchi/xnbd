@@ -62,5 +62,18 @@ void make_pipe(int *write_fd, int *read_fd);
 void make_sockpair(int *fd0, int *fd1);
 int poll_data_and_event(int datafd, int event_listener_fd) __attribute__((deprecated));
 void get_event_connecter(int *notifier, int *listener) __attribute__((deprecated));
+
+void *mmap_or_abort(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
 void munmap_or_abort(void *addr, size_t len);
+
+struct mmap_region {
+	void *mmap_buf; // internal
+	size_t mmap_len; // internal
+
+	void *iobuf; // points to iofrom
+};
+
+struct mmap_region *mmap_region_create(int fd, off_t iofrom, size_t iolen, int readonly);
+void mmap_region_free(struct mmap_region *mpinfo);
+
 #endif
