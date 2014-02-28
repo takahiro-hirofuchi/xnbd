@@ -180,7 +180,10 @@ struct disk_stack *create_disk_stack(char *diskpath)
 	}
 
 	disksize = get_disksize(diskfd);
-	check_disksize(diskpath, disksize, true);
+	check_disksize(disksize);
+
+	/* off_t is 32bit singed integer without the large file support */
+	info("disk %s size %ju B (%ju MB)", diskpath, disksize, disksize /1024 /1024);
 
 	struct disk_stack *ds = g_malloc0(sizeof(struct disk_stack));
 	ds->nlayers = 1;
