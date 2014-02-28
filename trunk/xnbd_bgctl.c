@@ -336,7 +336,7 @@ void *cache_all_blocks_receiver_main(void *arg)
 		if (data == &cache_rx_req_eof)
 			break;
 		else if (data == &cache_rx_req_remote) {
-			int ret = nbd_client_recv_header(cache_rx->ctl_fd);
+			int ret = nbd_client_recv_reply_header(cache_rx->ctl_fd, UINT64_MAX);
 			if (ret < 0)
 				err("recv header, %m");
 			progress->blocks_from_remote += 1;

@@ -89,50 +89,7 @@ int nbd_client_send_request_header(int remotefd, uint32_t iotype, off_t iofrom, 
 }
 
 
-// static const char myhandle[8] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
-static const uint64_t myhandle = UINT64_MAX;
-
-int nbd_client_send_read_request(int remotefd, off_t iofrom, size_t len)
-{
-	dbg("sending request of iotype %s iofrom %ju len %zu",
-			"read", iofrom, len);
-
-	return nbd_client_send_request_header(remotefd, NBD_CMD_READ, iofrom, len, myhandle);
-}
-
-
-#if 0
-int send_read_request(int remotefd, off_t iofrom, size_t len)
-{
-	struct nbd_request request;
-	int ret;
-
-	dbg("sending request of iotype %s iofrom %ju len %zu",
-			"read", iofrom, len);
-
-	g_assert(len <= UINT32_MAX);
-	g_assert(iofrom + len <= OFF_MAX);
-
-	memset(&request, 0, sizeof(request));
-
-	request.magic = htonl(NBD_REQUEST_MAGIC);
-	request.type = htonl(NBD_CMD_READ);
-	request.from = htonll(iofrom);
-	request.len = htonl(len);
-	request.handle = htonll(myhandle);
-
-	ret = net_send_all(remotefd, &request, sizeof(request));
-	if (ret < (ssize_t) sizeof(request)) {
-		warn("send header");
-		return -1;
-	}
-
-	return 0;
-}
-#endif
-
-
-int nbd_client_recv_header(int remotefd)
+int nbd_client_recv_reply_header(int remotefd, uint64_t handle)
 {
 	struct nbd_reply reply;
 
@@ -168,11 +125,11 @@ int nbd_client_recv_header(int remotefd)
 	return 0;
 }
 
-int nbd_client_recv_read_reply_iov(int remotefd, struct iovec *iov, unsigned int count)
+int nbd_client_recv_read_reply_iov(int remotefd, struct iovec *iov, unsigned int count, uint64_t handle)
 {
 	int ret;
 
-	ret = nbd_client_recv_header(remotefd);
+	ret = nbd_client_recv_reply_header(remotefd, handle);
 	if (ret < 0) {
 		warn("recv header");
 		return -EPIPE;
@@ -188,6 +145,17 @@ int nbd_client_recv_read_reply_iov(int remotefd, struct iovec *iov, unsigned int
 	return 0;
 }
 
+
+static const uint64_t myhandle = UINT64_MAX;
+
+int nbd_client_send_read_request(int remotefd, off_t iofrom, size_t len)
+{
+	dbg("sending request of iotype %s iofrom %ju len %zu",
+			"read", iofrom, len);
+
+	return nbd_client_send_request_header(remotefd, NBD_CMD_READ, iofrom, len, myhandle);
+}
+
 int nbd_client_recv_read_reply(int remotefd, char *buf, size_t len)
 {
 	dbg("now receiving read reply");
@@ -199,7 +167,7 @@ int nbd_client_recv_read_reply(int remotefd, char *buf, size_t len)
 	iov[0].iov_base = buf;
 	iov[0].iov_len = len;
 
-	return nbd_client_recv_read_reply_iov(remotefd, iov, 1);
+	return nbd_client_recv_read_reply_iov(remotefd, iov, 1, myhandle);
 }
 
 

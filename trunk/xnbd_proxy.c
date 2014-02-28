@@ -68,11 +68,11 @@ void xnbd_proxy_control_cache_block(int ctl_fd, unsigned long index, unsigned lo
 	size_t iolen = nblocks * CBLOCKSIZE;
 	int ret;
 
-	ret = nbd_client_send_request_header(ctl_fd, NBD_CMD_BGCOPY, iofrom, iolen, (UINT64_MAX));
+	ret = nbd_client_send_request_header(ctl_fd, NBD_CMD_BGCOPY, iofrom, iolen, UINT64_MAX);
 	if (ret < 0)
 		err("send_read_request, %m");
 
-	ret = nbd_client_recv_header(ctl_fd);
+	ret = nbd_client_recv_reply_header(ctl_fd, UINT64_MAX);
 	if (ret < 0)
 		err("recv header, %m");
 }

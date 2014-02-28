@@ -96,11 +96,15 @@ void nbd_reply_dump(struct nbd_reply *reply);
 
 int  nbd_server_recv_request(int clientfd, off_t disksize, uint32_t *iotype_arg, off_t *iofrom_arg,
 		size_t *iolen_arg, struct nbd_reply *reply);
+
 int nbd_client_send_request_header(int remotefd, uint32_t iotype, off_t iofrom, size_t len, uint64_t handle);
-int  nbd_client_send_read_request(int remotefd, off_t iofrom, size_t len);
+int nbd_client_recv_reply_header(int remotefd, uint64_t handle);
+
+int nbd_client_recv_read_reply_iov(int remotefd, struct iovec *iov, unsigned int count, uint64_t handle);
+
+int nbd_client_send_read_request(int remotefd, off_t iofrom, size_t len);
+int nbd_client_recv_read_reply(int remotefd, char *buf, size_t len);
+
 void nbd_client_send_disc_request(int remotefd);
-int nbd_client_recv_read_reply_iov(int remotefd, struct iovec *iov, unsigned int count);
-int  nbd_client_recv_read_reply(int remotefd, char *buf, size_t len);
-int nbd_client_recv_header(int remotefd);
 
 #endif
