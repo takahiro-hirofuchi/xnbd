@@ -628,7 +628,7 @@ int main(int argc, char **argv) {
 		int c;
 		int index = 0;
 
-		c = getopt_long(argc, argv, "tphB:cm:", longopts, &index);
+		c = getopt_long(argc, argv, "B:cm:", longopts, &index);
 		if (c == -1)
 			break;
 
@@ -673,6 +673,8 @@ int main(int argc, char **argv) {
 
 	for (;;) {
 		int remotefd = net_connect(remotehost, remoteport, SOCK_STREAM, IPPROTO_TCP);
+		if (remotefd < 0)
+			err("connect to %s:%s", remotehost, remoteport);
 
 		int ret = test_direct_mode(srcpath, dstpath, remotefd, cowmode, rwmode, bgctlpath);
 		if (ret < 0)

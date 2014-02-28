@@ -148,7 +148,7 @@ void prepare_write_priv(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 
 		/*
 		 * Mark all write data blocks as cached. The following I/O
-		 * requests to this area never retrieve these blocks.
+		 * requests to this area never retrieve these blocks from remote.
 		 **/
 		for (unsigned long i = block_index_start; i <= block_index_end; i++) {
 			/* counter */

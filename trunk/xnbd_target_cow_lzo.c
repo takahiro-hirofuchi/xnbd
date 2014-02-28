@@ -443,7 +443,7 @@ struct disk_stack_io *disk_stack_mmap(struct disk_stack *ds, off_t iofrom, size_
 
 		int flags = PROT_READ;
 		if (i == ds->nlayers -1)
-		       flags |=	PROT_WRITE;
+		       flags |= PROT_WRITE;
 
 		io->bufs[i] = mmap(NULL, mapping_length, flags, MAP_SHARED, di->diskfd, mapping_start);
 		if (io->bufs[i] == MAP_FAILED)
@@ -843,11 +843,6 @@ int target_mode_main_cow(struct xnbd_session *ses)
 
 	free_disk_stack_io(io);
 
-
-#if 0
-	if (iotype == NBD_CMD_READ)
-		gstat_add(xnbd, iofrom);
-#endif
 
 	return 0;
 }

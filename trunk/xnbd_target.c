@@ -131,8 +131,7 @@ void xnbd_target_open_disk(char *diskpath, struct xnbd_info *xnbd)
 
 	check_disksize(diskpath, disksize, false);
 
-
-	/* multi-connections call this */
+	/* multiple connections call this */
 	//if (posix_fallocate(diskfd, 0, disksize))
 	//	warn("maybe no enough space in a local file system");
 
@@ -226,10 +225,6 @@ int target_mode_main_mmap(struct xnbd_session *ses)
 	//	warn("msync failed");
 	munmap_or_abort(mmaped_buf, mmaped_len);
 
-#if 0
-	if (iotype == NBD_CMD_READ)
-		gstat_add(xnbd, iofrom);
-#endif
 
 	return 0;
 }
