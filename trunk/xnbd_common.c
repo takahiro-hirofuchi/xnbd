@@ -130,35 +130,16 @@ int poll_request_arrival(struct xnbd_session *ses)
 	return wait_until_readable(ses->clientfd, ses->pipe_worker_fd);
 }
 
-void check_disksize(char *diskpath, off_t disksize, bool force_cblock)
+/* --proxy and --cow-target will depend on mmap_block_region */
+void check_disksize(off_t disksize)
 {
-	int pgsize = getpagesize();
-
-	if (disksize % 1024)
-		warn("disksize %jd is not a multiple of 1024 (nbd's default block size)", disksize);
-
-	if (disksize % pgsize)
-		warn("disksize %jd is not a multiple of a page size (%d)", disksize, pgsize);
-
-	/* A known issue is the end block of the disk; the size of which is not
-	 * a multiple of CBLOCKSIZE. */
-	if (disksize % CBLOCKSIZE) {
-		warn("disksize %jd is not a multiple of %d (xnbd's cache block size)",
-				disksize, CBLOCKSIZE);
-		if (force_cblock)
-			exit(EXIT_FAILURE);
-	}
-
-	/* off_t becomes 32bit singed integer when no large file support */
-	info("disk %s size %ju B (%ju MB)", diskpath, disksize, disksize /1024 /1024);
+	/* This restriction makes it simple to handle the end of the disk file. */
+	if (disksize % CBLOCKSIZE)
+		err("disksize %jd must be a multiple of CBLOCKSIZE(%d)", disksize, CBLOCKSIZE);
 }
 
 unsigned long get_disk_nblocks(off_t disksize)
 {
-	if (disksize % CBLOCKSIZE)
-		warn("disksize is not a multiple of CBLOCKSIZE");
-
-	/* setup bitmap */
 	off_t nblocks64 = disksize / CBLOCKSIZE + ((disksize % CBLOCKSIZE) ? 1U : 0U);
 
 	/*
