@@ -298,7 +298,7 @@ void *receiver_thread_main(void *data)
 		dbg("req %p index %d iofrom %ju iolen %zu", req, req->index, req->iofrom, req->iolen);
 
 
-		struct mmap_partial *tgtmp = mmap_partial_map(params->tgtdiskfd, req->iofrom, req->iolen, 0);
+		struct mmap_region *tgtmp = mmap_region_create(params->tgtdiskfd, req->iofrom, req->iolen, 0);
 
 		if (req->iotype == NBD_CMD_WRITE) {
 			info("index %d req %p write done", req->index, req);
@@ -336,7 +336,7 @@ int check_consistency_by_partial_mmap_for_cowdisk(char *srcdisk, int tgtdiskfd, 
 	struct disk_stack_io *io = disk_stack_mmap(ds, req->iofrom, req->iolen, 1);
 
 
-	struct mmap_partial *tgtmp = mmap_partial_map(tgtdiskfd, req->iofrom, req->iolen, 0);
+	struct mmap_region *tgtmp = mmap_region_create(tgtdiskfd, req->iofrom, req->iolen, 0);
 	char *tgtiobuf = tgtmp->iobuf;
 
 	unsigned long offset = 0;
@@ -355,7 +355,7 @@ int check_consistency_by_partial_mmap_for_cowdisk(char *srcdisk, int tgtdiskfd, 
 	free_disk_stack_io(io);
 	xnbd_cow_target_close_disk(ds, 0);
 
-	mmap_partial_unmap(tgtmp);
+	mmap_region_free(tgtmp);
 
 #if 0
 	if (ret) {
@@ -416,8 +416,8 @@ int check_consistency_by_partial_mmap(char *srcdisk, int tgtdiskfd, struct crequ
 	if (srcdiskfd < 0)
 		err("open srcdisk %s", srcdisk);
 
-	struct mmap_partial *srcmp = mmap_partial_map(srcdiskfd, req->iofrom, req->iolen, 1);
-	struct mmap_partial *tgtmp = mmap_partial_map(tgtdiskfd, req->iofrom, req->iolen, 0);
+	struct mmap_region *srcmp = mmap_region_create(srcdiskfd, req->iofrom, req->iolen, 1);
+	struct mmap_region *tgtmp = mmap_region_create(tgtdiskfd, req->iofrom, req->iolen, 0);
 	char *srciobuf = srcmp->iobuf;
 	char *tgtiobuf = tgtmp->iobuf;
 
@@ -469,8 +469,8 @@ int check_consistency_by_partial_mmap(char *srcdisk, int tgtdiskfd, struct crequ
 	}
 
 
-	mmap_partial_unmap(srcmp);
-	mmap_partial_unmap(tgtmp);
+	mmap_region_free(srcmp);
+	mmap_region_free(tgtmp);
 
 	close(srcdiskfd);
 
