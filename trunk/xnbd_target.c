@@ -115,7 +115,6 @@ void xnbd_target_open_disk(char *diskpath, struct xnbd_info *xnbd)
 {
 	int diskfd;
 
-
 	if (xnbd->readonly)
 		diskfd = open(diskpath, O_RDONLY | O_NOATIME);
 	else
@@ -126,17 +125,11 @@ void xnbd_target_open_disk(char *diskpath, struct xnbd_info *xnbd)
 		err("open, %s", strerror(errno));
 	}
 
-
 	off_t disksize = get_disksize(diskfd);
-
-	check_disksize(diskpath, disksize, false);
 
 	/* multiple connections call this */
 	//if (posix_fallocate(diskfd, 0, disksize))
 	//	warn("maybe no enough space in a local file system");
-
-
-
 
 	xnbd->target_diskfd = diskfd;
 	xnbd->disksize = disksize;
