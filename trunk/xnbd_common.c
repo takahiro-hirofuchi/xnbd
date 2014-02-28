@@ -114,7 +114,7 @@ void *mmap_iorange(const off_t disksize, const bool readonly, const int fd, cons
 	//dbg("iofrom %llu iofrom + iolen %llu", iofrom, iofrom + iolen);
 	//dbg("block_index_start %u end %u", index_start, index_end);
 
-	/* (uint64_t) casting is essential !!! */
+	/* (off_t) casting is essential !!! */
 	off_t mapping_start  = (off_t) index_start * CBLOCKSIZE;
 	size_t mapping_length = (index_end - index_start + 1) * CBLOCKSIZE;
 
