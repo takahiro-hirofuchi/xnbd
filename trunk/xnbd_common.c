@@ -47,14 +47,19 @@ const int XNBD_PORT = 8520;
  * 2. CBLOCKSIZE must be a power of 2. Otherwise, bit operations for ba_iofrom and ba_ioend fail. */
 struct mmap_block_region *mmap_block_region_create(int fd, off_t iofrom, size_t iolen, int readonly)
 {
+	/* cast to off_t in order to avoid overflow */
+	const off_t blocksize = CBLOCKSIZE;
 	/* block-aligned */
-	off_t ba_iofrom = iofrom & ~(CBLOCKSIZE - 1);
-	off_t ba_ioend  = ((iofrom + iolen) + (CBLOCKSIZE - 1)) & ~(CBLOCKSIZE - 1);
+	off_t ba_iofrom = iofrom & ~(blocksize - 1);
+	off_t ba_ioend  = ((iofrom + iolen) + (blocksize - 1)) & ~(blocksize - 1);
 
 	struct mmap_region *mr = mmap_region_create(fd, ba_iofrom, (ba_ioend - ba_iofrom), readonly);
 
 	struct mmap_block_region *mbr = g_slice_new(struct mmap_block_region);
 	mbr->mr = mr;
+
+	dbg("ba_iofrom %ju [iofrom %ju ioend %ju] ba_ioend %ju",
+			ba_iofrom, iofrom, iofrom  + iolen, ba_ioend);
 
 	/* mr->iobuf points to ba_iofrom. */
 	mbr->ba_iobuf = mr->iobuf;
