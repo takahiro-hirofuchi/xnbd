@@ -352,8 +352,8 @@ void munmap_or_abort(void *addr, size_t len)
 struct mmap_region *mmap_region_create(int fd, off_t iofrom, size_t iolen, int readonly)
 {
 	/* page-aligned offset for mmap() */
-	off_t pa_iofrom = iofrom & ~(getpagesize() - 1);
-	size_t mmap_len = iolen + iofrom - pa_iofrom;
+	off_t pa_iofrom = iofrom & ~((off_t) getpagesize() - 1);
+	size_t mmap_len = iolen + (iofrom - pa_iofrom); // be careful of overflow
 	void *mmap_buf = NULL;
 
 	if (readonly)
