@@ -182,20 +182,6 @@ off_t get_disksize_of_path(const char *path)
 	return disksize;
 }
 
-void calc_block_index(const unsigned int blocksize, const off_t iofrom, const size_t iolen, unsigned long *index_start, unsigned long *index_end)
-{
-	unsigned long block_index_start = iofrom / blocksize;
-	unsigned long block_index_end;
-
-	if ((iofrom + iolen) % blocksize == 0) {
-		block_index_end   = (iofrom + iolen) / blocksize - 1;
-	} else {
-		block_index_end   = (iofrom + iolen) / blocksize;
-	}
-
-	*index_start = block_index_start;
-	*index_end   = block_index_end;
-}
 
 char *get_line(int fd)
 {
