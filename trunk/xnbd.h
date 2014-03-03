@@ -188,17 +188,14 @@ struct xnbd_session {
 
 
 
+/* default XNBD server port */
+extern const int XNBD_PORT;
 extern const unsigned int CBLOCKSIZE;
 
 
 
-extern const unsigned long XNBD_BGCTL_MAGIC_CACHE_ALL;
-extern const unsigned long XNBD_BGCTL_MAGIC_SHUTDOWN;
 
 
-
-/* default XNBD server port */
-extern const int XNBD_PORT;
 
 
 
