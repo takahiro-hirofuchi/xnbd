@@ -259,30 +259,6 @@ void *sender_thread_main(void *data)
 	return NULL;
 }
 
-void recv_reply_header(int remotefd, uint64_t expected_index)
-{
-	struct nbd_reply reply;
-	memset(&reply, 0, sizeof(reply));
-
-
-	net_recv_all_or_abort(remotefd, &reply, sizeof(reply));
-
-	if (ntohl(reply.magic) != NBD_REPLY_MAGIC)
-		err("unknown reply magic, %x %x", reply.magic, ntohl(reply.magic));
-
-	uint32_t error = ntohl(reply.error);
-	if (error)
-		err("reply state error %d", error);
-
-
-	uint64_t reply_index = ntohll(reply.handle);
-
-	dbg("index %ju %ju", reply_index, reply.handle);
-
-	if (reply_index != expected_index)
-		err("wrong reply ordering, reply_index %ju (%jx) expected_index %ju", reply_index, reply_index, expected_index);
-}
-
 void *receiver_thread_main(void *data)
 {
 	struct parameters *params = (struct parameters *) data;
@@ -292,8 +268,9 @@ void *receiver_thread_main(void *data)
 		if (req == &eofmarker)
 			break;
 
-		recv_reply_header(params->remotefd, req->index);
-
+		int ret = nbd_client_recv_reply_header(params->remotefd, req->index);
+		if (ret < 0)
+			err("recv read reply");
 
 		dbg("req %p index %d iofrom %ju iolen %zu", req, req->index, req->iofrom, req->iolen);
 
