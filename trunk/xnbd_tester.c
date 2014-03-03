@@ -383,13 +383,12 @@ int check_consistency_by_partial_mmap(char *srcdisk, int tgtdiskfd, struct crequ
 				req->index, nbd_get_iotype_string(req->iotype),
 				req->iofrom, req->iolen);
 
-		unsigned long block_index_start;
-		unsigned long block_index_end;
-		get_io_range_index(req->iofrom, req->iolen, &block_index_start, &block_index_end);
+		unsigned long block_index_sta = get_bindex_sta(CBLOCKSIZE, req->iofrom);
+		unsigned long block_index_end = get_bindex_end(CBLOCKSIZE, req->iofrom + req->iolen);
 
-		info("iofrom %ju (%ju KB), block_index_start %lu offset_in_start_block %ju",
+		info("iofrom %ju (%ju KB), block_index_sta %lu offset_in_start_block %ju",
 				req->iofrom, req->iofrom / 1024,
-				block_index_start, req->iofrom % CBLOCKSIZE);
+				block_index_sta, req->iofrom % CBLOCKSIZE);
 
 		info("ioend %ju (%ju KB), block_index_end %lu offset_in_end_block %ju",
 				req->iofrom + req->iolen, (req->iofrom + req->iolen) / 1024,

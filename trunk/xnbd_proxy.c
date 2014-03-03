@@ -248,17 +248,15 @@ int recv_request(struct proxy_session *ps)
 		}
 	}
 
-	unsigned long block_index_start;
-	unsigned long block_index_end;
-
-	get_io_range_index(iofrom, iolen, &block_index_start, &block_index_end);
+	unsigned long block_index_sta = get_bindex_sta(CBLOCKSIZE, iofrom);
+	unsigned long block_index_end = get_bindex_end(CBLOCKSIZE, iofrom + iolen);
 	dbg("disk io iofrom %ju iolen %zu", iofrom, iolen);
-	dbg("block_index_start %lu stop %lu", block_index_start, block_index_end);
+	dbg("block_index_sta %lu stop %lu", block_index_sta, block_index_end);
 
 	priv->iotype = iotype;
 	priv->iofrom = iofrom;
 	priv->iolen  = iolen;
-	priv->block_index_start = block_index_start;
+	priv->block_index_start = block_index_sta;
 	priv->block_index_end   = block_index_end;
 
 

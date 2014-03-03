@@ -46,7 +46,19 @@ pid_t fork_or_abort(void);
 
 off_t get_disksize(int fd);
 off_t get_disksize_of_path(const char *path);
-void calc_block_index(const unsigned int blocksize, off_t iofrom, size_t iolen, unsigned long *index_start, unsigned long *index_end);
+
+static inline unsigned long get_bindex_sta(const unsigned int blocksize, const off_t iofrom)
+{
+	return iofrom / blocksize;
+}
+
+static inline unsigned long get_bindex_end(const unsigned int blocksize, const off_t ioend)
+{
+	if (ioend % blocksize == 0)
+		return ioend / blocksize - 1;
+	else
+		return ioend / blocksize;
+}
 
 char *get_line(int fd);
 int put_line(int fd, const char *msg);

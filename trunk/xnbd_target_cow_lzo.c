@@ -420,9 +420,8 @@ void free_disk_stack_io(struct disk_stack_io *io)
 
 struct disk_stack_io *disk_stack_mmap(struct disk_stack *ds, off_t iofrom, size_t iolen, int reading)
 {
-	unsigned long index_start, index_end;
-
-	get_io_range_index(iofrom, iolen, &index_start, &index_end);
+	unsigned long index_start = get_bindex_sta(CBLOCKSIZE, iofrom);
+	unsigned long index_end   = get_bindex_end(CBLOCKSIZE, iofrom + iolen);
 
 	dbg("iofrom %ju iofrom + iolen %ju", iofrom, iofrom + iolen);
 	dbg("index_start %lu end %lu", index_start, index_end);

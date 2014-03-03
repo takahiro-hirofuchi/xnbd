@@ -40,12 +40,6 @@ const int XNBD_PORT = 8520;
 
 
 
-
-void get_io_range_index(off_t iofrom, size_t iolen, unsigned long *index_start, unsigned long *index_end)
-{
-	calc_block_index(CBLOCKSIZE, iofrom, iolen, index_start, index_end);
-}
-
 /* mmap a region of a given file. The start and the end of the region are also block-aligned.
  *
  * 1. Make sure the file size is a multiple of CBLOCKSIZE. Otherwise, ba_ioend
@@ -80,10 +74,9 @@ void mmap_block_region_free(struct mmap_block_region *mbr)
 #if 0
 void *mmap_iorange(const off_t disksize, const bool readonly, const int fd, const off_t iofrom, const size_t iolen, char **mmaped_buf, size_t *mmaped_len, off_t *mmaped_offset)
 {
-	unsigned long index_start, index_end;
+	unsigned long index_start = get_bindex_sta(CBLOCKSIZE, iofrom);
+	unsigned long index_end   = get_gindex_end(CBLOCKSIZE, iofrom + ioend);
 	char *buf;
-
-	get_io_range_index(iofrom, iolen, &index_start, &index_end);
 
 	//dbg("iofrom %llu iofrom + iolen %llu", iofrom, iofrom + iolen);
 	//dbg("block_index_start %u end %u", index_start, index_end);
