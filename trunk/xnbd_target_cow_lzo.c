@@ -178,7 +178,6 @@ struct disk_stack *create_disk_stack(char *diskpath)
 	}
 
 	disksize = get_disksize(diskfd);
-	check_disksize(disksize);
 
 	/* off_t is 32bit singed integer without the large file support */
 	info("disk %s size %ju B (%ju MB)", diskpath, disksize, disksize /1024 /1024);
@@ -344,10 +343,12 @@ static void update_block_with_found(struct disk_stack *ds, struct disk_stack_io 
 		err("bug");
 }
 
-/* TODO: adjust iolen */
-static void copy_block_to_top_layer(struct disk_stack *ds, struct disk_stack_io *io, unsigned long index, unsigned long start_index)
+
+static void copy_block_to_top_layer(struct disk_stack *ds, struct disk_stack_io *io, unsigned long index, unsigned long start_index, off_t disksize)
 {
 	bool found = false;
+
+	size_t iolen = confine_iolen_within_disk(disksize, (off_t) index * CBLOCKSIZE, CBLOCKSIZE);
 
 	for (int i = ds->nlayers - 1; i >= 0; i--) {
 		struct disk_image *di = ds->image[i];
@@ -358,7 +359,7 @@ static void copy_block_to_top_layer(struct disk_stack *ds, struct disk_stack_io 
 			char *dstptr = (char *) io->mbrs[ds->nlayers - 1]->ba_iobuf + (index - start_index) * CBLOCKSIZE;
 			char *srcptr = (char *) io->mbrs[i]->ba_iobuf + (index - start_index) * CBLOCKSIZE;
 
-			memcpy(dstptr, srcptr, CBLOCKSIZE);
+			memcpy(dstptr, srcptr, iolen);
 
 			found = true;
 			break;
@@ -704,10 +705,10 @@ struct disk_stack_io *disk_stack_mmap(struct disk_stack *ds, off_t iofrom, size_
 		}
 
 		if (get_sta_block)
-			copy_block_to_top_layer(ds, io, index_sta, index_sta);
+			copy_block_to_top_layer(ds, io, index_sta, index_sta, ds->disksize);
 
 		if (get_end_block)
-			copy_block_to_top_layer(ds, io, index_end, index_sta);
+			copy_block_to_top_layer(ds, io, index_end, index_sta, ds->disksize);
 
 
 		for (unsigned long index = index_sta; index <= index_end; index++) {
