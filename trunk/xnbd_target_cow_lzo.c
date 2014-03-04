@@ -448,7 +448,7 @@ void free_disk_stack_io(struct disk_stack_io *io)
 	g_free(io);
 }
 
-struct disk_stack_io *disk_stack_mmap(struct disk_stack *ds, off_t iofrom, size_t iolen, int reading)
+struct disk_stack_io *disk_stack_mmap_old(struct disk_stack *ds, off_t iofrom, size_t iolen, int reading)
 {
 	unsigned long index_start = get_bindex_sta(CBLOCKSIZE, iofrom);
 	unsigned long index_end   = get_bindex_end(CBLOCKSIZE, iofrom + iolen);
@@ -606,7 +606,7 @@ struct disk_stack_io *disk_stack_mmap(struct disk_stack *ds, off_t iofrom, size_
 }
 
 
-struct disk_stack_io *disk_stack_mmap2(struct disk_stack *ds, off_t iofrom, size_t iolen, int reading)
+struct disk_stack_io *disk_stack_mmap(struct disk_stack *ds, off_t iofrom, size_t iolen, int reading)
 {
 	off_t ioend = iofrom + iolen;
 	unsigned long index_sta = get_bindex_sta(CBLOCKSIZE, iofrom);
@@ -615,17 +615,6 @@ struct disk_stack_io *disk_stack_mmap2(struct disk_stack *ds, off_t iofrom, size
 	dbg("iofrom %ju ioend %ju", iofrom, ioend);
 	dbg("index_sta %lu end %lu", index_sta, index_end);
 
-#if 0
-	/* need casting to off_t */
-	off_t mapping_start  = (off_t) index_sta * CBLOCKSIZE;
-	size_t mapping_length = (index_end - index_sta + 1) * CBLOCKSIZE;
-
-	//dbg("%u * %u = %llu", index_sta, CBLOCKSIZE, mapping_start);
-
-	dbg("mmapping_start %ju mapping_end %ju mapping_length %zu",
-			mapping_start, mapping_start + mapping_length,
-			mapping_length);
-#endif
 
 	struct disk_stack_io *io = create_disk_stack_io(ds);
 
@@ -639,16 +628,6 @@ struct disk_stack_io *disk_stack_mmap2(struct disk_stack *ds, off_t iofrom, size
 
 		io->mbrs[i] = mmap_block_region_create(di->diskfd, ds->disksize, iofrom, iolen, readonly);
 
-		// io->bufs[i] = io->mbrs[i]->mr->mmap_buf;
-		// io->buflen  = io->mbrs[i]->mr->mmap_len;
-
-		// io->bufs[i] = mmap(NULL, mapping_length, flags, MAP_SHARED, di->diskfd, mapping_start);
-		// if (io->bufs[i] == MAP_FAILED)
-		// 	err("mmap, %m");
-		//
-		// io->buflen  = mapping_length;
-		// dbg("mmap %d %s, disk %ju - %ju => buf %p - %p", i, di->path, mapping_start, mapping_start + mapping_length,
-		//		io->bufs[i], io->bufs[i] + io->buflen);
 	}
 
 
@@ -663,32 +642,6 @@ struct disk_stack_io *disk_stack_mmap2(struct disk_stack *ds, off_t iofrom, size
 		iov = g_new0(struct iovec, iov_size);
 
 		for (unsigned long index = index_sta; index <= index_end; index++) {
-
-#if 0
-			unsigned long iofrom_inbuf = 0;
-			unsigned long iolen_inbuf = 0;
-
-			/* should we uint64_t?, but how much does overhead come in 32-bit arch? */
-			iofrom_inbuf = (unsigned long) ((off_t) index * CBLOCKSIZE - mapping_start);
-			iolen_inbuf  = CBLOCKSIZE;
-
-			if (index_sta == index_end) {
-				iofrom_inbuf = (unsigned long) (iofrom - mapping_start);
-				iolen_inbuf  = iolen;
-			} else {
-				if (index == index_sta) {
-					iofrom_inbuf = (unsigned long) (iofrom - mapping_start);
-					iolen_inbuf  = CBLOCKSIZE - iofrom_inbuf;
-
-				} else if (index == index_end) {
-					iofrom_inbuf = (unsigned long) ((off_t) index * CBLOCKSIZE - mapping_start);
-					iolen_inbuf  = (unsigned long) (ioend - (index * CBLOCKSIZE));
-				}
-			}
-
-			dbg("index %lu, iofrom_inbuf %lu iolen_inbuf %lu", index, iofrom_inbuf, iolen_inbuf);
-#endif
-
 			bool found = true;
 
 			for (int i = ds->nlayers - 1; i >= 0; i--) {
@@ -725,12 +678,8 @@ struct disk_stack_io *disk_stack_mmap2(struct disk_stack *ds, off_t iofrom, size
 		iov_size = 1;
 		iov = g_malloc0(sizeof(struct iovec));
 
-		// unsigned long iofrom_inbuf = (unsigned long) (iofrom - mapping_start);
-
-		// iov[0].iov_base = io->bufs[ds->nlayers-1] + iofrom_inbuf;
 		iov[0].iov_base = io->mbrs[ds->nlayers-1]->iobuf;
 		iov[0].iov_len  = iolen;
-
 
 		/* copy the start/end blocks of the region from a lower layer to the top layer */
 		bool get_sta_block = false;
@@ -739,7 +688,6 @@ struct disk_stack_io *disk_stack_mmap2(struct disk_stack *ds, off_t iofrom, size
 		if (iofrom % CBLOCKSIZE)
 			if (!bitmap_test(ds->image[ds->nlayers-1]->bm, index_sta))
 				get_sta_block = true;
-
 
 		if (ioend % CBLOCKSIZE) {
 			/*
@@ -1005,7 +953,7 @@ int target_mode_main_cow(struct xnbd_session *ses)
 	dbg("direct mode");
 
 
-	struct disk_stack_io *io = disk_stack_mmap2(xnbd->cow_ds, iofrom, iolen, (iotype == NBD_CMD_READ));
+	struct disk_stack_io *io = disk_stack_mmap(xnbd->cow_ds, iofrom, iolen, (iotype == NBD_CMD_READ));
 
 
 	switch (iotype) {
