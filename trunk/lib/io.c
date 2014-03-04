@@ -336,7 +336,7 @@ void *mmap_or_abort(void *addr, size_t length, int prot, int flags, int fd, off_
 {
 	void *buf = mmap(addr, length, prot, flags, fd, offset);
 	if (buf == MAP_FAILED)
-		err("mmap %m");
+		err("mmap %m, fd %d", fd);
 
 	return buf;
 }

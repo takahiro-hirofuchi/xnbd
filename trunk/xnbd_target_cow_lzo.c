@@ -96,9 +96,7 @@ void setup_debug_buf(struct disk_stack *ds)
 	if (fd < 0)
 		err("open, %m");
 
-	char *buf = mmap(NULL, len, PROT_READ, MAP_SHARED, fd, 0);
-	if (buf == MAP_FAILED)
-		err("mmap debug_buf, %m");
+	mmap_or_abort(NULL, len, PROT_READ, MAP_SHARED, fd, 0);
 
 	close(fd);
 
