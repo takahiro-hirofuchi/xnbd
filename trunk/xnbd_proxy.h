@@ -138,4 +138,4 @@ void *forwarder_tx_thread_main(void *arg);
 extern struct proxy_priv priv_stop_forwarder;
 void proxy_priv_dump(struct proxy_priv *priv);
 void block_all_signals(void);
-void xnbd_proxy_control_cache_block(int ctl_fd, unsigned long index, unsigned long nblocks);
+void xnbd_proxy_control_cache_block(int ctl_fd, off_t disksize, unsigned long index, unsigned long nblocks);

@@ -62,11 +62,13 @@ void block_all_signals(void)
 
 
 /* used in xnbd-tester */
-void xnbd_proxy_control_cache_block(int ctl_fd, unsigned long index, unsigned long nblocks)
+void xnbd_proxy_control_cache_block(int ctl_fd, off_t disksize, unsigned long index, unsigned long nblocks)
 {
+	int ret;
+
 	off_t iofrom = (off_t) index * CBLOCKSIZE;
 	size_t iolen = nblocks * CBLOCKSIZE;
-	int ret;
+	iolen = confine_iolen_within_disk(disksize, iofrom, iolen);
 
 	ret = nbd_client_send_request_header(ctl_fd, NBD_CMD_BGCOPY, iofrom, iolen, UINT64_MAX);
 	if (ret < 0)

@@ -33,25 +33,26 @@
  * 1024 or 8192, which is different from the page size, is also possible, but not well tested.
  **/
 const unsigned int CBLOCKSIZE = 4096;
-
 const int XNBD_PORT = 8520;
 
 
 
 
 
-/* mmap a region of a given file. The start and the end of the region are also block-aligned.
- *
- * 1. Make sure the file size is a multiple of CBLOCKSIZE. Otherwise, ba_ioend
- * goes over the end of the file.
- * 2. CBLOCKSIZE must be a power of 2. Otherwise, bit operations for ba_iofrom and ba_ioend fail. */
-struct mmap_block_region *mmap_block_region_create(int fd, off_t iofrom, size_t iolen, int readonly)
+/* mmap a region of a given file. The start and the end of the region are block-aligned. */
+struct mmap_block_region *mmap_block_region_create(int fd, off_t disksize, off_t iofrom, size_t iolen, int readonly)
 {
 	/* cast to off_t in order to avoid overflow */
 	const off_t blocksize = CBLOCKSIZE;
 	/* block-aligned */
 	off_t ba_iofrom = iofrom & ~(blocksize - 1);
 	off_t ba_ioend  = ((iofrom + iolen) + (blocksize - 1)) & ~(blocksize - 1);
+
+	/* This may happen when the disk size is not a multiple of CBLOCKSIZE */
+	if (ba_ioend > disksize) {
+		info("The disk end offset is not block-aligned. (disksize %ju ba_ioend %ju)", disksize, ba_ioend);
+		ba_ioend = disksize;
+	}
 
 	struct mmap_region *mr = mmap_region_create(fd, ba_iofrom, (ba_ioend - ba_iofrom), readonly);
 

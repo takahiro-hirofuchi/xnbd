@@ -66,7 +66,7 @@ static void speed_test(int remotefd)
 		for (off_t iofrom = 0; iofrom < disksize; iofrom += cnst_iosize) {
 			/* should not go over the last offset */
 			size_t iosize = cnst_iosize;
-			if (iofrom + cnst_iosize > disksize)
+			if (iofrom + (off_t) cnst_iosize > disksize)
 				iosize = disksize - iofrom;
 
 			// info("iofrom %ju iosize %zu", iofrom, iosize);
