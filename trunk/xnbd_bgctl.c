@@ -529,17 +529,6 @@ void cache_all_blocks(char *unix_path, unsigned long *bm, unsigned long nblocks)
 	end_register_fd(unix_fd, ctl_fd);
 }
 
-unsigned long get_cached(unsigned long *bm, unsigned long nblocks)
-{
-	unsigned long cached = 0;
-	for (unsigned long index = 0; index < nblocks; index++) {
-		if (bitmap_test(bm, index))
-			cached += 1;
-	}
-
-	return cached;
-}
-
 static struct option longopts[] = {
 	/* commands */
 	{"query",      no_argument, NULL, 'q'},
@@ -737,7 +726,7 @@ int main(int argc, char **argv)
 	struct xnbd_proxy_query *query = create_proxy_query(unix_path);
 	unsigned long nblocks = get_disk_nblocks(query->disksize);
 	unsigned long *bm = bitmap_open_file(query->bmpath, nblocks, &bmlen, 1, 0);
-	unsigned long cached = get_cached(bm, nblocks);
+	unsigned long cached = bitmap_popcount(bm, nblocks);
 
 	info("%s (%s): disksize %ju", query->diskpath, query->bmpath, query->disksize);
 	info("forwarded to %s:%s", query->rhost, query->rport);
