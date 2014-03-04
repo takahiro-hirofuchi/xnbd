@@ -38,3 +38,4 @@ void bitmap_close_file(unsigned long *bitmap, size_t bitmaplen);
 unsigned long *bitmap_create(char *bitmapfile, unsigned long size, int *cbitmapfd, size_t *cbitmaplen);
 int bitmap_test(unsigned long *bitmap_array, unsigned long block_index);
 void bitmap_on(unsigned long *bitmap_array, unsigned long block_index);
+unsigned long bitmap_popcount(unsigned long *bm, unsigned long nblocks);

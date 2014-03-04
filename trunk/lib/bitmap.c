@@ -144,6 +144,7 @@ unsigned long *bitmap_open_file(const char *bitmapfile, unsigned long bits, size
 	return (unsigned long *) buf;
 }
 
+
 unsigned long *bitmap_create(char *bitmapfile, unsigned long bits, int *cbitmapfd, size_t *cbitmaplen)
 {
 	int fd;
@@ -188,6 +189,7 @@ unsigned long *bitmap_create(char *bitmapfile, unsigned long bits, int *cbitmapf
 	return (unsigned long *) buf;
 }
 
+
 int bitmap_test(unsigned long *bitmap_array, unsigned long block_index)
 {
 	//printf("%p, %u\n",  bitmap_array, block_index);
@@ -206,6 +208,7 @@ int bitmap_test(unsigned long *bitmap_array, unsigned long block_index)
 		return 0;
 }
 
+
 void bitmap_on(unsigned long *bitmap_array, unsigned long block_index)
 {
 	unsigned long bitmap_index = block_index / BITS_PER_LONG;
@@ -217,4 +220,17 @@ void bitmap_on(unsigned long *bitmap_array, unsigned long block_index)
 	*bitmap |= (1UL << (block_index % BITS_PER_LONG));
 
 	//dbg("set_bitmap %08x", *bitmap);
+}
+
+
+/* we can make it faster */
+unsigned long bitmap_popcount(unsigned long *bm, unsigned long nblocks)
+{
+	unsigned long cached = 0;
+	for (unsigned long index = 0; index < nblocks; index++) {
+		if (bitmap_test(bm, index))
+			cached += 1;
+	}
+
+	return cached;
 }
