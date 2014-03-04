@@ -346,6 +346,31 @@ static void update_block_with_found(struct disk_stack *ds, struct disk_stack_io 
 		err("bug");
 }
 
+/* TODO: adjust iolen */
+static void copy_block_to_top_layer(struct disk_stack *ds, struct disk_stack_io *io, unsigned long index, unsigned long start_index)
+{
+	bool found = false;
+
+	for (int i = ds->nlayers - 1; i >= 0; i--) {
+		struct disk_image *di = ds->image[i];
+
+		if (bitmap_test(di->bm, index)) {
+			dbg("index %lu found at layer %d", index, i);
+
+			char *dstptr = (char *) io->mbrs[ds->nlayers - 1]->ba_iobuf + (index - start_index) * CBLOCKSIZE;
+			char *srcptr = (char *) io->mbrs[i]->ba_iobuf + (index - start_index) * CBLOCKSIZE;
+
+			memcpy(dstptr, srcptr, CBLOCKSIZE);
+
+			found = true;
+			break;
+		}
+	}
+
+	if (!found)
+		err("bug");
+}
+
 
 struct disk_stack *xnbd_cow_target_open_disk(char *diskpath, int newfile, int cowid)
 {
@@ -411,8 +436,15 @@ static struct disk_stack_io *create_disk_stack_io(struct disk_stack *ds)
 
 void free_disk_stack_io(struct disk_stack_io *io)
 {
-	for (int i = 0; i < io->ds->nlayers; i++)
-		munmap_or_abort(io->bufs[i], io->buflen);
+	// for (int i = 0; i < io->ds->nlayers; i++)
+	// 	munmap_or_abort(io->bufs[i], io->buflen);
+
+	for (int i = 0; i < io->ds->nlayers; i++) {
+		if (io->bufs[i])
+			munmap_or_abort(io->bufs[i], io->buflen);
+		if (io->mbrs[i])
+			mmap_block_region_free(io->mbrs[i]);
+	}
 
 	g_free(io->iov);
 	g_free(io);
@@ -574,6 +606,181 @@ struct disk_stack_io *disk_stack_mmap(struct disk_stack *ds, off_t iofrom, size_
 
 	return io;
 }
+
+
+struct disk_stack_io *disk_stack_mmap2(struct disk_stack *ds, off_t iofrom, size_t iolen, int reading)
+{
+	off_t ioend = iofrom + iolen;
+	unsigned long index_sta = get_bindex_sta(CBLOCKSIZE, iofrom);
+	unsigned long index_end = get_bindex_end(CBLOCKSIZE, ioend);
+
+	dbg("iofrom %ju ioend %ju", iofrom, ioend);
+	dbg("index_sta %lu end %lu", index_sta, index_end);
+
+#if 0
+	/* need casting to off_t */
+	off_t mapping_start  = (off_t) index_sta * CBLOCKSIZE;
+	size_t mapping_length = (index_end - index_sta + 1) * CBLOCKSIZE;
+
+	//dbg("%u * %u = %llu", index_sta, CBLOCKSIZE, mapping_start);
+
+	dbg("mmapping_start %ju mapping_end %ju mapping_length %zu",
+			mapping_start, mapping_start + mapping_length,
+			mapping_length);
+#endif
+
+	struct disk_stack_io *io = create_disk_stack_io(ds);
+
+	/* mmap() all layers */
+	for (int i = 0; i < ds->nlayers; i++) {
+		struct disk_image *di = ds->image[i];
+
+		int readonly = 1;
+		if (i == ds->nlayers -1)
+			readonly = 0;
+
+		io->mbrs[i] = mmap_block_region_create(di->diskfd, ds->disksize, iofrom, iolen, readonly);
+
+		// io->bufs[i] = io->mbrs[i]->mr->mmap_buf;
+		// io->buflen  = io->mbrs[i]->mr->mmap_len;
+
+		// io->bufs[i] = mmap(NULL, mapping_length, flags, MAP_SHARED, di->diskfd, mapping_start);
+		// if (io->bufs[i] == MAP_FAILED)
+		// 	err("mmap, %m");
+		//
+		// io->buflen  = mapping_length;
+		// dbg("mmap %d %s, disk %ju - %ju => buf %p - %p", i, di->path, mapping_start, mapping_start + mapping_length,
+		//		io->bufs[i], io->bufs[i] + io->buflen);
+	}
+
+
+	struct iovec *iov = NULL;
+	unsigned int iov_size = 0;
+
+	if (reading) {
+		/* the number of iovec in readv()'s args is int */
+		g_assert((index_end - index_sta + 1) <= UINT32_MAX);
+
+		iov_size = (unsigned int) (index_end - index_sta + 1);
+		iov = g_new0(struct iovec, iov_size);
+
+		for (unsigned long index = index_sta; index <= index_end; index++) {
+
+#if 0
+			unsigned long iofrom_inbuf = 0;
+			unsigned long iolen_inbuf = 0;
+
+			/* should we uint64_t?, but how much does overhead come in 32-bit arch? */
+			iofrom_inbuf = (unsigned long) ((off_t) index * CBLOCKSIZE - mapping_start);
+			iolen_inbuf  = CBLOCKSIZE;
+
+			if (index_sta == index_end) {
+				iofrom_inbuf = (unsigned long) (iofrom - mapping_start);
+				iolen_inbuf  = iolen;
+			} else {
+				if (index == index_sta) {
+					iofrom_inbuf = (unsigned long) (iofrom - mapping_start);
+					iolen_inbuf  = CBLOCKSIZE - iofrom_inbuf;
+
+				} else if (index == index_end) {
+					iofrom_inbuf = (unsigned long) ((off_t) index * CBLOCKSIZE - mapping_start);
+					iolen_inbuf  = (unsigned long) (ioend - (index * CBLOCKSIZE));
+				}
+			}
+
+			dbg("index %lu, iofrom_inbuf %lu iolen_inbuf %lu", index, iofrom_inbuf, iolen_inbuf);
+#endif
+
+			bool found = true;
+
+			for (int i = ds->nlayers - 1; i >= 0; i--) {
+				struct disk_image *di = ds->image[i];
+
+				if (bitmap_test(di->bm, index)) {
+					dbg("index %lu found at layer %d", index, i);
+
+					char *ba_iobuf = io->mbrs[i]->ba_iobuf;
+					char *iobuf = io->mbrs[i]->iobuf;
+
+					off_t chunk_iofrom = MAX(iofrom, (off_t) index * CBLOCKSIZE);
+					off_t chunk_ioend  = MIN(ioend, (off_t) (index + 1) * CBLOCKSIZE);
+					size_t chunk_iolen = (size_t) chunk_ioend - chunk_iofrom;
+					char *chunk_iobuf  = MAX(iobuf, (ba_iobuf + (index - index_sta) * CBLOCKSIZE));
+
+					g_assert(chunk_iolen <= CBLOCKSIZE);
+					dbg("bindex %zu [chunk_iofrom %ju chunk_ioend %ju (%zu)]",
+							index, chunk_iofrom, chunk_ioend, chunk_iolen);
+
+					iov[index - index_sta].iov_base = chunk_iobuf;
+					iov[index - index_sta].iov_len  = chunk_iolen;
+
+					found = 1;
+					break;
+				}
+			}
+
+			if (!found)
+				err("bug");
+		}
+
+	} else {
+		iov_size = 1;
+		iov = g_malloc0(sizeof(struct iovec));
+
+		// unsigned long iofrom_inbuf = (unsigned long) (iofrom - mapping_start);
+
+		// iov[0].iov_base = io->bufs[ds->nlayers-1] + iofrom_inbuf;
+		iov[0].iov_base = io->mbrs[ds->nlayers-1]->iobuf;
+		iov[0].iov_len  = iolen;
+
+
+		/* copy the start/end blocks of the region from a lower layer to the top layer */
+		bool get_sta_block = false;
+		bool get_end_block = false;
+
+		if (iofrom % CBLOCKSIZE)
+			if (!bitmap_test(ds->image[ds->nlayers-1]->bm, index_sta))
+				get_sta_block = true;
+
+
+		if (ioend % CBLOCKSIZE) {
+			/*
+			 * Handle the end of the io range is not aligned.
+			 * Case 1: The IO range covers more than one block.
+			 * Case 2: One block, but the start of the io range is aligned.
+			 */
+			if ((index_end > index_sta) ||
+					((index_end == index_sta) && !get_sta_block))
+				if (!bitmap_test(ds->image[ds->nlayers-1]->bm, index_end))
+					get_end_block = true;
+
+			/* bitmap_on() is performed in the below forloop */
+		}
+
+		if (get_sta_block)
+			copy_block_to_top_layer(ds, io, index_sta, index_sta);
+
+		if (get_end_block)
+			copy_block_to_top_layer(ds, io, index_end, index_sta);
+
+
+		for (unsigned long index = index_sta; index <= index_end; index++) {
+			bitmap_on(ds->image[ds->nlayers-1]->bm, index);
+		}
+	}
+
+
+	for (unsigned int i = 0; i < iov_size; i++) {
+		dbg("iov %d: base %p len %zu", i, iov[i].iov_base, iov[i].iov_len);
+	}
+
+	io->iov = iov;
+	io->iov_size = iov_size;
+
+	return io;
+}
+
+
 
 #ifdef XNBD_LZO
 /* See LZO.FAQ */
@@ -800,7 +1007,7 @@ int target_mode_main_cow(struct xnbd_session *ses)
 	dbg("direct mode");
 
 
-	struct disk_stack_io *io = disk_stack_mmap(xnbd->cow_ds, iofrom, iolen, (iotype == NBD_CMD_READ));
+	struct disk_stack_io *io = disk_stack_mmap2(xnbd->cow_ds, iofrom, iolen, (iotype == NBD_CMD_READ));
 
 
 	switch (iotype) {

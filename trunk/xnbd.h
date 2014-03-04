@@ -114,6 +114,8 @@ struct disk_stack_io {
 	size_t buflen;
 	struct iovec *iov;
 	unsigned int iov_size;
+
+	struct mmap_block_region *mbrs[MAX_DISKIMAGESTACK];
 };
 
 
@@ -195,7 +197,7 @@ extern const unsigned int CBLOCKSIZE;
 static inline size_t confine_iolen_within_disk(off_t disksize, off_t iofrom, size_t iolen)
 {
 	/* fix overrun beyond the disk end */
-	iolen = MIN(disksize - iofrom, (off_t) iolen);
+	iolen = MIN((size_t) (disksize - iofrom), iolen);
 	if (iolen < CBLOCKSIZE)
 		info("fix overrun caused by non-block-aligned disk end, length %zu", iolen);
 
