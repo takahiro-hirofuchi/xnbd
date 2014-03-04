@@ -78,7 +78,6 @@ void add_read_block_to_tail(struct proxy_priv *priv, unsigned long i)
 
 
 
-
 void prepare_read_priv(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 {
 	unsigned long block_index_start = priv->block_index_start;
@@ -216,6 +215,7 @@ void prepare_write_priv(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 	 **/
 }
 
+
 static unsigned long fwd_counter = 0;
 
 void *forwarder_tx_thread_main(void *arg)
@@ -267,6 +267,8 @@ void *forwarder_tx_thread_main(void *arg)
 			off_t iofrom = (off_t) priv->req[i].bindex_iofrom * CBLOCKSIZE;
 			size_t length = priv->req[i].bindex_iolen * CBLOCKSIZE;
 
+			length = confine_iolen_within_disk(proxy->xnbd->disksize, iofrom, length);
+
 			int ret = nbd_client_send_read_request(proxy->remotefd, iofrom, length);
 			if (ret < 0) {
 				warn("sending read request failed, seqnum %lu", priv->seqnum);
@@ -289,7 +291,6 @@ out_of_loop:
 	info("bye forwarder_tx thread");;
 	return NULL;
 }
-
 
 static int receiving_failed = 0;
 int forwarder_rx_thread_mainloop(struct xnbd_proxy *proxy)
@@ -314,20 +315,16 @@ int forwarder_rx_thread_mainloop(struct xnbd_proxy *proxy)
 		goto got_stop_session;
 
 
-
-	struct mmap_block_region *mbr = mmap_block_region_create(proxy->cachefd, priv->iofrom, priv->iolen, 0);
+	struct mmap_block_region *mbr = mmap_block_region_create(proxy->cachefd, proxy->xnbd->disksize, priv->iofrom, priv->iolen, 0);
 	char *iobuf = mbr->iobuf;
-
 
 	for (int i = 0; i < priv->nreq; i++) {
 		dbg("priv req %d", i);
 		off_t block_iofrom = priv->req[i].bindex_iofrom * CBLOCKSIZE;
-		size_t block_iolen  = priv->req[i].bindex_iolen  * CBLOCKSIZE;
-		char *iobuf_partial = NULL;
+		size_t block_iolen = priv->req[i].bindex_iolen  * CBLOCKSIZE;
+		block_iolen = confine_iolen_within_disk(xnbd->disksize, block_iofrom, block_iolen);
 
-		iobuf_partial = (char *) mbr->ba_iobuf + (block_iofrom - mbr->ba_iofrom);
-
-
+		char *iobuf_partial = (char *) mbr->ba_iobuf + (block_iofrom - mbr->ba_iofrom);
 
 		/* recv from server */
 		ret = nbd_client_recv_read_reply(proxy->remotefd, iobuf_partial, block_iolen);

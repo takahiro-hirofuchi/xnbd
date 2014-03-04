@@ -192,7 +192,15 @@ struct xnbd_session {
 extern const int XNBD_PORT;
 extern const unsigned int CBLOCKSIZE;
 
+static inline size_t confine_iolen_within_disk(off_t disksize, off_t iofrom, size_t iolen)
+{
+	/* fix overrun beyond the disk end */
+	iolen = MIN(disksize - iofrom, (off_t) iolen);
+	if (iolen < CBLOCKSIZE)
+		info("fix overrun caused by non-block-aligned disk end, length %zu", iolen);
 
+	return iolen;
+}
 
 
 
@@ -226,7 +234,7 @@ struct mmap_block_region {
 	off_t ba_iofrom;
 };
 
-struct mmap_block_region *mmap_block_region_create(int fd, off_t iofrom, size_t iolen, int readonly);
+struct mmap_block_region *mmap_block_region_create(int fd, off_t disksize, off_t iofrom, size_t iolen, int readonly);
 void mmap_block_region_free(struct mmap_block_region *);
 
 

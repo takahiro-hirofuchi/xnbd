@@ -102,10 +102,10 @@ void *bgctl_thread_main(void *data)
 
 
 	for (;;) {
-		off_t nblocks = bginfo->disksize / CBLOCKSIZE;
+		off_t nblocks = get_disk_nblocks(bginfo->disksize);
 		unsigned long index =  (unsigned long) (1.0L * nblocks * random() / RAND_MAX);
 
-		xnbd_proxy_control_cache_block(ctl_fd, index, 1);
+		xnbd_proxy_control_cache_block(ctl_fd, bginfo->disksize, index, 1);
 
 		info("%d bgctl index %lu (iofrom %ju)\n", bginfo->count, index, (off_t) index * CBLOCKSIZE);
 

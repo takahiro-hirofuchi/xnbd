@@ -241,9 +241,10 @@ void close_shared_buffer(void *shared_buff)
 	info("shared buffer deallocated, %p (len %zu)", shared_buff, len);
 }
 
-void cache_block_range(char *unix_path, unsigned long *bm, unsigned long disk_nblocks, int remote_fd, char *shared_buff)
+void cache_block_range(char *unix_path, unsigned long *bm, off_t disksize, int remote_fd, char *shared_buff)
 {
 	int ctl_fd, unix_fd;
+	unsigned long disk_nblocks = get_disk_nblocks(disksize);
 	start_register_fd(unix_path, &unix_fd, &ctl_fd);
 
 
@@ -265,6 +266,8 @@ void cache_block_range(char *unix_path, unsigned long *bm, unsigned long disk_nb
 
 		off_t iofrom = (off_t) index * CBLOCKSIZE;
 		size_t iolen = (size_t) nblocks * CBLOCKSIZE;
+		iolen = confine_iolen_within_disk(disksize, iofrom, iolen);
+
 		int ret = nbd_client_send_read_request(remote_fd, iofrom, iolen);
 		if (ret < 0)
 			err("send_read_request, %m");
@@ -273,7 +276,7 @@ void cache_block_range(char *unix_path, unsigned long *bm, unsigned long disk_nb
 		if (ret < 0)
 			err("recv_read_reply, %m");
 
-		xnbd_proxy_control_cache_block(ctl_fd, index, nblocks);
+		xnbd_proxy_control_cache_block(ctl_fd, disksize, index, nblocks);
 	}
 
 
@@ -293,8 +296,7 @@ void cache_all_blocks_with_dedicated_connection(char *unix_path, unsigned long *
 
 	char *shared_buff = setup_shared_buffer(unix_path);
 
-	unsigned long nblocks = get_disk_nblocks(query->disksize);
-	cache_block_range(unix_path, bm, nblocks, remote_fd, shared_buff);
+	cache_block_range(unix_path, bm, query->disksize, remote_fd, shared_buff);
 
 	close_shared_buffer(shared_buff);
 
@@ -474,10 +476,11 @@ void progress_refresh_draw(struct progress_info *p)
  * --cache-all. */
 #define XNBD_BGCTL_ASYNC_DEPTH 1000
 
-void cache_all_blocks_async(char *unix_path, unsigned long *bm, unsigned long nblocks, bool progress_enabled)
+void cache_all_blocks_async(char *unix_path, unsigned long *bm, off_t disksize, bool progress_enabled)
 {
 	int unix_fd, ctl_fd;
 	start_register_fd(unix_path, &unix_fd, &ctl_fd);
+	unsigned long nblocks = get_disk_nblocks(disksize);
 
 	struct cache_rx_ctl cache_rx;
 	cache_rx.ctl_fd  = ctl_fd;
@@ -494,6 +497,7 @@ void cache_all_blocks_async(char *unix_path, unsigned long *bm, unsigned long nb
 
 			off_t iofrom = (off_t) index * CBLOCKSIZE;
 			size_t iolen = CBLOCKSIZE;
+			iolen = confine_iolen_within_disk(disksize, iofrom, iolen);
 
 			int ret = nbd_client_send_request_header(ctl_fd, NBD_CMD_BGCOPY, iofrom, iolen, (UINT64_MAX));
 			if (ret < 0)
@@ -515,14 +519,15 @@ void cache_all_blocks_async(char *unix_path, unsigned long *bm, unsigned long nb
 
 
 
-void cache_all_blocks(char *unix_path, unsigned long *bm, unsigned long nblocks)
+void cache_all_blocks(char *unix_path, unsigned long *bm, off_t disksize)
 {
 	int unix_fd, ctl_fd;
+	unsigned long nblocks = get_disk_nblocks(disksize);
 	start_register_fd(unix_path, &unix_fd, &ctl_fd);
 
 	for (unsigned long index = 0; index < nblocks; index++) {
 		if (!bitmap_test(bm, index)) {
-			xnbd_proxy_control_cache_block(ctl_fd, index, 1);
+			xnbd_proxy_control_cache_block(ctl_fd, disksize, index, 1);
 		}
 	}
 
@@ -768,7 +773,7 @@ int main(int argc, char **argv)
 
 		case xnbd_bgctl_cmd_cache_all:
 			// cache_all_blocks(unix_path, bm, nblocks);
-			cache_all_blocks_async(unix_path, bm, nblocks, progress_enabled);
+			cache_all_blocks_async(unix_path, bm, query->disksize, progress_enabled);
 			break;
 
 		case xnbd_bgctl_cmd_cache_all2:
