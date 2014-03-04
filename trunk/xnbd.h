@@ -110,7 +110,6 @@ struct disk_stack {
 struct disk_stack_io {
 	struct disk_stack *ds;
 
-	char *bufs[MAX_DISKIMAGESTACK];
 	size_t buflen;
 	struct iovec *iov;
 	unsigned int iov_size;
@@ -241,7 +240,6 @@ void mmap_block_region_free(struct mmap_block_region *);
 
 
 int poll_request_arrival(struct xnbd_session *ses);
-void check_disksize(off_t disksize);
 unsigned long get_disk_nblocks(off_t disksize);
 
 

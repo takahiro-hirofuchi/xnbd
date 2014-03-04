@@ -223,7 +223,7 @@ void bitmap_on(unsigned long *bitmap_array, unsigned long block_index)
 }
 
 
-/* we can make it faster */
+/* we can make it faster. use __builtin_popcountl()? */
 unsigned long bitmap_popcount(unsigned long *bm, unsigned long nblocks)
 {
 	unsigned long cached = 0;

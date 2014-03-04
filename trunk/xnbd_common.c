@@ -83,13 +83,6 @@ int poll_request_arrival(struct xnbd_session *ses)
 	return wait_until_readable(ses->clientfd, ses->pipe_worker_fd);
 }
 
-/* --proxy and --cow-target will depend on mmap_block_region */
-void check_disksize(off_t disksize)
-{
-	/* This restriction makes it simple to handle the end of the disk file. */
-	if (disksize % CBLOCKSIZE)
-		err("disksize %jd must be a multiple of CBLOCKSIZE(%d)", disksize, CBLOCKSIZE);
-}
 
 unsigned long get_disk_nblocks(off_t disksize)
 {
