@@ -315,21 +315,6 @@ int forwarder_rx_thread_mainloop(struct xnbd_proxy *proxy)
 
 
 
-#if 0
-	/* large file support on 32bit architecture */
-	char *mmaped_buf = NULL;
-	size_t mmaped_len = 0;
-	off_t mmaped_offset = 0;
-	char *iobuf = NULL;
-
-	/* Note: if the --readonly option is given to the proxy server, the
-	 * proxy server rejects write requests from clients, but accepts read
-	 * requests. The cache image file will be updated. */
-	iobuf = mmap_iorange(xnbd->disksize, 0, proxy->cachefd, priv->iofrom, priv->iolen, &mmaped_buf, &mmaped_len, &mmaped_offset);
-	dbg("#mmaped_buf %p iobuf %p mmaped_len %zu iolen %zu", mmaped_buf, iobuf, mmaped_len, priv->iolen);
-	dbg("#mapped %p -> %p", mmaped_buf, mmaped_buf + mmaped_len);
-#endif
-
 	struct mmap_block_region *mbr = mmap_block_region_create(proxy->cachefd, priv->iofrom, priv->iolen, 0);
 	char *iobuf = mbr->iobuf;
 
@@ -340,12 +325,9 @@ int forwarder_rx_thread_mainloop(struct xnbd_proxy *proxy)
 		size_t block_iolen  = priv->req[i].bindex_iolen  * CBLOCKSIZE;
 		char *iobuf_partial = NULL;
 
-//		iobuf_partial = mmaped_buf + (block_iofrom - mmaped_offset);
-
 		iobuf_partial = (char *) mbr->ba_iobuf + (block_iofrom - mbr->ba_iofrom);
 
 
-		dbg("i %u block_iofrom %ju iobuf_partial %p", i, block_iofrom, iobuf_partial);
 
 		/* recv from server */
 		ret = nbd_client_recv_read_reply(proxy->remotefd, iobuf_partial, block_iolen);
@@ -387,7 +369,6 @@ int forwarder_rx_thread_mainloop(struct xnbd_proxy *proxy)
 		}
 	}
 
-//	munmap_or_abort(mmaped_buf, mmaped_len);
 	mmap_block_region_free(mbr);
 
 
@@ -400,7 +381,6 @@ got_stop_session:
 	/* do not touch priv after enqueue */
 	dbg("seqnum %lu", priv->seqnum);
 	g_async_queue_push(priv->tx_queue, priv);
-
 
 	dbg("send reply to client done");
 

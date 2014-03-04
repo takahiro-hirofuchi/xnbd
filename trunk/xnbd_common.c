@@ -76,54 +76,6 @@ void mmap_block_region_free(struct mmap_block_region *mbr)
 	g_slice_free(struct mmap_block_region, mbr);
 }
 
-#if 0
-void *mmap_iorange(const off_t disksize, const bool readonly, const int fd, const off_t iofrom, const size_t iolen, char **mmaped_buf, size_t *mmaped_len, off_t *mmaped_offset)
-{
-	unsigned long index_start = get_bindex_sta(CBLOCKSIZE, iofrom);
-	unsigned long index_end   = get_gindex_end(CBLOCKSIZE, iofrom + ioend);
-	char *buf;
-
-	//dbg("iofrom %llu iofrom + iolen %llu", iofrom, iofrom + iolen);
-	//dbg("block_index_start %u end %u", index_start, index_end);
-
-	/* (off_t) casting is essential !!! */
-	off_t mapping_start  = (off_t) index_start * CBLOCKSIZE;
-	size_t mapping_length = (index_end - index_start + 1) * CBLOCKSIZE;
-
-
-	//dbg("mmapping_start %llu mapping_end %llu mapping_length %u",
-	//		mapping_start, mapping_start + mapping_length,
-	//		mapping_length);
-
-	if ((mapping_start + (off_t) mapping_length) > disksize)
-		err("exceed disksize");
-
-
-	/*
-	 * mapping_start (off_t) is 64bit in 64-bit environments or in the
-	 * 32-bit envinronment with LARGEFILE. mapping_length (size_t) is 64 bit in
-	 * 64-bit environments, 32 bit in 32-bit environments.
-	 **/
-
-	if (readonly)
-		buf = mmap(NULL, mapping_length, PROT_READ, MAP_SHARED,
-				fd, mapping_start);
-	else
-		buf = mmap(NULL, mapping_length, PROT_READ | PROT_WRITE, MAP_SHARED,
-				fd, mapping_start);
-	if (buf == MAP_FAILED)
-		err("disk mapping failed (iofrom %ju iolen %zu), %m", iofrom, iolen);
-
-	*mmaped_buf = buf;
-	*mmaped_len = mapping_length;
-	*mmaped_offset = mapping_start;
-
-	char *iobuf = buf + (iofrom - mapping_start);
-
-	return iobuf;
-}
-#endif
-
 
 int poll_request_arrival(struct xnbd_session *ses)
 {
