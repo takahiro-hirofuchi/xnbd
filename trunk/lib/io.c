@@ -379,3 +379,10 @@ void mmap_region_free(struct mmap_region *mr)
 	munmap_or_abort(mr->mmap_buf, mr->mmap_len);
 	g_slice_free(struct mmap_region, mr);
 }
+
+void mmap_region_msync(struct mmap_region *mr)
+{
+	int ret = msync(mr->mmap_buf, mr->mmap_len, MS_SYNC);
+	if (ret < 0)
+		warn("msync failed, %m");
+}
