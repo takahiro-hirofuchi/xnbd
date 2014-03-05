@@ -204,11 +204,7 @@ int target_mode_main_mmap(struct xnbd_session *ses)
 			err("unknown command %u", iotype);
 	}
 
-
-
-	//ret = msync(mmaped_buf, mmaped_len, MS_SYNC);
-	//if (ret < 0)
-	//	warn("msync failed");
+	/* call mmap_region_msync(mpinfo) if writeout is necessary now */
 
 	mmap_region_free(mpinfo);
 
