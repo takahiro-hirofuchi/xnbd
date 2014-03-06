@@ -329,7 +329,7 @@ int check_consistency_by_partial_mmap_for_cowdisk(char *srcdisk, int tgtdiskfd, 
 	if (req->iolen != offset)
 		err("io size mismatch");
 
-	free_disk_stack_io(io);
+	disk_stack_munmap(io);
 	xnbd_cow_target_close_disk(ds, 0);
 
 	mmap_region_free(tgtmp);
