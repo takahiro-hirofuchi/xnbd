@@ -57,16 +57,20 @@ struct nbd_reply {
 };
 
 enum {
+	/* nbd */
 	NBD_CMD_READ = 0,
 	NBD_CMD_WRITE = 1,
 	NBD_CMD_DISC = 2,
+	NBD_CMD_FLUSH = 3,
+	NBD_CMD_TRIM = 4,
 
-	NBD_CMD_BGCOPY = 3,
+	/* xnbd specific */
+	NBD_CMD_BGCOPY = 10, // for the communication between the proxy server and xnbd-bgctl
+	NBD_CMD_UNDEFINED = 11, // used internally in the proxy server
 
-	NBD_CMD_READ_COMPRESS = 4,
-	NBD_CMD_READ_COMPRESS_LZO = 5,
-
-	NBD_CMD_UNDEFINED = 6
+	/* xnbd specific (send back compressed data) */
+	NBD_CMD_READ_COMPRESS = 12,
+	NBD_CMD_READ_COMPRESS_LZO = 13
 };
 
 const char *nbd_get_iotype_string(uint32_t iotype);
@@ -84,6 +88,9 @@ int nbd_negotiate_with_server_new(int sockfd, off_t *exportsize, uint32_t *expor
 
 #define NBD_FLAG_HAS_FLAGS      (1 << 0)
 #define NBD_FLAG_READ_ONLY      (1 << 1)
+#define NBD_FLAG_SEND_FLUSH     (1 << 2)
+/* skip _SEND_FUA and _ROTATIONAL */
+#define NBD_FLAG_SEND_TRIM      (1 << 5)
 
 
 

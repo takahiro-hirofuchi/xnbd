@@ -25,20 +25,30 @@
 
 const char *nbd_get_iotype_string(uint32_t iotype)
 {
-	const char *nbd_iotype_string_table[] = {
-		"NBD_CMD_READ",
-		"NBD_CMD_WRITE",
-		"NBD_CMD_DISC",
-		"NBD_CMD_BGCOPY",
-		"NBD_CMD_READ_COMPRESS",
-		"NBD_CMD_READ_COMPRESS_LZO",
-		"NBD_CMD_UNDEFINED"
-	};
+	switch (iotype) {
+		case NBD_CMD_READ:
+			return "NBD_CMD_READ";
+		case NBD_CMD_WRITE:
+			return "NBD_CMD_WRITE";
+		case NBD_CMD_DISC:
+			return "NBD_CMD_DISC";
+		case NBD_CMD_FLUSH:
+			return "NBD_CMD_FLUSH";
+		case NBD_CMD_TRIM:
+			return "NBD_CMD_TRIM";
 
-	if (iotype >= sizeof(nbd_iotype_string_table) / sizeof(nbd_iotype_string_table[0]))
-		return "NBD_CMD_UNDEFINED";
+		case NBD_CMD_BGCOPY:
+			return "NBD_CMD_BGCOPY";
+		case NBD_CMD_UNDEFINED:
+			return "NBD_CMD_UNDEFINED";
+		case NBD_CMD_READ_COMPRESS:
+			return "NBD_CMD_READ_COMPRESS";
+		case NBD_CMD_READ_COMPRESS_LZO:
+			return "NBD_CMD_READ_COMPRESS_LZO";
 
-	return nbd_iotype_string_table[iotype];
+		default:
+			return "NBD_CMD_(unknown)";
+	}
 }
 
 
