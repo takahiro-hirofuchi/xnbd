@@ -376,3 +376,26 @@ void mmap_region_msync(struct mmap_region *mr)
 	if (ret < 0)
 		warn("msync failed, %m");
 }
+
+
+/* We should not enable punch hole in the default settings.  In some use-cases,
+ * all the disk blocks may be pre-allocated when created. Punch hole operations
+ * will incur fragmentation of allocated disk blocks. */
+void punch_hole(int fd, off_t iofrom, off_t iolen)
+{
+#ifdef FALLOC_FL_PUNCH_HOLE
+	/* TODO:
+	 * 1. make sure whether iofrom and iolen must be block-aligned or not?
+	 * 2. fallocate() works a device file or not? ioctl(BLKDISCARD) is necessary?
+	 * 3. what should be necessary if fallocate() has failed?
+	 *      report the failure to a user?
+	 *      skip punch hole operations in upcoming requests?
+	 *      keep it enabled because punch holing may succeed for other offsets?
+	 *        (does this happen if a disk image is made from a logical
+	 *         partition overlaying different types of lower volumes?)
+	 */
+	int ret = fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, iofrom, iolen);
+	if (ret < 0)
+		warn("fallocate %m");
+#endif
+}
