@@ -85,5 +85,6 @@ struct mmap_region {
 struct mmap_region *mmap_region_create(int fd, off_t iofrom, size_t iolen, int readonly);
 void mmap_region_free(struct mmap_region *mpinfo);
 void mmap_region_msync(struct mmap_region *mr);
+void punch_hole(int fd, off_t iofrom, off_t iolen);
 
 #endif

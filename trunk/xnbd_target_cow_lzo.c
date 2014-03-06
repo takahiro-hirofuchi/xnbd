@@ -546,6 +546,14 @@ void disk_stack_fsync(struct disk_stack *ds)
 		err("fsync %m");
 }
 
+void disk_stack_punch_hole(struct disk_stack *ds, off_t iofrom, size_t iolen)
+{
+	int top = ds->nlayers - 1;
+	int diskfd = ds->image[top]->diskfd;
+
+	punch_hole(diskfd, iofrom, iolen);
+}
+
 
 #ifdef XNBD_LZO
 /* See LZO.FAQ */
