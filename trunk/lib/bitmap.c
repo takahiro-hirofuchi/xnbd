@@ -51,13 +51,18 @@ unsigned long *bitmap_alloc(unsigned long bits)
 }
 
 
-void bitmap_close_file(unsigned long *bitmap, size_t bitmaplen)
+void bitmap_sync_file(unsigned long *bitmap, size_t bitmaplen)
 {
 	dbg("msync bitmap %p", bitmap);
 	int ret = msync(bitmap, bitmaplen, MS_SYNC);
 	if (ret < 0)
 		err("msync bitmap failed");
+}
 
+
+void bitmap_close_file(unsigned long *bitmap, size_t bitmaplen)
+{
+	bitmap_sync_file(bitmap, bitmaplen);
 	munmap_or_abort(bitmap, bitmaplen);
 }
 
