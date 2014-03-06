@@ -31,12 +31,14 @@
 #include <errno.h>
 
 
-size_t bitmap_size(unsigned long bits);
-unsigned long *bitmap_alloc(unsigned long bits);
-unsigned long *bitmap_open_file(const char *bitmapfile, unsigned long bits, size_t *cbitmaplen, int readonly, int zeroclear);
+size_t bitmap_size(unsigned long nbits);
+unsigned long *bitmap_alloc(unsigned long nbits);
+
+/* bitmap file operations */
+unsigned long *bitmap_open_file(const char *bitmapfile, unsigned long nbits, size_t *bitmaplen, int readonly, int zeroclear);
 void bitmap_sync_file(unsigned long *bitmap, size_t bitmaplen);
 void bitmap_close_file(unsigned long *bitmap, size_t bitmaplen);
-unsigned long *bitmap_create(char *bitmapfile, unsigned long size, int *cbitmapfd, size_t *cbitmaplen);
-int bitmap_test(unsigned long *bitmap_array, unsigned long block_index);
-void bitmap_on(unsigned long *bitmap_array, unsigned long block_index);
-unsigned long bitmap_popcount(unsigned long *bm, unsigned long nblocks);
+
+int bitmap_test(unsigned long *bitmap, unsigned long block_index);
+void bitmap_on(unsigned long *bitmap, unsigned long block_index);
+unsigned long bitmap_popcount(unsigned long *bitmap, unsigned long bits);
