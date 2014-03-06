@@ -213,7 +213,7 @@ int recv_request(struct proxy_session *ps)
 	dbg("++++ a new %s request received", nbd_get_iotype_string(iotype));
 
 	if (proxy->xnbd->readonly) {
-		if (iotype == NBD_CMD_WRITE) {
+		if (iotype == NBD_CMD_WRITE || iotype == NBD_CMD_TRIM) {
 			warn("NBD_CMD_WRITE to a readonly server. disconnect.");
 			goto err_handle;
 		}
@@ -254,8 +254,8 @@ int recv_request(struct proxy_session *ps)
 	} else if (iotype == NBD_CMD_READ) {
 		priv->read_buff = g_malloc(iolen);
 
-	} else if (iotype == NBD_CMD_BGCOPY) {
-		/* do nothing here */
+	} else if (iotype == NBD_CMD_BGCOPY || iotype == NBD_CMD_FLUSH || iotype == NBD_CMD_TRIM) {
+		/* do nothing here, but do something later */
 		;
 
 	} else {

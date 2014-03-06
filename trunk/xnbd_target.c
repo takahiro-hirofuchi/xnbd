@@ -165,13 +165,15 @@ int target_mode_main_mmap(struct xnbd_session *ses)
 	else if (ret == -3)
 		return ret;
 
-	if (xnbd->readonly && iotype == NBD_CMD_WRITE) {
-		/* do not read following write data */
-		err("NBD_CMD_WRITE to a readonly disk. disconnect.");
+	if (xnbd->readonly) {
+		if (iotype == NBD_CMD_WRITE || iotype == NBD_CMD_TRIM) {
+			/* do not read following write data */
+			err("%s to a readonly disk. disconnect.", nbd_get_iotype_string(iotype));
+		}
 	}
 
-	dbg("direct mode");
 
+	dbg("direct mode");
 	struct mmap_region *mpinfo = mmap_region_create(xnbd->target_diskfd, iofrom, iolen, xnbd->readonly);
 
 	switch (iotype) {
@@ -199,6 +201,18 @@ int target_mode_main_mmap(struct xnbd_session *ses)
 			}
 			break;
 
+		case NBD_CMD_FLUSH:
+			dbg("disk flush");
+
+			ret = fsync(xnbd->target_diskfd);
+			if (ret < 0)
+				err("fsync %m");
+			break;
+
+		case NBD_CMD_TRIM:
+			dbg("disk trim iofrom %ju iolen %zu", iofrom, iolen);
+
+			punch_hole(xnbd->target_diskfd, iofrom, iolen);
 			break;
 
 		default:

@@ -363,7 +363,35 @@ int forwarder_rx_thread_mainloop(struct xnbd_proxy *proxy)
 		} else if (priv->iotype == NBD_CMD_BGCOPY) {
 			/* NBD_CMD_BGCOPY does not do nothing here */
 			;
-		}
+		} else if (priv->iotype == NBD_CMD_FLUSH) {
+			/* FLUSH ensure that the data of all the blocks is
+			 * written out to the storage. If all the blocks are
+			 * already cached, the FLUSH command works as intended.
+			 *
+			 * If some blocks are not yet cached, FLUSH cannot
+			 * ensure that the data of all the blocks is written
+			 * out to the *local* storage. It only ensures that the
+			 * data of all the cached blocks is written out.
+			 *
+			 * We can consider this behavior is okay because the
+			 * other blocks exits in the remote server. Even if the
+			 * proxy sever crashes before all the blocks are
+			 * cached, we will be able to recover the disk data
+			 * from the local and remote storage, in theory.
+			 **/
+			ret = fsync(proxy->cachefd);
+			if (ret < 0)
+				err("fsync %m");
+
+			bitmap_sync_file(proxy->cbitmap, proxy->cbitmaplen);
+
+		} else if (priv->iotype == NBD_CMD_TRIM) {
+			/* If some blocks in the range are not yet cached, we
+			 * can mark them as cached. */
+			punch_hole(proxy->cachefd, priv->iofrom, priv->iolen);
+
+		} else
+			err("bug");
 	}
 
 	mmap_block_region_free(mbr);
