@@ -34,16 +34,16 @@
 #define BITS_TO_LONGS(nr)       DIV_ROUND_UP(nr, BITS_PER_BYTE * sizeof(long))
 #define BITS_PER_LONG		(sizeof(unsigned long) * BITS_PER_BYTE)
 
-size_t bitmap_size(unsigned long bits)
+size_t bitmap_size(unsigned long nbits)
 {
-	unsigned long narrays = BITS_TO_LONGS(bits);
+	unsigned long narrays = BITS_TO_LONGS(nbits);
 	return sizeof(unsigned long) * narrays;
 }
 
-unsigned long *bitmap_alloc(unsigned long bits)
+unsigned long *bitmap_alloc(unsigned long nbits)
 {
 	unsigned long *bitmap_array;
-	unsigned long narrays = BITS_TO_LONGS(bits);
+	unsigned long narrays = BITS_TO_LONGS(nbits);
 
 	bitmap_array = g_new0(unsigned long, narrays);
 
@@ -67,10 +67,10 @@ void bitmap_close_file(unsigned long *bitmap, size_t bitmaplen)
 }
 
 
-unsigned long *bitmap_open_file(const char *bitmapfile, unsigned long bits, size_t *bitmaplen, int readonly, int zeroclear)
+unsigned long *bitmap_open_file(const char *bitmapfile, unsigned long nbits, size_t *bitmaplen, int readonly, int zeroclear)
 {
 	void *buf = NULL;
-	unsigned long narrays = BITS_TO_LONGS(bits);
+	unsigned long narrays = BITS_TO_LONGS(nbits);
 	size_t buflen = sizeof(unsigned long) * narrays;
 
 	int mmap_flag = readonly ? PROT_READ : PROT_WRITE;
@@ -127,7 +127,7 @@ unsigned long *bitmap_open_file(const char *bitmapfile, unsigned long bits, size
 
 
 	info("bitmap file %s (%zu bytes = %lu arrays of %zu bytes), %lu nbits",
-			bitmapfile, buflen, narrays, sizeof(unsigned long), bits);
+			bitmapfile, buflen, narrays, sizeof(unsigned long), nbits);
 
 	if (!readonly) {
 		if (zeroclear) {
@@ -149,7 +149,7 @@ unsigned long *bitmap_open_file(const char *bitmapfile, unsigned long bits, size
 	return (unsigned long *) buf;
 }
 
-
+#if 0
 unsigned long *bitmap_create(char *bitmapfile, unsigned long bits, int *cbitmapfd, size_t *cbitmaplen)
 {
 	int fd;
@@ -193,6 +193,7 @@ unsigned long *bitmap_create(char *bitmapfile, unsigned long bits, int *cbitmapf
 
 	return (unsigned long *) buf;
 }
+#endif
 
 
 int bitmap_test(unsigned long *bitmap_array, unsigned long block_index)
@@ -229,10 +230,10 @@ void bitmap_on(unsigned long *bitmap_array, unsigned long block_index)
 
 
 /* we can make it faster. use __builtin_popcountl()? */
-unsigned long bitmap_popcount(unsigned long *bm, unsigned long nblocks)
+unsigned long bitmap_popcount(unsigned long *bm, unsigned long nbits)
 {
 	unsigned long cached = 0;
-	for (unsigned long index = 0; index < nblocks; index++) {
+	for (unsigned long index = 0; index < nbits; index++) {
 		if (bitmap_test(bm, index))
 			cached += 1;
 	}
