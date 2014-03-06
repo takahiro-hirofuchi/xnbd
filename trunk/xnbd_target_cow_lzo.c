@@ -407,17 +407,6 @@ static struct disk_stack_io *create_disk_stack_io(struct disk_stack *ds)
 	return io;
 }
 
-void free_disk_stack_io(struct disk_stack_io *io)
-{
-	for (int i = 0; i < io->ds->nlayers; i++)
-		mmap_block_region_free(io->mbrs[i]);
-
-
-	g_free(io->iov);
-	g_free(io);
-}
-
-
 struct disk_stack_io *disk_stack_mmap(struct disk_stack *ds, off_t iofrom, size_t iolen, int reading)
 {
 	off_t ioend = iofrom + iolen;
@@ -538,6 +527,32 @@ struct disk_stack_io *disk_stack_mmap(struct disk_stack *ds, off_t iofrom, size_
 	return io;
 }
 
+void disk_stack_munmap(struct disk_stack_io *io)
+{
+	for (int i = 0; i < io->ds->nlayers; i++)
+		mmap_block_region_free(io->mbrs[i]);
+
+	g_free(io->iov);
+	g_free(io);
+}
+
+void disk_stack_fsync(struct disk_stack *ds)
+{
+	int top = ds->nlayers - 1;
+	int diskfd = ds->image[top]->diskfd;
+
+	int ret = fsync(diskfd);
+	if (ret < 0)
+		err("fsync %m");
+}
+
+void disk_stack_punch_hole(struct disk_stack *ds, off_t iofrom, size_t iolen)
+{
+	int top = ds->nlayers - 1;
+	int diskfd = ds->image[top]->diskfd;
+
+	punch_hole(diskfd, iofrom, iolen);
+}
 
 
 #ifdef XNBD_LZO
@@ -808,7 +823,7 @@ int target_mode_main_cow(struct xnbd_session *ses)
 	}
 
 
-	free_disk_stack_io(io);
+	disk_stack_munmap(io);
 
 
 	return 0;

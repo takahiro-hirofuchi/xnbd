@@ -34,16 +34,16 @@
 #define BITS_TO_LONGS(nr)       DIV_ROUND_UP(nr, BITS_PER_BYTE * sizeof(long))
 #define BITS_PER_LONG		(sizeof(unsigned long) * BITS_PER_BYTE)
 
-size_t bitmap_size(unsigned long bits)
+size_t bitmap_size(unsigned long nbits)
 {
-	unsigned long narrays = BITS_TO_LONGS(bits);
+	unsigned long narrays = BITS_TO_LONGS(nbits);
 	return sizeof(unsigned long) * narrays;
 }
 
-unsigned long *bitmap_alloc(unsigned long bits)
+unsigned long *bitmap_alloc(unsigned long nbits)
 {
 	unsigned long *bitmap_array;
-	unsigned long narrays = BITS_TO_LONGS(bits);
+	unsigned long narrays = BITS_TO_LONGS(nbits);
 
 	bitmap_array = g_new0(unsigned long, narrays);
 
@@ -51,21 +51,26 @@ unsigned long *bitmap_alloc(unsigned long bits)
 }
 
 
-void bitmap_close_file(unsigned long *bitmap, size_t bitmaplen)
+void bitmap_sync_file(unsigned long *bitmap, size_t bitmaplen)
 {
 	dbg("msync bitmap %p", bitmap);
 	int ret = msync(bitmap, bitmaplen, MS_SYNC);
 	if (ret < 0)
 		err("msync bitmap failed");
+}
 
+
+void bitmap_close_file(unsigned long *bitmap, size_t bitmaplen)
+{
+	bitmap_sync_file(bitmap, bitmaplen);
 	munmap_or_abort(bitmap, bitmaplen);
 }
 
 
-unsigned long *bitmap_open_file(const char *bitmapfile, unsigned long bits, size_t *bitmaplen, int readonly, int zeroclear)
+unsigned long *bitmap_open_file(const char *bitmapfile, unsigned long nbits, size_t *bitmaplen, int readonly, int zeroclear)
 {
 	void *buf = NULL;
-	unsigned long narrays = BITS_TO_LONGS(bits);
+	unsigned long narrays = BITS_TO_LONGS(nbits);
 	size_t buflen = sizeof(unsigned long) * narrays;
 
 	int mmap_flag = readonly ? PROT_READ : PROT_WRITE;
@@ -86,32 +91,50 @@ unsigned long *bitmap_open_file(const char *bitmapfile, unsigned long bits, size
 		}
 	}
 
+	/* !zeroclear is considered "reuse_data" */
+
+	/* if (readonly && !zeroclear)
+	 *   open the existing file as readonly, and use data in it
+	 *
+	 * if (readonly && zeroclear)
+	 *   error
+	 *
+	 * if (!readonly && !zeroclear)
+	 *   open the existing file as read/write, and use data in it
+	 *
+	 * if (!readonly && zeroclear)
+	 *   open the existing file as read/write, and zero-clear data
+	 *
+	 *
+	 * if the file size is different,
+	 *    (!readonly && zeroclear) is possible
+	 *
+	 * if the file is created,
+	 *    (!readonly && zeroclear) is possible
+	 *
+	 */
+
 	{
 		int fd = open(bitmapfile, open_flag, S_IRUSR | S_IWUSR);
 		if (fd < 0)
 			err("bitmap open %s, %m", bitmapfile);
 
-		if (readonly) {
-			uint64_t size = get_disksize(fd);
-			if (size != buflen)
-				err("bitmap size mismatch, %ju %zu", size, buflen);
-		} else {
-			const uint64_t previous_size = get_disksize(fd);
-			if (previous_size == 0) {
-				zeroclear = 1;  /* ensure proper initialization on initial creation */
-			}
+		/* get the file size of a bitmap file */
+		off_t size = get_disksize(fd);
+		if (size != (off_t) buflen) {
+			if (readonly)
+				err("cannot resize readonly bitmap file (%s)", bitmapfile);
 
-			if (previous_size != buflen) {
-				if (zeroclear) {
-					const int ret = ftruncate(fd, buflen);
-					if (ret < 0) {
-						err("ftruncate %m");
-					}
-				} else {
-					err("Denying to re-use existing bitmap file of different size with no --clear-bitmap given.");
-				}
-			}
+			if (!zeroclear)
+				err("deny using bitmap file (%s) without clearing it. The bitmap size is different (%ju != %zu)",
+						bitmapfile, size, buflen);
+
+			int ret = ftruncate(fd, buflen);
+			if (ret < 0)
+				err("ftruncate %m");
 		}
+
+		/* now we get the bitmap file of the required file size */
 
 		buf = mmap(NULL, buflen, mmap_flag, MAP_SHARED, fd, 0);
 		if (buf == MAP_FAILED)
@@ -122,21 +145,21 @@ unsigned long *bitmap_open_file(const char *bitmapfile, unsigned long bits, size
 
 
 	info("bitmap file %s (%zu bytes = %lu arrays of %zu bytes), %lu nbits",
-			bitmapfile, buflen, narrays, sizeof(unsigned long), bits);
+			bitmapfile, buflen, narrays, sizeof(unsigned long), nbits);
 
-	if (!readonly) {
-		if (zeroclear) {
-			info("bitmap file %s zero-cleared", bitmapfile);
-			memset(buf, 0, buflen);
-		} else {
-			info("re-using previous state from bitmap file %s", bitmapfile);
-		}
+
+	if (zeroclear) {
+		g_assert(!readonly);
+
+		info("make bitmap file (%s) zero-cleared", bitmapfile);
+		memset(buf, 0, buflen);
 
 		/* get disk space for bitmap */
 		int ret = msync(buf, buflen, MS_SYNC);
 		if (ret < 0)
 			err("bitmap msync failed, %s", strerror(errno));
-	}
+	} else
+		info("reuse previous state from bitmap file %s", bitmapfile);
 
 
 	*bitmaplen = buflen;
@@ -144,7 +167,7 @@ unsigned long *bitmap_open_file(const char *bitmapfile, unsigned long bits, size
 	return (unsigned long *) buf;
 }
 
-
+#if 0
 unsigned long *bitmap_create(char *bitmapfile, unsigned long bits, int *cbitmapfd, size_t *cbitmaplen)
 {
 	int fd;
@@ -188,6 +211,7 @@ unsigned long *bitmap_create(char *bitmapfile, unsigned long bits, int *cbitmapf
 
 	return (unsigned long *) buf;
 }
+#endif
 
 
 int bitmap_test(unsigned long *bitmap_array, unsigned long block_index)
@@ -224,10 +248,10 @@ void bitmap_on(unsigned long *bitmap_array, unsigned long block_index)
 
 
 /* we can make it faster. use __builtin_popcountl()? */
-unsigned long bitmap_popcount(unsigned long *bm, unsigned long nblocks)
+unsigned long bitmap_popcount(unsigned long *bm, unsigned long nbits)
 {
 	unsigned long cached = 0;
-	for (unsigned long index = 0; index < nblocks; index++) {
+	for (unsigned long index = 0; index < nbits; index++) {
 		if (bitmap_test(bm, index))
 			cached += 1;
 	}
