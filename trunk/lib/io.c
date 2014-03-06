@@ -300,11 +300,6 @@ int wait_until_readable(int fd, int unblock_fd)
 	}
 }
 
-int poll_data_and_event(int datafd, int event_listener_fd)
-{
-	return wait_until_readable(datafd, event_listener_fd);
-}
-
 void make_pipe(int *write_fd, int *read_fd)
 {
 	int pipefds[2];
@@ -325,11 +320,6 @@ void make_sockpair(int *fd0, int *fd1)
 
 	*fd0 = sockfds[0];
 	*fd1 = sockfds[1];
-}
-
-void get_event_connecter(int *notifier, int *listener)
-{
-	make_pipe(notifier, listener);
 }
 
 void *mmap_or_abort(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
@@ -385,4 +375,27 @@ void mmap_region_msync(struct mmap_region *mr)
 	int ret = msync(mr->mmap_buf, mr->mmap_len, MS_SYNC);
 	if (ret < 0)
 		warn("msync failed, %m");
+}
+
+
+/* We should not enable punch hole in the default settings.  In some use-cases,
+ * all the disk blocks may be pre-allocated when created. Punch hole operations
+ * will incur fragmentation of allocated disk blocks. */
+void punch_hole(int fd, off_t iofrom, off_t iolen)
+{
+#ifdef FALLOC_FL_PUNCH_HOLE
+	/* TODO:
+	 * 1. make sure whether iofrom and iolen must be block-aligned or not?
+	 * 2. fallocate() works a device file or not? ioctl(BLKDISCARD) is necessary?
+	 * 3. what should be necessary if fallocate() has failed?
+	 *      report the failure to a user?
+	 *      skip punch hole operations in upcoming requests?
+	 *      keep it enabled because punch holing may succeed for other offsets?
+	 *        (does this happen if a disk image is made from a logical
+	 *         partition overlaying different types of lower volumes?)
+	 */
+	int ret = fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, iofrom, iolen);
+	if (ret < 0)
+		warn("fallocate %m");
+#endif
 }

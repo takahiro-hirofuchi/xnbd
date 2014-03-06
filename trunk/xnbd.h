@@ -105,7 +105,7 @@ struct disk_stack_io {
 
 
 struct disk_stack_io *disk_stack_mmap(struct disk_stack *ds, off_t iofrom, size_t iolen, int reading);
-void free_disk_stack_io(struct disk_stack_io *io);
+void disk_stack_munmap(struct disk_stack_io *io);
 
 
 enum xnbd_cmd_type {
