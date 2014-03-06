@@ -34,6 +34,7 @@
 size_t bitmap_size(unsigned long bits);
 unsigned long *bitmap_alloc(unsigned long bits);
 unsigned long *bitmap_open_file(const char *bitmapfile, unsigned long bits, size_t *cbitmaplen, int readonly, int zeroclear);
+void bitmap_sync_file(unsigned long *bitmap, size_t bitmaplen);
 void bitmap_close_file(unsigned long *bitmap, size_t bitmaplen);
 unsigned long *bitmap_create(char *bitmapfile, unsigned long size, int *cbitmapfd, size_t *cbitmaplen);
 int bitmap_test(unsigned long *bitmap_array, unsigned long block_index);
