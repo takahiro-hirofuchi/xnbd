@@ -300,11 +300,6 @@ int wait_until_readable(int fd, int unblock_fd)
 	}
 }
 
-int poll_data_and_event(int datafd, int event_listener_fd)
-{
-	return wait_until_readable(datafd, event_listener_fd);
-}
-
 void make_pipe(int *write_fd, int *read_fd)
 {
 	int pipefds[2];
@@ -325,11 +320,6 @@ void make_sockpair(int *fd0, int *fd1)
 
 	*fd0 = sockfds[0];
 	*fd1 = sockfds[1];
-}
-
-void get_event_connecter(int *notifier, int *listener)
-{
-	make_pipe(notifier, listener);
 }
 
 void *mmap_or_abort(void *addr, size_t length, int prot, int flags, int fd, off_t offset)

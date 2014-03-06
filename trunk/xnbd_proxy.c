@@ -79,37 +79,6 @@ void xnbd_proxy_control_cache_block(int ctl_fd, off_t disksize, unsigned long in
 		err("recv header, %m");
 }
 
-#if 0
-void wait_for_low_queue_load(struct proxy_session *ps)
-{
-	if (!ps->proxy->xnbd->proxy_max_queue_size)
-		return;
-
-	struct xnbd_proxy *proxy = ps->proxy;
-	struct timespec sleep_time = { 0, 20*1000*1000 };
-
-	for (;;) {
-		const gint len_fwd_tx_queue = g_async_queue_length(proxy->fwd_tx_queue);
-		const gint len_fwd_rx_queue = g_async_queue_length(proxy->fwd_rx_queue);
-		const gint len_fwd_retry_queue = g_async_queue_length(proxy->fwd_retry_queue);
-		const gint len_tx_queue = g_async_queue_length(ps->tx_queue);
-		const guint len_total = MAX(len_fwd_tx_queue, 0)
-				+ MAX(len_fwd_rx_queue, 0)
-				+ MAX(len_fwd_retry_queue, 0)
-				+ MAX(len_tx_queue, 0);
-
-		dbg("QUEUE SIZES: fwd_tx = %d, fwd_rx = %d, fwd_retry = %d, tx = %d / total = %d",
-				len_fwd_tx_queue, len_fwd_rx_queue, len_fwd_retry_queue, len_tx_queue,
-				len_total);
-
-		if (len_total < ps->proxy->xnbd->proxy_max_queue_size) {
-			break;
-		}
-		nanosleep(&sleep_time, NULL);
-	}
-}
-#endif
-
 
 static void mem_usage_add(struct xnbd_proxy *proxy, struct proxy_priv *priv)
 {
@@ -295,7 +264,6 @@ int recv_request(struct proxy_session *ps)
 	}
 
 
-	// wait_for_low_queue_load(ps);
 	mem_usage_wait(proxy);
 
 	mem_usage_add(proxy, priv);

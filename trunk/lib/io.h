@@ -29,7 +29,6 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <errno.h>
-#include <arpa/inet.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -72,8 +71,6 @@ void sigmask_all(void);
 int wait_until_readable(int fd, int unblock_fd);
 void make_pipe(int *write_fd, int *read_fd);
 void make_sockpair(int *fd0, int *fd1);
-int poll_data_and_event(int datafd, int event_listener_fd) __attribute__((deprecated));
-void get_event_connecter(int *notifier, int *listener) __attribute__((deprecated));
 
 void *mmap_or_abort(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
 void munmap_or_abort(void *addr, size_t len);
