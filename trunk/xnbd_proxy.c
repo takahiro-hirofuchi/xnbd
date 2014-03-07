@@ -259,7 +259,7 @@ int recv_request(struct proxy_session *ps)
 		;
 
 	} else {
-		warn("client bug: unknown iotype");
+		warn("unknown command in the proxy mode, %u (%s)", iotype, nbd_get_iotype_string(iotype));
 		goto err_handle;
 	}
 
