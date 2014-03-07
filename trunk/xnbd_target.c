@@ -174,37 +174,37 @@ int target_mode_main_mmap(struct xnbd_session *ses)
 
 	struct mmap_region *mpinfo = mmap_region_create(xnbd->target_diskfd, iofrom, iolen, xnbd->readonly);
 
-
-	struct iovec iov[2];
-
 	switch (iotype) {
 		case NBD_CMD_WRITE:
 			dbg("disk write iofrom %ju iolen %zu", iofrom, iolen);
 
 			net_recv_all_or_abort(csock, mpinfo->iobuf, iolen);
-
 			net_send_all_or_abort(csock, &reply, sizeof(reply));
 
+			/* call mmap_region_msync(mpinfo) if writeout is necessary now */
 			break;
 
 		case NBD_CMD_READ:
 			dbg("disk read iofrom %ju iolen %zu", iofrom, iolen);
 
-			memset(&iov, 0, sizeof(iov));
-			iov[0].iov_base = &reply;
-			iov[0].iov_len  = sizeof(reply);
-			iov[1].iov_base = mpinfo->iobuf;
-			iov[1].iov_len  = iolen;
+			{
+				struct iovec iov[2];
+				memset(&iov, 0, sizeof(iov));
+				iov[0].iov_base = &reply;
+				iov[0].iov_len  = sizeof(reply);
+				iov[1].iov_base = mpinfo->iobuf;
+				iov[1].iov_len  = iolen;
 
-			net_writev_all_or_abort(csock, iov, 2);
+				net_writev_all_or_abort(csock, iov, 2);
+			}
+			break;
 
 			break;
 
 		default:
-			err("unknown command %u", iotype);
+			err("unknown command in the target mode, %u (%s)", iotype, nbd_get_iotype_string(iotype));
 	}
 
-	/* call mmap_region_msync(mpinfo) if writeout is necessary now */
 
 	mmap_region_free(mpinfo);
 

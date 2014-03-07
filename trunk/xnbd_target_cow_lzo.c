@@ -834,6 +834,7 @@ int target_mode_main_cow(struct xnbd_session *ses)
 		err("NBD_CMD_WRITE to a readonly disk. disconnect.");
 	}
 
+
 	dbg("direct mode");
 
 
@@ -852,9 +853,7 @@ int target_mode_main_cow(struct xnbd_session *ses)
 #else
 			net_readv_all_or_abort(csock, io->iov, io->iov_size);
 #endif
-
 			net_send_all_or_abort(csock, &reply, sizeof(reply));
-
 			break;
 
 		case NBD_CMD_READ:
@@ -876,7 +875,7 @@ int target_mode_main_cow(struct xnbd_session *ses)
 			break;
 
 		default:
-			err("unknown command %u", iotype);
+			err("unknown command in the cow-target mode, %u (%s)", iotype, nbd_get_iotype_string(iotype));
 	}
 
 
