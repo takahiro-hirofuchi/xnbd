@@ -190,10 +190,8 @@ struct disk_stack *create_disk_stack(char *diskpath)
 	di->diskfd = diskfd;
 	di->path = g_strdup(diskpath);
 
-	// snprintf(di->bmpath, PATH_MAX, "%s.bm", diskpath);
 	unsigned long nblocks = get_disk_nblocks(ds->disksize);
 
-	// di->bmpath = g_strdup_printf("%s.bm", diskpath);
 
 
 	/* get a unique di->bmpath */
