@@ -163,7 +163,29 @@ void copy_buf_to_iov(struct iovec *iov, int iov_size, char *buf, size_t buflen)
 #endif
 
 
+/* 0xff filled, readonly, munmap possible */
+static void *get_filled_readonly_buffer(char *template, size_t buflen)
+{
+	int fd = mkstemp(template);
+	if (fd < 0)
+		err("mkstemp %m");
 
+	int ret = ftruncate(fd, buflen);
+	if (ret < 0)
+		err("ftruncate %m");
+
+	char *buf = mmap_or_abort(NULL, buflen, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	memset(buf, 0xff, buflen);
+	munmap_or_abort(buf, buflen);
+
+	/* map it again as readonly */
+	buf = mmap_or_abort(NULL, buflen, PROT_READ, MAP_SHARED, fd, 0);
+
+	close(fd);
+	unlink(template);
+
+	return buf;
+}
 
 struct disk_stack *create_disk_stack(char *diskpath)
 {
@@ -193,55 +215,9 @@ struct disk_stack *create_disk_stack(char *diskpath)
 	unsigned long nblocks = get_disk_nblocks(ds->disksize);
 
 
-
-	/* get a unique di->bmpath */
-	for (;;) {
-		long int suffix = random();
-		di->bmpath = g_strdup_printf("/dev/shm/xnbd-server-cow-base-%lx.bm", suffix);
-
-		int fd = open(di->bmpath, O_RDWR | O_CREAT | O_EXCL, 0600);
-		if (fd < 0) {
-			g_free(di->bmpath);
-			continue;
-		} else {
-			close(fd);
-			break;
-		}
-	}
-
-	{
-		info("create new base bitmap %s", di->bmpath);
-		size_t tmp_bmlen;
-		unsigned long *tmp_bm = bitmap_open_file(di->bmpath, nblocks, &tmp_bmlen, 0, 1);
-		info("bitmap file %s filled by 1", di->bmpath);
-		memset(tmp_bm, 0xff, tmp_bmlen);  /* catch all blocks (2nd arg is converted to unsigned char) */
-		bitmap_close_file(tmp_bm, tmp_bmlen);
-	}
-
-#if 0
-	{
-		/* A CoW stack needs the bitmap filled by 1, which is
-		 * coupled with the base target file. */
-		struct stat st;
-		int ret = stat(di->bmpath, &st);
-		if (ret == 0) {
-			info("use already-existing bitmap %s", di->bmpath);
-		} else {
-			info("create new base bitmap %s", di->bmpath);
-			size_t tmp_bmlen;
-			unsigned long *tmp_bm = bitmap_open_file(di->bmpath, nblocks, &tmp_bmlen, 0, 1);
-			info("bitmap file %s filled by 1", di->bmpath);
-			memset(tmp_bm, 0xff, tmp_bmlen);  /* catch all blocks (2nd arg is converted to unsigned char) */
-			bitmap_close_file(tmp_bm, tmp_bmlen);
-		}
-	}
-#endif
-
-	/* open an existing bitmap file as readonly */
-	di->bm = bitmap_open_file(di->bmpath, nblocks, &di->bmlen, 1, 0);
-
-	unlink(di->bmpath);
-
+	di->bmpath = g_strdup_printf("/dev/shm/xnbd.XXXXXX");
+	di->bmlen = bitmap_size(nblocks);
+	di->bm = get_filled_readonly_buffer(di->bmpath, di->bmlen);
 
 	ds->image[0] = di;
 
