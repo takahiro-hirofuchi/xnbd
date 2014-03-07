@@ -46,7 +46,7 @@ void xnbd_initialize(struct xnbd_info *xnbd)
 		case xnbd_cmd_cow_target:
 			g_assert(xnbd->cow_diskpath);
 
-			xnbd->cow_ds = xnbd_cow_target_open_disk(xnbd->cow_diskpath, 1, 0);
+			xnbd->cow_ds = xnbd_cow_target_create_disk_stack(xnbd->cow_diskpath);
 			xnbd->disksize = xnbd->cow_ds->disksize;
 			xnbd->nblocks = get_disk_nblocks(xnbd->disksize);
 
@@ -86,7 +86,7 @@ void xnbd_shutdown(struct xnbd_info *xnbd)
 
 
 	if (xnbd->cmd == xnbd_cmd_cow_target)
-		xnbd_cow_target_close_disk(xnbd->cow_ds, 1);
+		xnbd_cow_target_close_disk_stack(xnbd->cow_ds);
 
 
 	if (xnbd->cmd == xnbd_cmd_proxy)
