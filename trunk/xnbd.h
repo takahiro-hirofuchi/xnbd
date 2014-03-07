@@ -75,12 +75,9 @@
 
 struct disk_image {
 	char *path;
-	// char path[PATH_MAX];
 	int diskfd;
 
-	// char bmpath[PATH_MAX];
 	char *bmpath;
-	// int bmfd;
 	unsigned long *bm;
 	size_t bmlen;
 };
