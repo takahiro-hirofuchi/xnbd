@@ -308,7 +308,7 @@ int check_consistency_by_partial_mmap_for_cowdisk(char *srcdisk, int tgtdiskfd, 
 {
 	int result = 0;
 
-	struct disk_stack *ds = xnbd_cow_target_open_disk(srcdisk, 0, CoWID);
+	struct disk_stack *ds = xnbd_cow_target_open_disk_stack_readonly(srcdisk, CoWID);
 
 	struct disk_stack_io *io = disk_stack_mmap(ds, req->iofrom, req->iolen, 1);
 
@@ -330,7 +330,7 @@ int check_consistency_by_partial_mmap_for_cowdisk(char *srcdisk, int tgtdiskfd, 
 		err("io size mismatch");
 
 	disk_stack_munmap(io);
-	xnbd_cow_target_close_disk(ds, 0);
+	xnbd_cow_target_close_disk_stack(ds);
 
 	mmap_region_free(tgtmp);
 

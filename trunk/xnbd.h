@@ -75,14 +75,13 @@
 
 struct disk_image {
 	char *path;
-	// char path[PATH_MAX];
 	int diskfd;
 
-	// char bmpath[PATH_MAX];
 	char *bmpath;
-	// int bmfd;
 	unsigned long *bm;
 	size_t bmlen;
+
+	bool persistent;
 };
 
 #define MAX_DISKIMAGESTACK 10
@@ -235,8 +234,9 @@ void xnbd_target_make_snapshot(struct xnbd_info *xnbd);
 int xnbd_target_session_server(struct xnbd_session *);
 
 /* xnbd_cmd_cow_target mode */
-struct disk_stack *xnbd_cow_target_open_disk(char *diskpath, int newfile, int cowid);
-void xnbd_cow_target_close_disk(struct disk_stack *ds, int delete_cow);
+struct disk_stack *xnbd_cow_target_open_disk_stack_readonly(char *diskpath, int cowid);
+struct disk_stack *xnbd_cow_target_create_disk_stack(char *diskpath);
+void xnbd_cow_target_close_disk_stack(struct disk_stack *ds);
 int xnbd_cow_target_session_server(struct xnbd_session *);
 
 /* xnbd_cmd_proxy mode */

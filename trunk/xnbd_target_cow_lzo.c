@@ -163,7 +163,29 @@ void copy_buf_to_iov(struct iovec *iov, int iov_size, char *buf, size_t buflen)
 #endif
 
 
+/* 0xff filled, readonly, munmap possible */
+static void *get_filled_readonly_buffer(char *template, size_t buflen)
+{
+	int fd = mkstemp(template);
+	if (fd < 0)
+		err("mkstemp %m");
 
+	int ret = ftruncate(fd, buflen);
+	if (ret < 0)
+		err("ftruncate %m");
+
+	char *buf = mmap_or_abort(NULL, buflen, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	memset(buf, 0xff, buflen);
+	munmap_or_abort(buf, buflen);
+
+	/* map it again as readonly */
+	buf = mmap_or_abort(NULL, buflen, PROT_READ, MAP_SHARED, fd, 0);
+
+	close(fd);
+	unlink(template);
+
+	return buf;
+}
 
 struct disk_stack *create_disk_stack(char *diskpath)
 {
@@ -183,74 +205,34 @@ struct disk_stack *create_disk_stack(char *diskpath)
 	info("disk %s size %ju B (%ju MB)", diskpath, disksize, disksize /1024 /1024);
 
 	struct disk_stack *ds = g_malloc0(sizeof(struct disk_stack));
-	ds->nlayers = 1;
+	ds->nlayers = 0;
 	ds->disksize = disksize;
 
 	struct disk_image *di = g_malloc0(sizeof(struct disk_image));
 	di->diskfd = diskfd;
 	di->path = g_strdup(diskpath);
 
-	// snprintf(di->bmpath, PATH_MAX, "%s.bm", diskpath);
 	unsigned long nblocks = get_disk_nblocks(ds->disksize);
 
-	// di->bmpath = g_strdup_printf("%s.bm", diskpath);
 
+	/* the bitmap of the layer zero is filled with 0xff */
+	di->bmpath = g_strdup_printf("/dev/shm/xnbd.XXXXXX");
+	di->bmlen = bitmap_size(nblocks);
+	di->bm = get_filled_readonly_buffer(di->bmpath, di->bmlen);
 
-	/* get a unique di->bmpath */
-	for (;;) {
-		long int suffix = random();
-		di->bmpath = g_strdup_printf("/dev/shm/xnbd-server-cow-base-%lx.bm", suffix);
-
-		int fd = open(di->bmpath, O_RDWR | O_CREAT | O_EXCL, 0600);
-		if (fd < 0) {
-			g_free(di->bmpath);
-			continue;
-		} else {
-			close(fd);
-			break;
-		}
-	}
-
-	{
-		info("create new base bitmap %s", di->bmpath);
-		size_t tmp_bmlen;
-		unsigned long *tmp_bm = bitmap_open_file(di->bmpath, nblocks, &tmp_bmlen, 0, 1);
-		info("bitmap file %s filled by 1", di->bmpath);
-		memset(tmp_bm, 0xff, tmp_bmlen);  /* catch all blocks (2nd arg is converted to unsigned char) */
-		bitmap_close_file(tmp_bm, tmp_bmlen);
-	}
-
-#if 0
-	{
-		/* A CoW stack needs the bitmap filled by 1, which is
-		 * coupled with the base target file. */
-		struct stat st;
-		int ret = stat(di->bmpath, &st);
-		if (ret == 0) {
-			info("use already-existing bitmap %s", di->bmpath);
-		} else {
-			info("create new base bitmap %s", di->bmpath);
-			size_t tmp_bmlen;
-			unsigned long *tmp_bm = bitmap_open_file(di->bmpath, nblocks, &tmp_bmlen, 0, 1);
-			info("bitmap file %s filled by 1", di->bmpath);
-			memset(tmp_bm, 0xff, tmp_bmlen);  /* catch all blocks (2nd arg is converted to unsigned char) */
-			bitmap_close_file(tmp_bm, tmp_bmlen);
-		}
-	}
-#endif
-
-	/* open an existing bitmap file as readonly */
-	di->bm = bitmap_open_file(di->bmpath, nblocks, &di->bmlen, 1, 0);
-
-	unlink(di->bmpath);
-
+	di->persistent = true;
 
 	ds->image[0] = di;
 
-	info("disk_stack[0] %s %s", di->path, di->bmpath);
+	info("add disk_stack[%d] %s %s (%s)", ds->nlayers, di->path, di->bmpath,
+			di->persistent ? "persistent" : "volatile");
+
+	ds->nlayers += 1;
 
 	return ds;
 }
+
+
 
 void destroy_disk_stack(struct disk_stack *ds)
 {
@@ -258,12 +240,24 @@ void destroy_disk_stack(struct disk_stack *ds)
 		struct disk_image *di = ds->image[i];
 		close(di->diskfd);
 
-		if (di->bm) {
-			int ret = msync(di->bm, di->bmlen, MS_SYNC);
-			if (ret < 0)
-				err("msync");
+		int ret = msync(di->bm, di->bmlen, MS_SYNC);
+		if (ret < 0)
+			err("msync");
+		munmap_or_abort(di->bm, di->bmlen);
 
-			munmap_or_abort(di->bm, di->bmlen);
+		if (!di->persistent) {
+			/* never delete the base image */
+			g_assert(i != 0);
+
+			int ret = unlink(di->path);
+			if (ret < 0)
+				err("unlink %m");
+
+			ret = unlink(di->bmpath);
+			if (ret < 0)
+				err("unlink %m");
+
+			info("unlink %s (%s)", di->path, di->bmpath);
 		}
 
 		g_free(di->path);
@@ -275,47 +269,31 @@ void destroy_disk_stack(struct disk_stack *ds)
 	g_free(ds);
 }
 
-
-void disk_stack_add_image(struct disk_stack *ds, char *diskpath, int newfile)
+void disk_stack_add_layer(struct disk_stack *ds, char *diskpath, int diskfd, char *bmpath, unsigned long *bm, size_t bmlen, bool persistent)
 {
-	int diskfd;
-	off_t disksize;
-
 	if (ds->nlayers == MAX_DISKIMAGESTACK)
 		err("no space");
 
-	diskfd = open(diskpath, O_RDWR | O_CREAT, 0644);
-	if (diskfd < 0) {
-		if (errno == EOVERFLOW)
-			warn("enable large file support!");
-		err("open, %s", strerror(errno));
-	}
-
-	disksize = get_disksize(diskfd);
-	if (disksize != ds->disksize) {
-		warn("ftruncate %s (%ju -> %ju)", diskpath, disksize, ds->disksize);
-		int ret = ftruncate(diskfd, ds->disksize);
-		if (ret < 0)
-			err("ftruncate");
-	}
+	off_t disksize = get_disksize(diskfd);
+	g_assert(ds->disksize == disksize);
 
 	struct disk_image *di = g_malloc0(sizeof(struct disk_image));
 	di->diskfd = diskfd;
-	di->path = g_strdup(diskpath);
+	di->path   = g_strdup(diskpath);
 
-	di->bmpath = g_strdup_printf("%s.bm", diskpath);
+	di->bmpath = g_strdup(bmpath);
+	di->bm     = bm;
+	di->bmlen  = bmlen;
 
-	if (newfile)
-		di->bm = bitmap_open_file(di->bmpath, get_disk_nblocks(ds->disksize), &di->bmlen, 0, 1);
-	else
-		di->bm = bitmap_open_file(di->bmpath, get_disk_nblocks(ds->disksize), &di->bmlen, 1, 0);
+	di->persistent = persistent;
 
-
-	info("disk_stack[%d] %s %s", ds->nlayers, di->path, di->bmpath);
-
+	info("add disk_stack[%d] %s %s (%s)", ds->nlayers, di->path, di->bmpath,
+			di->persistent ? "persistent" : "volatile");
 	ds->image[ds->nlayers] = di;
 	ds->nlayers += 1;
 }
+
+
 
 
 static void copy_block_to_top_layer(struct disk_stack *ds, struct disk_stack_io *io, unsigned long index, unsigned long start_index, off_t disksize)
@@ -344,55 +322,135 @@ static void copy_block_to_top_layer(struct disk_stack *ds, struct disk_stack_io 
 		err("bug");
 }
 
+static void dump_disk_stack(struct disk_stack *ds)
+{
+	info("disk stack (base %s, size %ju)", ds->image[0]->path, ds->disksize);
+	for (int i = 0; i < ds->nlayers; i++) {
+		info("  layer %d: %s %s %s", i, ds->image[i]->path, ds->image[i]->bmpath,
+				ds->image[i]->persistent ? "persistent" : "volatile");
+	}
+}
 
-struct disk_stack *xnbd_cow_target_open_disk(char *diskpath, int newfile, int cowid)
+
+/*
+ * Find all the layers of the disk image and register them as readonly.
+ * For example, it stacks found layers as follows:
+ *    /VM/disk.img.cow0.layerN		(bitmap /VM/disk.img.cow0.layerN.bm)
+ *    ...
+ *    /VM/disk.img.cow0.layer2		(bitmap /VM/disk.img.cow0.layer2.bm)
+ *    /VM/disk.img.cow0.layer1		(bitmap /VM/disk.img.cow0.layer1.bm)
+ *    /VM/disk.img
+ *
+ * TODO: somebody may want to open the top layer for read/write?
+ */
+struct disk_stack *xnbd_cow_target_open_disk_stack_readonly(char *diskpath, int cowid)
 {
 	struct disk_stack *ds = create_disk_stack(diskpath);
+	int layer = 1;
 
-	char *cowpath;
-
-	if (newfile) {
-		/* get a unique di->bmpath */
-		for (;;) {
-			cowpath = g_strdup_printf("%s.cow%d.layer%d", diskpath, cowid, ds->nlayers - 1);
-
-			int fd = open(cowpath, O_RDWR | O_CREAT | O_EXCL, 0600);
-			if (fd < 0) {
-				cowid += 1;
-				g_free(cowpath);
-				continue;
-			} else {
-				close(fd);
+	for (;;) {
+		char *cowpath = g_strdup_printf("%s.cow%d.layer%d", diskpath, cowid, layer);
+		int cowfd = open(cowpath, O_RDONLY);
+		if (cowfd < 0) {
+			if (errno == ENOENT)
 				break;
-			}
+			else
+				err("open %s, %m", cowpath);
 		}
-	} else
-		cowpath = g_strdup_printf("%s.cow%d.layer%d", diskpath, cowid, ds->nlayers - 1);
 
+		off_t disksize = get_disksize(cowfd);
+		if (disksize != ds->disksize)
+			err("%s (%ju bytes) mismatches the disk stack (%ju)",
+					diskpath, disksize, ds->disksize);
 
-	disk_stack_add_image(ds, cowpath, newfile);
+		char *bmpath = g_strdup_printf("%s.cow%d.layer%d.bm", diskpath, cowid, layer);
+		size_t bmlen;
+		/* readonly, keep data */
+		unsigned long *bm = bitmap_open_file(bmpath, get_disk_nblocks(ds->disksize), &bmlen, 1, 0);
 
-	g_free(cowpath);
+		disk_stack_add_layer(ds, cowpath, cowfd, bmpath, bm, bmlen, true);
+
+		g_free(cowpath);
+		g_free(bmpath);
+
+		layer += 1;
+	}
+
+	if (ds->nlayers == 1)
+		err("no layers found for cow%d of %s", cowid, diskpath);
+
+	dump_disk_stack(ds);
 
 	return ds;
 }
 
-void xnbd_cow_target_close_disk(struct disk_stack *ds, int delete_cow)
+
+/*
+ * Open the base image as readonly and put a new read/write layer on it.
+ *
+ * Note:
+ *   Written data is not persistent. The added layer is gone upon shutdown.
+ *
+ *   Snapshoting (i.e, adding a new layer furthermore) is not yet implemented.
+ *
+ *   xnbd-server automatically finds an unused cowid for the base image, and
+ *   creates a new cow image with it. This allows users to invoke multiple
+ *   xnbd-servers using the base image, each of which saves written data
+ *   indivisually.
+ *
+ *   If we enable xnbd-server to keep written data persistent, we should be
+ *   able to give xnbd-server cowid in the command line.
+ *
+ * */
+struct disk_stack *xnbd_cow_target_create_disk_stack(char *diskpath)
 {
-	info("close cow disk");
-	g_assert(ds);
+	struct disk_stack *ds = create_disk_stack(diskpath);
+	int cowid = 0;
 
-	if (delete_cow) {
-		struct disk_image *di_cow = ds->image[ds->nlayers - 1];
+	/* get a unique cowpath */
+	char *cowpath = NULL;;
+	int cowfd;
+	for (;;) {
+		cowpath = g_strdup_printf("%s.cow%d.layer%d", diskpath, cowid, 1);
 
-		int ret = unlink(di_cow->path);
-		if (ret < 0)
-			err("unlink %m");
+		cowfd = open(cowpath, O_RDWR | O_CREAT | O_EXCL, 0600);
+		if (cowfd < 0) {
+			if (errno == EEXIST) {
+				cowid += 1;
+				g_free(cowpath);
+				close(cowfd);
+				continue;
+			} else
+				err("open %m");
+		}
 
-		ret = unlink(di_cow->bmpath);
-		if (ret < 0)
-			err("unlink %m");
+		break;
 	}
+
+	int ret = ftruncate(cowfd, ds->disksize);
+	if (ret < 0)
+		err("ftruncate %m");
+
+	char *bmpath = g_strdup_printf("%s.cow%d.layer%d.bm", diskpath, cowid, 1);
+	size_t bmlen;
+	/* read/write zero-clear */
+	unsigned long *bm = bitmap_open_file(bmpath, get_disk_nblocks(ds->disksize), &bmlen, 0, 1);
+
+	disk_stack_add_layer(ds, cowpath, cowfd, bmpath, bm, bmlen, false);
+
+	g_free(cowpath);
+	g_free(bmpath);
+
+	dump_disk_stack(ds);
+
+	return ds;
+}
+
+/* currently, cow-target is not persistent */
+void xnbd_cow_target_close_disk_stack(struct disk_stack *ds)
+{
+	info("cow disk close (base image %s)", ds->image[0]->path);
+	g_assert(ds);
 
 	destroy_disk_stack(ds);
 }
@@ -424,11 +482,10 @@ struct disk_stack_io *disk_stack_mmap(struct disk_stack *ds, off_t iofrom, size_
 		struct disk_image *di = ds->image[i];
 
 		int readonly = 1;
-		if (i == ds->nlayers -1)
+		if (!di->persistent)
 			readonly = 0;
 
 		io->mbrs[i] = mmap_block_region_create(di->diskfd, ds->disksize, iofrom, iolen, readonly);
-
 	}
 
 
@@ -777,6 +834,7 @@ int target_mode_main_cow(struct xnbd_session *ses)
 		err("NBD_CMD_WRITE to a readonly disk. disconnect.");
 	}
 
+
 	dbg("direct mode");
 
 
@@ -795,9 +853,7 @@ int target_mode_main_cow(struct xnbd_session *ses)
 #else
 			net_readv_all_or_abort(csock, io->iov, io->iov_size);
 #endif
-
 			net_send_all_or_abort(csock, &reply, sizeof(reply));
-
 			break;
 
 		case NBD_CMD_READ:
@@ -819,7 +875,7 @@ int target_mode_main_cow(struct xnbd_session *ses)
 			break;
 
 		default:
-			err("unknown command %u", iotype);
+			err("unknown command in the cow-target mode, %u (%s)", iotype, nbd_get_iotype_string(iotype));
 	}
 
 
