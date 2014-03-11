@@ -16,7 +16,16 @@ xNBD Change Log
 
 Bugfixes
 ~~~~~~~~
- * xnbd-client: Output spoke of xnbd-server process ID rather than xnbd-client one
+ * xnbd-client: Fix wrong message output speaking of xnbd-server's PID rather
+     than that of xnbd-client
+ * xnbd-server: Fix alignment issues warned by clang
+
+Improvements
+~~~~~~~~~~~~
+ * xnbd-server: Remove the limitation that a disk size should be a multiple of
+     4096. Now support any disk size.
+ * xnbd-server: Remove the limitation that the cache block size should be a
+     multiple of 4096.  Now support any disk size that is a power of 2.
 
 
 0.3.0
