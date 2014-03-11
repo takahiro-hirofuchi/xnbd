@@ -165,7 +165,7 @@ int get_nbd_pid(const char *devname, pid_t * p_pid)
 		pid = -1;
 	} else {
 		pid = atoi(g_strchomp(buf));
-		info("%s is ready for read/write, xnbd-server (pid %d)", devname, pid);
+		info("%s is ready for read/write (xnbd-client pid %d)", devname, pid);
 	}
 
 	g_free(buf);

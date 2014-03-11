@@ -11,6 +11,14 @@ Line width is meant to be 90 characters.
 xNBD Change Log
 ===============
 
+NEXT
+----
+
+Bugfixes
+~~~~~~~~
+ * xnbd-client: Output spoke of xnbd-server process ID rather than xnbd-client one
+
+
 0.3.0
 -----
 
