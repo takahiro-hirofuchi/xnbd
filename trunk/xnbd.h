@@ -206,8 +206,8 @@ void cachestat_read_block(void);
 void cachestat_write_block(void);
 void cachestat_miss(void);
 void cachestat_hit(void);
-int cachestat_initialize(const char *path, unsigned long blocks);
-int cachestat_shutdown(void);
+void cachestat_initialize(const char *path, unsigned long blocks);
+void cachestat_shutdown(void);
 
 
 
