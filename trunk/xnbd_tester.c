@@ -50,7 +50,7 @@ struct crequest eofmarker = { .write_buff = NULL };
 
 
 
-struct bginfo_struct {
+struct bgctl_info {
 	off_t disksize;
 	pthread_mutex_t lock;
 	pthread_cond_t  init_done;
@@ -58,18 +58,12 @@ struct bginfo_struct {
 
 	const char *ctlpath;
 	int count;
-} bginfo_data;
-
-// uint64_t bgctl_disksize = 0;
-// pthread_mutex_t bgthread_lock = PTHREAD_MUTEX_INITIALIZER;
-// pthread_cond_t  bgthread_init_done = PTHREAD_COND_INITIALIZER;
-// pthread_t bgthread_tid;
-
+};
 
 
 void *bgctl_thread_main(void *data)
 {
-	struct bginfo_struct *bginfo = (struct bginfo_struct *) data;
+	struct bgctl_info *bginfo = (struct bgctl_info *) data;
 
 	int bgctlfd = 0;
 
@@ -95,15 +89,14 @@ void *bgctl_thread_main(void *data)
 	close(proxy_fd);
 
 
-
 	pthread_mutex_lock(&bginfo->lock);
 	pthread_cond_signal(&bginfo->init_done);
 	pthread_mutex_unlock(&bginfo->lock);
 
 
 	for (;;) {
-		off_t nblocks = get_disk_nblocks(bginfo->disksize);
-		unsigned long index =  (unsigned long) (1.0L * nblocks * random() / RAND_MAX);
+		unsigned long nblocks = get_disk_nblocks(bginfo->disksize);
+		unsigned long index = (unsigned long) (1.0L * nblocks * random() / RAND_MAX);
 
 		xnbd_proxy_control_cache_block(ctl_fd, bginfo->disksize, index, 1);
 
@@ -117,6 +110,7 @@ void *bgctl_thread_main(void *data)
 		if (bginfo->count > 1000)
 			break;
 	}
+
 
 	nbd_client_send_disc_request(ctl_fd);
 	close(ctl_fd);
@@ -132,22 +126,19 @@ void *bgctl_thread_main(void *data)
 }
 
 
-void bgctl_thread_create(off_t disksize, const char *bgctlpath)
+struct bgctl_info *bgctl_thread_create(off_t disksize, const char *bgctlpath)
 {
-	struct bginfo_struct *bginfo = &bginfo_data;
+	if (!bgctlpath)
+		return NULL;
 
-	memset(bginfo, 0, sizeof(struct bginfo_struct));
+	struct bgctl_info *bginfo = g_new0(struct bgctl_info, 1);
+
 	pthread_mutex_init(&bginfo->lock, NULL);
 	pthread_cond_init(&bginfo->init_done, NULL);
 	bginfo->disksize  = disksize;
 	bginfo->ctlpath   = bgctlpath;
 
-	if (!bginfo->ctlpath)
-		return;
-
 	info("bgctl is on");
-	// unlink(bginfo->ctlpath);
-
 
 	/* mutex_lock must come before pthread_create. Before cond_wait() is
 	 * called, cond_signal() cannot notify anyone. Without mutex here, if
@@ -161,15 +152,14 @@ void bgctl_thread_create(off_t disksize, const char *bgctlpath)
 	pthread_mutex_unlock(&bginfo->lock);
 
 	info("bgthread creation done");
+
+	return bginfo;
 }
 
-void bgctl_wait_shutdown(void)
+void bgctl_thread_shutdown(struct bgctl_info *bginfo)
 {
-	struct bginfo_struct *bginfo = &bginfo_data;
-
-	if (!bginfo->ctlpath)
+	if (!bginfo)
 		return;
-
 
 	info("wait bgctl");
 	pthread_join(bginfo->tid, NULL);
@@ -177,7 +167,6 @@ void bgctl_wait_shutdown(void)
 
 	pthread_mutex_destroy(&bginfo->lock);
 	pthread_cond_destroy(&bginfo->init_done);
-	memset(bginfo, 0, sizeof(struct bginfo_struct));
 }
 
 
@@ -199,7 +188,7 @@ struct parameters {
 	int tgtdiskfd;
 };
 
-void *sender_thread_main(void *data)
+void *send_thread_main(void *data)
 {
 	struct parameters *params = (struct parameters *) data;
 
@@ -259,7 +248,7 @@ void *sender_thread_main(void *data)
 	return NULL;
 }
 
-void *receiver_thread_main(void *data)
+void *recv_thread_main(void *data)
 {
 	struct parameters *params = (struct parameters *) data;
 
@@ -356,7 +345,7 @@ int check_consistency_by_partial_mmap(char *srcdisk, int tgtdiskfd, struct crequ
 	int ret = memcmp(srciobuf, tgtiobuf, req->iolen);
 
 	if (ret) {
-		g_warning("mismatch index %d iotype %s iofrom %ju iolen %zu",
+		warn("mismatch index %d iotype %s iofrom %ju iolen %zu",
 				req->index, nbd_get_iotype_string(req->iotype),
 				req->iofrom, req->iolen);
 
@@ -453,23 +442,23 @@ int test_direct_mode(char *srcdisk, char *tgtdisk, int remotefd, int cowmode, en
 	for (int loop_per_session = 0; loop_per_session < 100; loop_per_session++) {
 		info("io start");
 
-		bgctl_thread_create(disksize, bgctlpath);
+		struct bgctl_info *bginfo = bgctl_thread_create(disksize, bgctlpath);
 
 
 		int aaa = (int) (1000.0L * random() / RAND_MAX);
 		poll(NULL, 0, aaa);
 
-		pthread_t tid_sender = pthread_create_or_abort(sender_thread_main, &params);
-		pthread_t tid_receiver = pthread_create_or_abort(receiver_thread_main, &params);
+		pthread_t tid_send = pthread_create_or_abort(send_thread_main, &params);
+		pthread_t tid_recv = pthread_create_or_abort(recv_thread_main, &params);
 
 
-		pthread_join(tid_sender, NULL);
-		pthread_join(tid_receiver, NULL);
+		pthread_join(tid_send, NULL);
+		pthread_join(tid_recv, NULL);
 
-		bgctl_wait_shutdown();
+		bgctl_thread_shutdown(bginfo);
 
 
-		info("sender and receiver finished");
+		info("send and recv threads finished");
 		/* wait here. make sure the last write is committed to the disk */
 		//sleep(1);
 		info("checking start ...");
