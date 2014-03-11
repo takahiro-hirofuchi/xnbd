@@ -25,10 +25,6 @@
 
 
 
-/* A PAGESIZE is plused to include a header */
-#define logsize (getpagesize())
-
-
 struct cachestat {
 	unsigned long nblocks;
 
@@ -46,18 +42,13 @@ struct cachestat {
 
 void cachestat_dump(char *path)
 {
-	int fd;
-	char *buf;
-
-	fd = open(path, O_RDONLY);
+	int fd = open(path, O_RDONLY);
 	if (fd < 0)
 		err("open cachestat file %s, %s", path, strerror(errno));
 
-	buf = mmap(NULL, logsize, PROT_READ, MAP_SHARED, fd, 0);
-	if (buf == MAP_FAILED)
-		err("disk mapping failed, %s", strerror(errno));
+	struct cachestat *st = mmap_or_abort(NULL, sizeof(struct cachestat), PROT_READ, MAP_SHARED, fd, 0);
+	close(fd);
 
-	struct cachestat *st = (struct cachestat *) buf;
 
 	printf("nblocks %lu\n", st->nblocks);
 	printf("cached_by_ondemand_read %lu\n", st->cache_odread);
@@ -74,26 +65,18 @@ void cachestat_dump(char *path)
 	printf("cache_hit_ratio %lf\n", 100.0 * (double) st->cache_hit / (double) (st->cache_hit + st->cache_miss));
 	printf("transferred blocks %lu\n", st->cache_miss + st->cache_bgcopy);
 
-	munmap_or_abort(buf, logsize);
-
-	close(fd);
+	munmap_or_abort(st, sizeof(struct cachestat));
 }
 
 
 void cachestat_dump_loop(char *path, unsigned int interval)
 {
-	int fd;
-	char *buf;
-
-	fd = open(path, O_RDONLY);
+	int fd = open(path, O_RDONLY);
 	if (fd < 0)
 		err("open cachestat file %s, %s", path, strerror(errno));
 
-	buf = mmap(NULL, logsize, PROT_READ, MAP_SHARED, fd, 0);
-	if (buf == MAP_FAILED)
-		err("disk mapping failed, %s", strerror(errno));
-
-	struct cachestat *st = (struct cachestat *) buf;
+	struct cachestat *st = mmap_or_abort(NULL, sizeof(struct cachestat), PROT_READ, MAP_SHARED, fd, 0);
+	close(fd);
 
 	printf("#time nblocks ");
 	printf("cached_by_ondemand_read ");
@@ -159,17 +142,12 @@ void cachestat_dump_loop(char *path, unsigned int interval)
 		sleep(interval);
 	}
 
-	munmap_or_abort(buf, logsize);
-
-	close(fd);
+	munmap_or_abort(st, sizeof(struct cachestat));
 }
 
 
 #ifdef CACHESTAT_ENABLED
-static struct cachestat *cachest;
-static int cachestfd;
-static int cachest_initialized = 0;
-static char *cachestbuf;
+static struct cachestat *cachest = NULL;
 
 inline void cachestat_cache_odread(void)
 {
@@ -208,43 +186,30 @@ inline void cachestat_miss(void)
 	cachest->cache_miss += 1;
 }
 
-int cachestat_initialize(const char *path, unsigned long nblocks)
+void cachestat_initialize(const char *path, unsigned long nblocks)
 {
-	cachestfd = open(path, O_CREAT | O_RDWR | O_TRUNC, S_IRUSR | S_IWUSR);
-	if (cachestfd < 0) {
+	int fd = open(path, O_CREAT | O_RDWR | O_TRUNC, S_IRUSR | S_IWUSR);
+	if (fd < 0) {
 		err("open cachestfd  %s, %s", path, strerror(errno));
 	}
 
-	info("cachest file %s size %llu B\n", path, (off64_t) logsize);
+	info("cachest file %s (%zu bytes)\n", path, sizeof(struct cachestat));
 
-	cachestbuf = mmap(NULL, logsize, PROT_READ | PROT_WRITE, MAP_SHARED, cachestfd, 0);
-	if (cachestbuf == MAP_FAILED)
-		err("disk mapping failed, %s", strerror(errno));
-
-	cachest = (struct cachestat *) cachestbuf;
+	cachest = mmap_or_abort(NULL, sizeof(struct cachestat), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	cachest->nblocks = nblocks;
 
-	cachest_initialized = 1;
-
-	return 0;
+	close(fd);
 }
 
-int cachestat_shutdown(void)
+void cachestat_shutdown(void)
 {
-	int ret;
+	g_assert(cachest);
 
-	if (!cachest_initialized)
-		return 0;
-
-	ret = msync(cachestbuf, logsize, MS_SYNC);
+	int ret = msync(cachest, sizeof(struct cachestat), MS_SYNC);
 	if (ret < 0)
 		warn("msync failed");
 
-	munmap_or_abort(cachestbuf, logsize);
-
-	close(cachestfd);
-
-	return 0;
+	munmap_or_abort(cachest, sizeof(struct cachestat));
 }
 
 #else
@@ -255,7 +220,6 @@ inline void cachestat_read_block(void) { return; }
 inline void cachestat_write_block(void) { return; }
 inline void cachestat_miss(void) { return; }
 inline void cachestat_hit(void) { return; }
-int cachestat_initialize(const char *path __attribute__((unused)), unsigned long nblocks __attribute__((unused))) { return 0; }
-int cachestat_shutdown(void) { return 0; }
-
+void cachestat_initialize(const char *path __attribute__((unused)), unsigned long nblocks __attribute__((unused))) { return; }
+void cachestat_shutdown(void) { return; }
 #endif
