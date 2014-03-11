@@ -670,8 +670,7 @@ int unix_send_fd(int socket, int fd)
 	cmsg->cmsg_type  = SCM_RIGHTS;
 	cmsg->cmsg_len   = CMSG_LEN(sizeof(fd));
 
-	int *fdptr = (int *) CMSG_DATA(cmsg);
-	*fdptr = fd;
+	memcpy(CMSG_DATA(cmsg), &fd, sizeof(fd));
 
 	msg.msg_controllen = cmsg->cmsg_len;
 
@@ -720,8 +719,8 @@ int unix_recv_fd(int socket)
 	if (cmsg->cmsg_len == CMSG_LEN(sizeof(fd))
 		&& cmsg->cmsg_level == SOL_SOCKET
 		&& cmsg->cmsg_type == SCM_RIGHTS) {
-		int *fdptr = (int *) CMSG_DATA(cmsg);
-		fd = *fdptr;
+
+		memcpy(&fd, CMSG_DATA(cmsg), sizeof(fd));
 	} else
 		err("no descriptor");
 
