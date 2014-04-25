@@ -24,8 +24,8 @@ Bugfixes
 
 Improvements
 ~~~~~~~~~~~~
- * xnbd-server: Remove the limitation that a disk size should be a multiple of
-     4096. Now support any disk size.
+ * xnbd-server: Remove the limitation that a disk size should be a multiple of 4096.
+     Now support any disk size.
  * xnbd-server: Remove the limitation that the cache block size should be a
      multiple of 4096.  Now support any disk size that is a power of 2.
 
