@@ -21,6 +21,9 @@ Bugfixes
  * xnbd-server: Proxy mode unintentionally required `--clear-bitmap` to create
      new bitmap files (issue #10)
  * xnbd-server: Fix alignment issues warned by clang
+ * xnbd-register: Wrapper options "max_buf_size" and "max_queue_size" were
+     required rather than optional; a mis-leading error message made things worse
+     (issue #11)
 
 Improvements
 ~~~~~~~~~~~~
@@ -28,6 +31,9 @@ Improvements
      Now support any disk size.
  * xnbd-server: Remove the limitation that the cache block size should be a
      multiple of 4096.  Now support any disk size that is a power of 2.
+ * xnbd-register: Support partial wrapper configuration
+     (e.g. a custom port but defaults for everything else)
+     without need to duplicate defaults in the config file
 
 
 0.3.0

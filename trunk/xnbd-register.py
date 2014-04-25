@@ -38,6 +38,20 @@ VERBOSE = True
 SERVER_KEY = 'server'
 WRAPPER_KEY = 'wrapper'
 
+WRAPPER_ADDRESS_KEY = 'address'
+WRAPPER_LOGPATH_KEY = 'logpath'
+WRAPPER_PORT_KEY = 'port'
+WRAPPER_SOCKET_KEY = 'socket'
+WRAPPER_MAX_BUF_SIZE_KEY = 'max_buf_size'
+WRAPPER_MAX_QUEUE_SIZE_KEY = 'max_queue_size'
+WRAPPER_VOLUMES_KEY = 'volumes'
+
+DEFAULT_ADDRESS = '127.0.0.1'
+DEFAULT_PORT = 8520
+DEFAULT_LOGPATH = '/var/log/xnbd.log'
+DEFAULT_SOCKET = '/var/run/xnbd-wrapper.ctl'
+
+
 def vprint(msg, **kwargs):
 	if (VERBOSE):
 		print(msg, **kwargs)
@@ -71,16 +85,20 @@ def check_syntax(data, config_file):
 			sys.exit(1)
 
 		if (key == WRAPPER_KEY):
-			wrapper_keys = set(["address", "port", "socket", "volumes", "logpath", "max_buf_size", "max_queue_size"])
+			wrapper_keys = set([
+					WRAPPER_ADDRESS_KEY,
+					WRAPPER_LOGPATH_KEY,
+					WRAPPER_MAX_BUF_SIZE_KEY,
+					WRAPPER_MAX_QUEUE_SIZE_KEY,
+					WRAPPER_PORT_KEY,
+					WRAPPER_SOCKET_KEY,
+					WRAPPER_VOLUMES_KEY,
+					])
 			config_keys = set(data[key].keys())
-			if (config_keys < wrapper_keys):
-				vprint("Incomplete wrapper configuration. Was expecting `address', `port', `socket' and `volumes' in configuration file `%s'"  % config_file)
-				sys.exit(1)
-
 			ukeys = config_keys - wrapper_keys
 			if (ukeys):
 				vprint("WARNING: Unknown wrapper option(s): %s\n" % ", ".join(ukeys))
-			continue
+				sys.exit(1)
 
 		elif (key.startswith("nbd")):
 			if (not re.match("nbd\d+", key)):
@@ -127,12 +145,16 @@ def stop_client(device, data):
 	call(stop_cmd, "Stopping /dev/%s ... " % (device))
 
 def start_wrapper(data):
-	start_cmd = [XNBD_WRAPPER, "--daemonize", "--logpath", data['logpath'],
-		"--laddr", data['address'], "--port", str(data['port']), "--socket", data['socket']]
+	start_cmd = [XNBD_WRAPPER, "--daemonize",
+			"--logpath", data.get(WRAPPER_LOGPATH_KEY, DEFAULT_LOGPATH),
+			"--laddr", data.get(WRAPPER_ADDRESS_KEY, DEFAULT_ADDRESS),
+			"--port", str(data.get(WRAPPER_PORT_KEY, DEFAULT_PORT)),
+			"--socket", data.get(WRAPPER_SOCKET_KEY, DEFAULT_SOCKET),
+			]
 
 	for parameter, config_key in (
-			('--max-queue-size', 'max_queue_size'),
-			('--max-buf-size',   'max_buf_size'),
+			('--max-queue-size', WRAPPER_MAX_QUEUE_SIZE_KEY),
+			('--max-buf-size',   WRAPPER_MAX_BUF_SIZE_KEY),
 			):
 		number = int(data.get(config_key, 0))
 		if number > 0:
@@ -142,12 +164,12 @@ def start_wrapper(data):
 	if call(start_cmd, "Starting `%s' ..." % (XNBD_WRAPPER)):
 		sys.exit(1)
 
-	if isinstance(data['volumes'], types.ListType):
+	if isinstance(data[WRAPPER_VOLUMES_KEY], types.ListType):
 		# List data, format of 0.1.0-pre*
-		exportname_volume_tuple_list = [(path, path) for path in data['volumes']]
+		exportname_volume_tuple_list = [(path, path) for path in data[WRAPPER_VOLUMES_KEY]]
 	else:
 		# Dict data, format of >=0.2.0
-		exportname_volume_tuple_list = list(data['volumes'].items())
+		exportname_volume_tuple_list = list(data[WRAPPER_VOLUMES_KEY].items())
 
 	for exportname, volume in exportname_volume_tuple_list:
 		add_volume = [XNBD_WRAPPER_CTL, "--socket", data['socket'], "--add-target", exportname, volume]
