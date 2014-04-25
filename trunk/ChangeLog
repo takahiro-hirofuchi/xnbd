@@ -18,6 +18,8 @@ Bugfixes
 ~~~~~~~~
  * xnbd-client: Fix wrong message output speaking of xnbd-server's PID rather
      than that of xnbd-client
+ * xnbd-server: Proxy mode unintentionally required `--clear-bitmap` to create
+     new bitmap files (issue #10)
  * xnbd-server: Fix alignment issues warned by clang
 
 Improvements

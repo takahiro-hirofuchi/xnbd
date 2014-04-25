@@ -106,11 +106,15 @@ unsigned long *bitmap_open_file(const char *bitmapfile, unsigned long nbits, siz
 	 *   open the existing file as read/write, and zero-clear data
 	 *
 	 *
-	 * if the file size is different,
+	 * if the obtained file size is different from the requested size,
+	 *    (readonly && *) is not possible
+	 *    (!readonly && !zeroclear) is not possible
 	 *    (!readonly && zeroclear) is possible
 	 *
-	 * if the file is created,
-	 *    (!readonly && zeroclear) is possible
+	 * if the file is to be created,
+	 *    (!readonly && *) is possible,
+	 *       i.e., the given value of zeroclear is not referred
+	 *
 	 *
 	 */
 
@@ -124,6 +128,10 @@ unsigned long *bitmap_open_file(const char *bitmapfile, unsigned long nbits, siz
 		if (size != (off_t) buflen) {
 			if (readonly)
 				err("cannot resize readonly bitmap file (%s)", bitmapfile);
+
+			/* if the bitmap file did not exist, the obtained size is zero */
+			if (size == 0)
+				zeroclear = 1;
 
 			if (!zeroclear)
 				err("deny using bitmap file (%s) without clearing it. The bitmap size is different (%ju != %zu)",
