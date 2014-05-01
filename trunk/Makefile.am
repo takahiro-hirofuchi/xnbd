@@ -41,7 +41,7 @@ xnbd_server_SOURCES = \
 	xnbd_target.c
 
 
-xnbd_bgctl_LDADD = libxnbd_internal.la
+xnbd_bgctl_LDADD = libxnbd_internal.la -lm
 xnbd_bgctl_SOURCES = xnbd_bgctl.c
 
 

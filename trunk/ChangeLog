@@ -16,6 +16,8 @@ xNBD Change Log
 
 Bugfixes
 ~~~~~~~~
+ * xnbd-bgctl: Do not show misleading "100.0%" before all blocks are cached.
+     `printf(3)` rounding was at fault (issue #12)
  * xnbd-client: Fix wrong message output speaking of xnbd-server's PID rather
      than that of xnbd-client
  * xnbd-server: Proxy mode unintentionally required `--clear-bitmap` to create
