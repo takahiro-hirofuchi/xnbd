@@ -176,7 +176,17 @@ struct xnbd_session {
 
 /* default XNBD server port */
 extern const int XNBD_PORT;
-extern const unsigned int CBLOCKSIZE;
+
+
+/*
+ * CBLOCKSIZE must be a power of 2, because bit operations are used in
+ * mmap_block_region functions. There is an assertion to check this in main()
+ * of xnbd-server.
+ *
+ * 1024 or 8192, which is different from the page size, is also possible, but not well tested.
+ **/
+#define CBLOCKSIZE  4096
+
 
 static inline size_t confine_iolen_within_disk(off_t disksize, off_t iofrom, size_t iolen)
 {

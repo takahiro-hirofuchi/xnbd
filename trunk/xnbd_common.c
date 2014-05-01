@@ -25,14 +25,6 @@
 #include "xnbd_common.h"
 
 
-/*
- * CBLOCKSIZE must be a power of 2, because bit operations are used in
- * mmap_block_region functions. There is an assertion to check this in main()
- * of xnbd-server.
- *
- * 1024 or 8192, which is different from the page size, is also possible, but not well tested.
- **/
-const unsigned int CBLOCKSIZE = 4096;
 const int XNBD_PORT = 8520;
 
 
