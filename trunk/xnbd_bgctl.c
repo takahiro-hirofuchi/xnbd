@@ -24,6 +24,7 @@
 #include "xnbd_proxy.h"
 #include <assert.h>
 #include <sys/ioctl.h>
+#include <math.h> /* floor() */
 
 
 
@@ -733,9 +734,13 @@ int main(int argc, char **argv)
 	unsigned long *bm = bitmap_open_file(query->bmpath, nblocks, &bmlen, 1, 0);
 	unsigned long cached = bitmap_popcount(bm, nblocks);
 
+	/* Prevent printf from displaying "100.0%" before it's actually 100% (issue #12) */
+	double percent_cached = 100.0L * cached / nblocks;
+	percent_cached = floor(percent_cached * 10) / 10;
+
 	info("%s (%s): disksize %ju", query->diskpath, query->bmpath, query->disksize);
 	info("forwarded to %s:%s", query->rhost, query->rport);
-	info("cached blocks %lu / %lu (%.1f%%)", cached, nblocks, nblocks ? (cached * 100.0 / nblocks) : 0.0);
+	info("cached blocks %lu / %lu (%.1f%%)", cached, nblocks, percent_cached);
 	info("internal buffer usage: %zu bytes / %zu bytes (%.1f%%)", query->cur_use_buf, query->max_use_buf, query->max_use_buf ? (query->cur_use_buf * 100.0 / query->max_use_buf) : 0.0);
 	info("pending request count: %zu / %zu (%.1f%%)", query->cur_use_que, query->max_use_que, query->max_use_que ? (query->cur_use_que * 100.0 / query->max_use_que) : 0.0);
 
