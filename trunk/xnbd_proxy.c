@@ -759,9 +759,11 @@ void xnbd_proxy_start(struct xnbd_info *xnbd)
 	else
 		ret = nbd_negotiate_with_server2(remotefd, &(xnbd->disksize), NULL);
 
-	if (ret < 0) {
+	if (ret < 0)
 		err("negotiation with %s:%s failed", xnbd->proxy_rhost, xnbd->proxy_rport);
-	}
+
+	if (xnbd->disksize == 0)
+		err("the size of the remote disk is zero");
 
 	xnbd->nblocks = get_disk_nblocks(xnbd->disksize);
 

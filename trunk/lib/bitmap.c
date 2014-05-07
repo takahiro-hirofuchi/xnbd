@@ -62,6 +62,12 @@ void bitmap_sync_file(unsigned long *bitmap, size_t bitmaplen)
 
 void bitmap_close_file(unsigned long *bitmap, size_t bitmaplen)
 {
+	/* do nothing if the size was zero when opened */
+	if (!bitmap) {
+		g_assert(bitmaplen == 0);
+		return;
+	}
+
 	bitmap_sync_file(bitmap, bitmaplen);
 	munmap_or_abort(bitmap, bitmaplen);
 }
@@ -75,6 +81,12 @@ unsigned long *bitmap_open_file(const char *bitmapfile, unsigned long nbits, siz
 
 	int mmap_flag = readonly ? PROT_READ : PROT_WRITE;
 	int open_flag = readonly ? O_RDONLY : (O_RDWR | O_CREAT);
+
+	/* mmap() of zero length results in EINVAL */
+	if (nbits == 0) {
+		warn("open a zero-length bitmap, %s", bitmapfile);
+		return NULL;
+	}
 
 	{
 		/* O_NOATIME will not give us visible performance improvement. Drop? */

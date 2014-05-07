@@ -166,6 +166,8 @@ void copy_buf_to_iov(struct iovec *iov, int iov_size, char *buf, size_t buflen)
 /* 0xff filled, readonly, munmap possible */
 static void *get_filled_readonly_buffer(char *template, size_t buflen)
 {
+	g_assert(buflen);
+
 	int fd = mkstemp(template);
 	if (fd < 0)
 		err("mkstemp %m");
@@ -200,6 +202,8 @@ struct disk_stack *create_disk_stack(char *diskpath)
 	}
 
 	disksize = get_disksize(diskfd);
+	if (disksize == 0)
+		err("the size of %s is zero", diskpath);
 
 	/* off_t is 32bit singed integer without the large file support */
 	info("disk %s size %ju B (%ju MB)", diskpath, disksize, disksize /1024 /1024);
