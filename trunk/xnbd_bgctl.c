@@ -735,7 +735,7 @@ int main(int argc, char **argv)
 	unsigned long cached = bitmap_popcount(bm, nblocks);
 
 	/* Prevent printf from displaying "100.0%" before it's actually 100% (issue #12) */
-	double percent_cached = 100.0L * cached / nblocks;
+	double percent_cached = nblocks ? (100.0L * cached / nblocks) : 0.0L; /* do not divide it by zero */
 	percent_cached = floor(percent_cached * 10) / 10;
 
 	info("%s (%s): disksize %ju", query->diskpath, query->bmpath, query->disksize);
