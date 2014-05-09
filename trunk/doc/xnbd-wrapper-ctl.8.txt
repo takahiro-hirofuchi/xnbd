@@ -55,11 +55,10 @@ The following options are supported:
     Deprecated alias to --add-target, please do not use.
 
 *--help*|*-h*::
-    Display a short usage overview and exit
+    Display a short usage overview
 
 *--list*|*-l*::
-    Connects to the xNBD wrapper and retrieves the list of exported file
-    names
+    Show the list of exported image files
 
 *--remove-by-file* 'FILE'::
     Instruct the xnbd-wrapper to remove the volume wired to file 'FILE'
@@ -78,20 +77,21 @@ The following options are supported:
     /var/run/xnbd-wrapper.ctl.
 
 *--target-exportname* 'NAME'::
-    Set the export name to request from the proxied xnbd-wrapper target.
+    Specify the export name of a remote volume. In this case, the target
+    server is exporting multiple volumes through one TCP port.
     This option is used in combination with *--add-proxy* and *--bgctl-reconnect*, only.
 
 *--bgctl-cache-all*::
-    Please see xnbd-bgctl(1) for details.
+    See xnbd-bgctl(1) for details.
 
 *--bgctl-query*::
-    Please see xnbd-bgctl(1) for details.
+    See xnbd-bgctl(1) for details.
 
 *--bgctl-reconnect* 'REMOTE_HOST' 'REMOTE_PORT'::
-    Please see xnbd-bgctl(1) for details.
+    See xnbd-bgctl(1) for details.
 
 *--bgctl-switch*::
-    Please see xnbd-bgctl(1) for details.
+    See xnbd-bgctl(1) for details.
 
 
 POSITIONAL ARGUMENTS

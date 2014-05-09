@@ -69,7 +69,7 @@ The following options are supported:
     listen on port 8520 by default.
 
 (*--port* 'PORT')::
-    Deprecated, please use *--lport* instead.
+    Deprecated, use *--lport* instead.
     This option might be removed in future releases.
 
 *--socket* 'PATH'::
@@ -88,7 +88,7 @@ The following options are supported:
     using `$PATH`.   By default, "xnbd-server" resolved from `$PATH` is used.
 
 (*--xnbd-binary* 'PATH')::
-    Deprecated, please use *--xnbd-server* 'PATH' instead.
+    Deprecated, use *--xnbd-server* 'PATH' instead.
     This option might be removed in future releases.
 
 *--cow*::
@@ -99,11 +99,11 @@ The following options are supported:
 
 *--max-queue-size* 'NUMBER'::
     Parameter forwarded to proxy mode xnbd-server on invocation.
-    See *xnbd-server(8)* for details, please.
+    See *xnbd-server(8)* for details..
 
 *--max-buf-size* 'NUMBER'::
     Parameter forwarded to proxy mode xnbd-server on invocation.
-    See *xnbd-server(8)* for details, please.
+    See *xnbd-server(8)* for details.
 
 
 SEE ALSO

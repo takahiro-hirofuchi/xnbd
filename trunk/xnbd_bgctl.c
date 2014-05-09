@@ -315,7 +315,8 @@ struct cache_rx_ctl {
 };
 
 char cache_rx_req_eof;
-char cache_rx_req_remote;
+char cache_rx_req_remote_first;
+char cache_rx_req_remote_later;
 char cache_rx_req_cached;
 
 struct progress_info *progress_setup(unsigned long nblocks);
@@ -327,7 +328,7 @@ void *cache_all_blocks_receiver_main(void *arg)
 
 	set_process_name("cache_rx");
 	block_all_signals();
-	info("create cache_rx thread %lu", pthread_self());
+	info("create cache_rx thread");
 
 	struct progress_info *progress = progress_setup(cache_rx->nblocks);
 	progress->enabled = cache_rx->progress_enabled;
@@ -338,10 +339,12 @@ void *cache_all_blocks_receiver_main(void *arg)
 
 		if (data == &cache_rx_req_eof)
 			break;
-		else if (data == &cache_rx_req_remote) {
+		else if (data == &cache_rx_req_remote_first) {
 			int ret = nbd_client_recv_reply_header(cache_rx->ctl_fd, UINT64_MAX);
 			if (ret < 0)
 				err("recv header, %m");
+			progress->blocks_from_remote += 1;
+		} else if (data == &cache_rx_req_remote_later) {
 			progress->blocks_from_remote += 1;
 		} else {
 			progress->blocks_from_cache += 1;
@@ -349,10 +352,9 @@ void *cache_all_blocks_receiver_main(void *arg)
 		progress_refresh_draw(progress);
 	}
 
-	//progress_refresh_draw(progress);
 	g_free(progress);
 
-	info("done cache_rx thread %lu", pthread_self());
+	info("done cache_rx thread");
 
 	return NULL;
 }
@@ -472,12 +474,53 @@ void progress_refresh_draw(struct progress_info *p)
 }
 
 
-/* Increase this value if necessary. The enough number of requests should be
- * being enqueued into the proxy server to get the maximum speed of of
- * --cache-all. */
-#define XNBD_BGCTL_ASYNC_DEPTH 1000
+/*
+ * The below parameters effects performance of the --cache-all operation.
+ * BLOCKS_AT_ONCE is the number of blocks that are to be cached in one request.
+ * ASYNC_DEPTH is the number of requests that are to be enqueued
+ * asynchronously.
+ *
+ * Migrate a Xen guest with a 30 GiB hard disk.
+ * BLOCK_AT_ONCE is set to 31.
+ *
+ *    ASYNC_DEPTH
+ *    |      Duration approximate (minutes)
+ *    |      |  Duration exact
+ *    -----------------------------------
+ *    1     14  0:13:57.739573
+ *    1     12  0:11:35.063002    (* BLOCKS_AT_ONCE is set to 31000)
+ *    10     9  0:09:06.786810
+ *    100    6  0:05:57.978245
+ *    1000   5  0:05:02.546333
+ *    10000  5  0:04:59.861427
+ *
+ * Buffer and queue size limits were not nearly exceeded even during the 10k
+ * run.
+ *
+ * So, for ASYNC_DEPTH * BLOCKS_AT_ONCE = 31000, we have
+ *
+ *    ASYNC_DEPTH
+ *    |         BLOCKS_AT_ONCE
+ *    |         |    Duration approximate (minutes)
+ *    ---------------------------------------------
+ *    1     31000   12
+ *    1000     31    5
+ *
+ * (BLOCK_AT_ONCE=31 and ASYNC_DEPTH=1000) seems a good choice.
+ *
+ *
+ * xnbd-server will accept any number of blocks in one request. But, other NBD
+ * programs may have the limitation on the maximum number of blocks in one
+ * request.
+ *
+ * Try 31 for BLOCK_AT_ONCE. It will be a safe choice.
+ * CBLOCKSIZE (i.e., 4096 in default) * 32 = 128KB.
+ */
+#define XNBD_BGCTL_DEFAULT_BLOCKS_AT_ONCE 31
+#define XNBD_BGCTL_DEFAULT_ASYNC_DEPTH 1000
 
-void cache_all_blocks_async(char *unix_path, unsigned long *bm, off_t disksize, bool progress_enabled)
+
+void cache_all_blocks_async(char *unix_path, unsigned long *bm, off_t disksize, bool progress_enabled, unsigned long blocks_at_once)
 {
 	int unix_fd, ctl_fd;
 	start_register_fd(unix_path, &unix_fd, &ctl_fd);
@@ -485,28 +528,58 @@ void cache_all_blocks_async(char *unix_path, unsigned long *bm, off_t disksize, 
 
 	struct cache_rx_ctl cache_rx;
 	cache_rx.ctl_fd  = ctl_fd;
-	cache_rx.q       = sized_async_queue_new(XNBD_BGCTL_ASYNC_DEPTH);
+	cache_rx.q       = sized_async_queue_new(XNBD_BGCTL_DEFAULT_ASYNC_DEPTH);
 	cache_rx.nblocks = nblocks;
 	cache_rx.progress_enabled = progress_enabled;
 
 	pthread_t cache_rx_tid = pthread_create_or_abort(cache_all_blocks_receiver_main, &cache_rx);
 
+	info("requesting transfer of up to %lu blocks at once", blocks_at_once);
 
+	for (unsigned long index = 0; index < nblocks; index += blocks_at_once) {
+		unsigned long const AFTER_LAST_MAX = MIN(index + blocks_at_once, nblocks);
 
-	for (unsigned long index = 0; index < nblocks; index++) {
-		if (!bitmap_test(bm, index)) {
+		unsigned long first = index;
+		unsigned long after_last;  /* initialized in loop body further down */
 
-			off_t iofrom = (off_t) index * CBLOCKSIZE;
-			size_t iolen = CBLOCKSIZE;
-			iolen = confine_iolen_within_disk(disksize, iofrom, iolen);
+		while (first < AFTER_LAST_MAX) {
+			/* Make <after_last> point after last uncached block (with no cached blocks in between) */
+			for (after_last = first; !bitmap_test(bm, after_last) && (after_last < AFTER_LAST_MAX); after_last++);
 
-			int ret = nbd_client_send_request_header(ctl_fd, NBD_CMD_BGCOPY, iofrom, iolen, (UINT64_MAX));
-			if (ret < 0)
-				err("send_read_request, %m");
+			/* At least a single block to fetch? */
+			if (after_last > first) {
+				dbg("blocks %lu to %lu (%lu in total): requesting transfer", first, after_last, after_last - first);
 
-			sized_async_queue_push(cache_rx.q, &cache_rx_req_remote);
-		} else {
-			sized_async_queue_push(cache_rx.q, &cache_rx_req_cached);
+				off_t iofrom = (off_t) first * CBLOCKSIZE;
+				size_t iolen = (off_t)(after_last - first) * CBLOCKSIZE;
+				iolen = confine_iolen_within_disk(disksize, iofrom, iolen);
+
+				int ret = nbd_client_send_request_header(ctl_fd, NBD_CMD_BGCOPY, iofrom, iolen, (UINT64_MAX));
+				if (ret < 0) {
+					err("send_read_request, %m");
+				}
+
+				/* Account for requested blocks */
+				for (unsigned long i = first; i < after_last; i++) {
+					if (i == first) {
+						sized_async_queue_push(cache_rx.q, &cache_rx_req_remote_first);
+					} else {
+						sized_async_queue_push(cache_rx.q, &cache_rx_req_remote_later);
+					}
+				}
+			}
+
+			/* Make <first> point after last cached block (with no uncached blocks in between) */
+			for (first = after_last; bitmap_test(bm, first) && (first < AFTER_LAST_MAX); first++);
+
+			/* Account for skipped blocks */
+			if (first > after_last) {
+				dbg("blocks %lu to %lu (%lu in total): skipping, already cached", after_last, first, first - after_last);
+
+				for (unsigned long i = after_last; i < first; i++) {
+					sized_async_queue_push(cache_rx.q, &cache_rx_req_cached);
+				}
+			}
 		}
 	}
 
@@ -537,40 +610,44 @@ void cache_all_blocks(char *unix_path, unsigned long *bm, off_t disksize)
 
 static struct option longopts[] = {
 	/* commands */
-	{"query",      no_argument, NULL, 'q'},
-	{"switch",     no_argument, NULL, 's'},
-	{"shutdown",   no_argument, NULL, 's'}, /* deprecated in favor of --switch */
-	{"cache-all",  no_argument, NULL, 'c'},
-	{"cache-all2", no_argument, NULL, 'C'},
-	{"reconnect",  no_argument, NULL, 'r'},
-	{"help",       no_argument, NULL, 'h'},
-	{"exportname", required_argument, NULL, 'n'},
-	{"progress",   no_argument, NULL, 'p'},
-	{"force",      no_argument, NULL, 'f'},
+	{"query",               no_argument, NULL, 'q'},
+	{"switch",              no_argument, NULL, 's'},
+	{"shutdown",            no_argument, NULL, 's'}, /* deprecated in favor of --switch */
+	{"cache-all",           no_argument, NULL, 'c'},
+	{"cache-all2",          no_argument, NULL, 'C'},
+	{"reconnect",           no_argument, NULL, 'r'},
+	{"help",                no_argument, NULL, 'h'},
+	{"exportname",          required_argument, NULL, 'n'},
+	{"blocks-per-request",  required_argument, NULL, 'k'},
+	{"progress",            no_argument, NULL, 'p'},
+	{"force",               no_argument, NULL, 'f'},
 	{NULL, 0, NULL, 0},
 };
 
-static const char *help_string = "\
+#define HELP_STRING_FORMAT "\
 Usage:\n\
-  xnbd-bgctl                     --query       CONTROL_UNIX_SOCKET\n\
-  xnbd-bgctl [--force]           --switch      CONTROL_UNIX_SOCKET\n\
-  xnbd-bgctl [--progress]        --cache-all   CONTROL_UNIX_SOCKET\n\
-  xnbd-bgctl                     --cache-all2  CONTROL_UNIX_SOCKET\n\
-  xnbd-bgctl [--exportname NAME] --reconnect   CONTROL_UNIX_SOCKET REMOTE_HOST REMOTE_PORT\n\
+  xnbd-bgctl                     --query      CONTROL_UNIX_SOCKET\n\
+  xnbd-bgctl [--force]           --switch     CONTROL_UNIX_SOCKET\n\
+  xnbd-bgctl [--progress] [--blocks-per-request COUNT]\n\
+                                 --cache-all  CONTROL_UNIX_SOCKET\n\
+  xnbd-bgctl                     --cache-all2 CONTROL_UNIX_SOCKET\n\
+  xnbd-bgctl [--exportname NAME] --reconnect  CONTROL_UNIX_SOCKET REMOTE_HOST REMOTE_PORT\n\
 \n\
 Commands:\n\
   --query       query current status of the proxy mode\n\
   --cache-all   cache all blocks\n\
-  --cache-all2  cache all blocks with the background connection\n\
+  --cache-all2  cache all blocks with the background connection (not yet implemented)\n\
   --switch      stop the proxy mode and restart the target mode\n\
   --reconnect   reconnect the forwarding session\n\
  (--shutdown)   alias to --switch, deprecated\n\
 \n\
 Options:\n\
-  --exportname NAME  reconnect to a given image\n\
-  --progress         show a progress bar on stderr (default: disabled)\n\
-  --force            force switch even if all blocks are not cached (default: disabled)\n\
-";
+  --exportname NAME           reconnect to a given image\n\
+  --progress                  show a progress bar on stderr (default: disabled)\n\
+  --blocks-per-request COUNT  request up to COUNT blocks at once (default: %d blocks)\n\
+  --force                     force switch even if all blocks are not cached (default: disabled)\n\
+\n\
+"
 
 
 void show_help_and_exit(const char *msg)
@@ -578,7 +655,7 @@ void show_help_and_exit(const char *msg)
 	if (msg)
 		info("%s\n", msg);
 
-	fprintf(stderr, "%s\n", help_string);
+	fprintf(stderr, HELP_STRING_FORMAT, XNBD_BGCTL_DEFAULT_BLOCKS_AT_ONCE);
 	exit(msg ? EXIT_FAILURE : EXIT_SUCCESS);
 }
 
@@ -620,6 +697,7 @@ int main(int argc, char **argv)
 	const char *exportname = NULL;
 	bool progress_enabled = false;
 	bool force_enabled = false;
+	unsigned long blocks_at_once = XNBD_BGCTL_DEFAULT_BLOCKS_AT_ONCE;
 
 	for (;;) {
 		int c;
@@ -675,6 +753,12 @@ int main(int argc, char **argv)
 
 			case '?':
 				show_help_and_exit("unknown option");
+				break;
+
+			case 'k':
+				blocks_at_once = atol(optarg);
+				if (blocks_at_once <= 0)
+					show_help_and_exit("block count must be greater than zero");
 				break;
 
 			case 'p':
@@ -751,11 +835,10 @@ int main(int argc, char **argv)
 
 		case xnbd_bgctl_cmd_switch:
 			if (cached != nblocks) {
-				if (force_enabled) {
+				if (force_enabled)
 					info("switching to target mode despite incomplete cache, requested by --force");
-				} else {
+				else
 					err("refusing to switch to target mode with incomplete cache and no --force given");
-				}
 			}
 
 			{
@@ -778,7 +861,7 @@ int main(int argc, char **argv)
 
 		case xnbd_bgctl_cmd_cache_all:
 			// cache_all_blocks(unix_path, bm, nblocks);
-			cache_all_blocks_async(unix_path, bm, query->disksize, progress_enabled);
+			cache_all_blocks_async(unix_path, bm, query->disksize, progress_enabled, blocks_at_once);
 			break;
 
 		case xnbd_bgctl_cmd_cache_all2:
