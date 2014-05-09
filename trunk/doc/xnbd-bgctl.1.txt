@@ -16,9 +16,7 @@ SYNOPSIS
 
 *xnbd-bgctl* [--force] --switch 'CONTROL_SOCKET'
 
-*xnbd-bgctl* [--progress] --cache-all 'CONTROL_SOCKET'
-
-*xnbd-bgctl* --cache-all2 'CONTROL_SOCKET'
+*xnbd-bgctl* [--progress] [--blocks-per-request 'COUNT'] --cache-all 'CONTROL_SOCKET'
 
 *xnbd-bgctl* [--exportname 'NAME'] --reconnect 'CONTROL_SOCKET' 'REMOTE_HOST' 'REMOTE_PORT'
 
@@ -44,11 +42,11 @@ The following options are supported:
 *--cache-all2*::
     This command is identical to *--cache-all* but detaches the process from
     the terminal and is hence using a dedicated connection for data
-    transfer. Not implemented fully yet.
+    transfer. Not fully implemented yet.
 
 *--query*::
-    This command retrieves completion statistics from the proxy server
-    instance. It returns the number of cached blocks on the server.
+    Retrieve cache completion statistics from the proxy server, and display the
+    number of cached blocks.
 
 *--reconnect*::
     This command recovers from a lost connection by re-establishing
@@ -57,22 +55,29 @@ The following options are supported:
     to connect to, to recover from a disconnected session.
 
 *--switch*::
-    This command stops the proxy server and restarts in target mode.
+    Stop the proxy server and restart it in target mode.
     All client sessions are preserved.
 
 *--exportname* 'NAME'::
-    If the server supports to access devices by an identifier, use 'NAME'
-    to request access to a particular volume. This command is useful in
-    combination with an xnbd-wrapper, not a plain xnbd-server.
+    Specify the volume name to be requested. If a target server (e.g.,
+    xnbd-wrapper) exports multiple volumes through a single TCP port, this
+    option needs to be specified.
+    This option is used with `--reconnect`.
+
+*--blocks-per-request* 'COUNT'::
+    Request up to 'COUNT' blocks at once. `--help` shows the default value.
+    This option is used with `--cache-all`.
 
 *--progress*::
-    Enables display of a progress bar on stderr.  Disabled by default.
+    Show a progress bar on stderr. Disabled by default.
+    This option is used with `--cache-all'.
 
 *--force*::
-    Ignore risks, use with care.  Disabled by default.
+    Forcibly do an operation, ignoring the risk of data loss. Disabled by default.
+    This option is used with `--switch'.
 
 (*--shutdown*)::
-    Deprecated alias to *--switch*, please do not use.
+    Deprecated alias to *--switch*.
 
 
 POSITIONAL ARGUMENTS

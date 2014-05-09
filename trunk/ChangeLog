@@ -29,6 +29,9 @@ Bugfixes
 
 Improvements
 ~~~~~~~~~~~~
+ * xnbd-bgctl: Request multiple blocks at once. Add parameter
+    `--blocks-per-request COUNT` for a custom number of blocks to be requested
+    at once.
  * xnbd-server: Remove the limitation that a disk size should be a multiple of 4096.
      Now support any disk size.
  * xnbd-server: Remove the limitation that the cache block size should be a
