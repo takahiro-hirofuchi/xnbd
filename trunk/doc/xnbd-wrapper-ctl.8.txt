@@ -31,6 +31,8 @@ SYNOPSIS
 
 *xnbd-wrapper-ctl* [options] [--target-exportname 'NAME'] --bgctl-reconnect  'LOCAL_EXPORTNAME' 'REMOTE_HOST' 'REMOTE_PORT'
 
+*xnbd-wrapper-ctl* [options] --orphan
+
 *xnbd-wrapper-ctl* [options] --shutdown
 
 
@@ -70,6 +72,9 @@ The following commands are supported:
 
 *--list*|*-l*::
     Show the list of exported image files
+
+*--orphan*::
+    Send SIGTERM to xnbd-wrapper while keeping its child processes alive.
 
 *--remove-by-exportname* 'NAME'::
     Instruct the xnbd-wrapper to remove the volume exported as 'NAME'
