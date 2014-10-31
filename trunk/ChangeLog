@@ -36,6 +36,7 @@ Improvements
      Now support any disk size.
  * xnbd-server: Remove the limitation that the cache block size should be a
      multiple of 4096.  Now support any disk size that is a power of 2.
+ * xnbd-server: Skip ftruncate() when a local cache image is larger than a remote one.
  * xnbd-register: Support partial wrapper configuration
      (e.g. a custom port but defaults for everything else)
      without need to duplicate defaults in the config file
