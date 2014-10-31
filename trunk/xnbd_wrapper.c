@@ -29,6 +29,8 @@
 #include <assert.h>
 #include <stdbool.h>
 
+#include <jansson.h>
+
 
 #define XNBD_IMAGE_ADDED  0
 #define XNBD_IMAGE_ACCESS_ERROR  (-1)
@@ -75,6 +77,7 @@ typedef struct _t_disk_data {
 typedef struct _t_thread_data {
 	int unix_sock_fd;
 	const char * xnbd_bgctl_command;
+	const char * database_file_name;
 	int * p_child_process_count;
 } t_thread_data;
 
@@ -405,6 +408,129 @@ static void list_diskimg(FILE *fp)
 	{
 		fprintf(fp, "no item\n");
 	}
+	pthread_mutex_unlock(&mutex);
+}
+
+static void add_disk_to_json_ghfunc(gpointer key, const t_disk_data * p_disk_data, json_t * json_root) {
+	(void)key;
+	json_t * const disk_property_dict = json_object();
+	json_object_set_new(json_root, p_disk_data->local_exportname, disk_property_dict);
+
+	const char * mode = (p_disk_data->proxy.target_host) ? "proxy" : "target";
+	json_object_set_new(disk_property_dict, "mode", json_string(mode));
+	json_object_set_new(disk_property_dict, "disk_file_name", json_string(p_disk_data->disk_file_name));
+	if (p_disk_data->proxy.target_host) {
+		json_object_set_new(disk_property_dict, "target_host", json_string(p_disk_data->proxy.target_host));
+		json_object_set_new(disk_property_dict, "target_port", json_string(p_disk_data->proxy.target_port));
+		json_object_set_new(disk_property_dict, "bitmap_image", json_string(p_disk_data->proxy.bitmap_image));
+		json_object_set_new(disk_property_dict, "control_socket_path", json_string(p_disk_data->proxy.control_socket_path));
+		json_object_set_new(disk_property_dict, "target_exportname", json_string(p_disk_data->proxy.target_exportname));
+	}
+}
+
+static bool ensure_directory_of_file_exists(FILE * fp, const char * filename) {
+	g_assert(filename);
+	char * const dup = strdup(filename);
+	if (! dup) {
+		return false;
+	}
+
+	const char * const dir = dirname(dup);
+	g_assert(dir);
+
+	if (strcmp(dir, "") && strcmp(dir, ".") && strcmp(dir, "/")) {
+		const int mkdir_res = mkdir(dir, 0700);
+		if (mkdir_res == -1) {
+			const int errno_backup = errno;
+			if (errno_backup != EEXIST) {
+				fprintf(fp, "Directory \"%s\": Could not create, error %d: %s\n", dir, errno_backup, strerror(errno_backup));
+
+				free(dup);
+				return false;
+			}
+		} else {
+			fprintf(fp, "Directory \"%s\" created.\n", dir);
+		}
+	}
+
+	free(dup);
+	return true;
+}
+
+static void dump_registered_images_UNLOCKED(FILE * fp, const char * json_filename) {
+	if (! ensure_directory_of_file_exists(fp, json_filename)) {
+		return;
+	}
+
+	const int fd = open(json_filename, O_WRONLY | O_CREAT | O_NOFOLLOW, 0600);
+	if (fd == -1) {
+		const int errno_backup = errno;
+		fprintf(fp, "File \"%s\": Could not open/create, error %d: %s\n", json_filename, errno_backup, strerror(errno_backup));
+		return;
+	}
+
+	struct stat props;
+	const int fstat_res = fstat(fd, &props);
+	if (fstat_res == -1) {
+		const int errno_backup = errno;
+		fprintf(fp, "File \"%s\": Could not fstat, error %d: %s\n", json_filename, errno_backup, strerror(errno_backup));
+
+		close(fd);
+		return;
+	}
+
+	if (! S_ISREG(props.st_mode)) {
+		fprintf(fp, "File \"%s\": Not a regular file, refusing to write to it\n", json_filename);
+
+		close(fd);
+		return;
+	}
+
+	if (props.st_nlink > 1) {
+		fprintf(fp, "File \"%s\": Detected hard-link, refusing to write to it\n", json_filename);
+
+		close(fd);
+		return;
+	}
+
+	/* Aggregate JSON */
+	json_t * const json_root = json_object();
+	json_t * const images_dict = json_object();
+	json_object_set_new(json_root, "version", json_string("1.0"));
+	json_object_set_new(json_root, "images", images_dict);
+	g_hash_table_foreach(p_disk_dict, (GHFunc)add_disk_to_json_ghfunc, images_dict);
+	char * const json_content = json_dumps(json_root, JSON_INDENT(4) | JSON_SORT_KEYS);
+	json_decref(json_root);
+
+	/* Interruptible write loop */
+	const ssize_t bytes_total = strlen(json_content);
+	ssize_t bytes_written = 0;
+	while (bytes_written < bytes_total) {
+		const ssize_t write_res = write(fd, json_content + bytes_written, bytes_total - bytes_written);
+		if (write_res == -1) {
+			const int errno_backup = errno;
+			if ((errno_backup != EINTR) && (errno_backup != EAGAIN) && (errno_backup != EWOULDBLOCK)) {
+				fprintf(fp, "File \"%s\": Could not write, error %d: %s\n", json_filename, errno_backup, strerror(errno_backup));
+
+				free(json_content);
+				close(fd);
+				return;
+			}
+			sleep(1);
+		} else {
+			bytes_written += write_res;
+		}
+	}
+
+	free(json_content);
+	close(fd);
+
+	fprintf(fp, "Database written to file \"%s\".\n", json_filename);
+}
+
+static void perform_save(FILE * fp, const char * json_filename) {
+	pthread_mutex_lock(&mutex);
+	dump_registered_images_UNLOCKED(fp, json_filename);
 	pthread_mutex_unlock(&mutex);
 }
 
@@ -886,6 +1012,8 @@ static void *start_filemgr_thread(void * pointer)
 				}
 
 				g_strfreev(argv);
+			} else if (strcmp(cmd, "save") == 0) {
+				perform_save(fp, p_thread_data->database_file_name);
 			}
 			else if (strcmp(cmd, "help") == 0)
 				fprintf(fp,
@@ -904,6 +1032,7 @@ static void *start_filemgr_thread(void * pointer)
 					"  bgctl-cache-all NAME : Instruct proxy to cache all blocks\n"
 					"  bgctl-reconnect ...  : Reconnect proxy to a given location\n"
 					"\n"
+					"  save                 : make xnbd-wrapper re-write its image database file\n"
 					"  shutdown             : terminate all images and shutdown xnbd-wrapper instance\n"
 					"  orphan               : shutdown xnbd-wrapper instance, keep xnbd-server processes alive\n"
 					"  quit                 : quit (disconnect)\n");
@@ -1141,6 +1270,7 @@ static const char help_string[] =
 	"  --imgfile      path to a disk image file. This options can be used multiple times.\n"
 	"                 Use also xnbd-wrapper-ctl to (de)register disk images dynamically.\n"
 	"  --logpath PATH use the given path for logging (default: stderr/syslog)\n"
+	"  --dbpath PATH  use the given path for persisting database state (default: /var/lib/xnbd/state.json)\n"
 	"  --socket       unix socket path to listen on (default: /var/run/xnbd-wrapper.ctl).\n"
 	"  --syslog       use syslog for logging\n"
 	"  --max-queue-size SIZE\n"
@@ -1172,6 +1302,7 @@ int main(int argc, char **argv) {
 	int daemonize = 0;
 	int syslog = 0;
 	const char *logpath = NULL;
+	const char *dbpath = "/var/lib/xnbd/state.json";
 	struct exec_params exec_srv_params = { .readonly = 0 };
 	const char * xnbd_bgctl_command = "xnbd-bgctl";
 
@@ -1203,6 +1334,7 @@ int main(int argc, char **argv) {
 		{"readonly",    no_argument,       NULL, 'r'},
 		{"daemonize",   no_argument,       NULL, 'd'},
 		{"logpath",     required_argument, NULL, 'L'},
+		{"dbpath",      required_argument, NULL, 'j'},
 		{"syslog",      no_argument,       NULL, 'S'},
 		{"help",        no_argument,       NULL, 'h'},
 		{"max-queue-size", required_argument, NULL, 'Q'},
@@ -1235,6 +1367,9 @@ int main(int argc, char **argv) {
 				log_params.fd = get_log_fd(logpath);
 				info("LOGFILE: %s", logpath);
 				g_log_set_default_handler(custom_log_handler, (void *)&log_params);
+				break;
+			case 'j':
+				dbpath = optarg;
 				break;
 			case 'c':
 				server_target = "--cow-target";
@@ -1434,6 +1569,7 @@ int main(int argc, char **argv) {
 				} else {
 					p_thread_data->unix_sock_fd = ux_sockfd;
 					p_thread_data->xnbd_bgctl_command = xnbd_bgctl_command;
+					p_thread_data->database_file_name = dbpath;
 					p_thread_data->p_child_process_count = &child_process_count;
 					if (pthread_create(&thread, NULL, start_filemgr_thread, (void *)p_thread_data))
 						warn("pthread_create : %m");

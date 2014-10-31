@@ -53,7 +53,8 @@ xnbd_watchdog_LDADD = libxnbd_internal.la
 xnbd_watchdog_SOURCES = xnbd_watchdog.c
 
 
-xnbd_wrapper_LDADD = libxnbd_internal.la
+xnbd_wrapper_CFLAGS = @JANSSON_CFLAGS@
+xnbd_wrapper_LDADD = libxnbd_internal.la @JANSSON_LIBS@
 xnbd_wrapper_SOURCES = xnbd_wrapper.c
 
 
