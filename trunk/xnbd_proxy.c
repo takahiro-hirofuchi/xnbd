@@ -337,13 +337,28 @@ void proxy_initialize(struct xnbd_info *xnbd, struct xnbd_proxy *proxy)
 	if (cachefd < 0)
 		err("open");
 
-	off_t size = get_disksize(cachefd);
-	if (size != xnbd->disksize) {
-		warn("cache disk size (%ju) != target disk size (%ju)", size, xnbd->disksize);
-		warn("now ftruncate() it");
-		int ret = ftruncate(cachefd, xnbd->disksize);
-		if (ret < 0)
-			err("ftruncate");
+	/* Local size | Remote size | Local action
+	 * -----------+-------------+-------------
+	 *   1024 MiB |   10240 MiB | Truncate/grow to 10240 MiB (since too small)
+	 *  10240 MiB |    1024 MiB | Keep at 10240 MiB
+	 *
+	 * For regular files, ftruncate is used to change the file size of the local image.
+	 * For block devices, it is expected to fail.
+	 */
+	const off_t local_size = get_disksize(cachefd);
+	if (local_size != xnbd->disksize) {
+		const char relation = (local_size < xnbd->disksize) ? '<' : '>';
+		warn("cache disk size (%ju) %c target disk size (%ju)", local_size, relation, xnbd->disksize);
+		if (local_size < xnbd->disksize) {
+			warn("now ftruncate() it");
+			const int ret = ftruncate(cachefd, xnbd->disksize);
+			if (ret < 0) {
+				if (errno == EINVAL)
+					err("ftruncate failed (since the local cache image is not a regular file)");
+				else
+					err("ftruncate %m");
+			}
+		}
 	}
 
 	proxy->cachefd = cachefd;
