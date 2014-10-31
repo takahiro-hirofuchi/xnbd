@@ -40,46 +40,19 @@ argument to the control program which are then forwarded, on your behalf, to
 the xnbd-server instance.
 
 
-OPTIONS
--------
-The following options are supported:
+COMMANDS
+--------
+The following commands are supported:
+
+*--add-proxy* 'TARGET_HOST' 'TARGET_PORT' 'CACHE_IMAGE' 'BITMAP_IMAGE' 'CONTROL_SOCKET_PATH'::
+    Instruct the xnbd-wrapper to add a proxy to the given target server.
 
 *--add-target* 'FILE'::
     Instruct the xnbd-wrapper to add the given 'FILE' as exported xNBD
     device.
 
-*--add-proxy* 'TARGET_HOST' 'TARGET_PORT' 'CACHE_IMAGE' 'BITMAP_IMAGE' 'CONTROL_SOCKET_PATH'::
-    Instruct the xnbd-wrapper to add a proxy to the given target server.
-
 (*--add*|*-a* 'FILE')::
     Deprecated alias to --add-target, please do not use.
-
-*--help*|*-h*::
-    Display a short usage overview
-
-*--list*|*-l*::
-    Show the list of exported image files
-
-*--remove-by-file* 'FILE'::
-    Instruct the xnbd-wrapper to remove the volume wired to file 'FILE'
-    from the list of exported xNBD devices.
-
-*--remove-by-exportname* 'NAME'::
-    Instruct the xnbd-wrapper to remove the volume exported as 'NAME'
-    from the list of exported xNBD devices.
-
-(*--remove*|*-r* 'INDEX')::
-    Instruct the xnbd-wrapper to remove the volume exported on 'INDEX'
-    from the list of exported xNBD devices.  Deprecated, please do not use.
-
-*--socket*|*-s* 'SOCKETPATH'::
-    Connect to 'SOCKETPATH' as xnbd-wrapper control socket. Default is
-    /var/run/xnbd-wrapper.ctl.
-
-*--target-exportname* 'NAME'::
-    Specify the export name of a remote volume. In this case, the target
-    server is exporting multiple volumes through one TCP port.
-    This option is used in combination with *--add-proxy* and *--bgctl-reconnect*, only.
 
 *--bgctl-cache-all*::
     See xnbd-bgctl(1) for details.
@@ -92,6 +65,38 @@ The following options are supported:
 
 *--bgctl-switch*::
     See xnbd-bgctl(1) for details.
+
+*--list*|*-l*::
+    Show the list of exported image files
+
+*--remove-by-exportname* 'NAME'::
+    Instruct the xnbd-wrapper to remove the volume exported as 'NAME'
+    from the list of exported xNBD devices.
+
+*--remove-by-file* 'FILE'::
+    Instruct the xnbd-wrapper to remove the volume wired to file 'FILE'
+    from the list of exported xNBD devices.
+
+(*--remove*|*-r* 'INDEX')::
+    Instruct the xnbd-wrapper to remove the volume exported on 'INDEX'
+    from the list of exported xNBD devices.  Deprecated, please do not use.
+
+*--help*|*-h*::
+    Display a short usage overview
+
+
+OPTIONS
+-------
+The following options are supported:
+
+*--socket*|*-s* 'SOCKETPATH'::
+    Connect to 'SOCKETPATH' as xnbd-wrapper control socket. Default is
+    /var/run/xnbd-wrapper.ctl.
+
+*--target-exportname* 'NAME'::
+    Specify the export name of a remote volume. In this case, the target
+    server is exporting multiple volumes through one TCP port.
+    This option is used in combination with *--add-proxy* and *--bgctl-reconnect*, only.
 
 
 POSITIONAL ARGUMENTS
