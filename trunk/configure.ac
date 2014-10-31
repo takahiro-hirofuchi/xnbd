@@ -24,6 +24,9 @@ GLIB_MINIMUM_VERSION=2.32  # has g_atomic_pointer_add(), deprecate g_thread_init
 PKG_CHECK_MODULES([GLIB], [glib-2.0 >= ${GLIB_MINIMUM_VERSION} gthread-2.0 >= ${GLIB_MINIMUM_VERSION}])
 AC_SUBST([GLIB_CFLAGS])
 AC_SUBST([GLIB_LIBS])
+PKG_CHECK_MODULES([JANSSON], [jansson >= 2.2.1])
+AC_SUBST([JANSSON_CFLAGS])
+AC_SUBST([JANSSON_LIBS])
 
 # Checks for header files.
 AC_CHECK_HEADERS([arpa/inet.h fcntl.h inttypes.h netdb.h netinet/in.h stdlib.h string.h sys/file.h sys/ioctl.h sys/socket.h sys/time.h syslog.h unistd.h math.h])

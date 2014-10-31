@@ -16,6 +16,7 @@ SYNOPSIS
     [--laddr 'ADDRESS'] [--lport 'PORT'] [--socket 'PATH'] [--xnbd-server 'PATH']
     [--daemonize] [--logpath 'PATH']
     [--max-buf-size 'NUMBER'] [--max-queue-size 'NUMBER']
+    [--dbpath 'PATH']
 
 
 DESCRIPTION
@@ -104,6 +105,10 @@ The following options are supported:
 *--max-buf-size* 'NUMBER'::
     Parameter forwarded to proxy mode xnbd-server on invocation.
     See *xnbd-server(8)* for details.
+
+*--dbpath* 'PATH'::
+    Use 'PATH' for persisting database state,
+    defaults to /var/lib/xnbd/state.json.
 
 
 SEE ALSO
