@@ -408,14 +408,18 @@ static void list_diskimg(FILE *fp)
 	pthread_mutex_unlock(&mutex);
 }
 
-static void perform_shutdown(FILE * fp)
+static void perform_shutdown(FILE * fp, bool kill_child_processes)
 {
 	pthread_mutex_lock(&mutex);
 	g_hash_table_destroy(p_disk_dict);
 	pthread_mutex_unlock(&mutex);
 
-	fprintf(fp, "All images terminated\n");
-	kill(0, SIGTERM);
+	if (kill_child_processes) {
+		fprintf(fp, "All images terminated\n");
+		kill(0, SIGTERM);  /* includes ourselves */
+	} else {
+		kill(getpid(), SIGTERM);  /* just ourselves */
+	}
 }
 
 static int hexdig_char_to_int(char c)
@@ -849,7 +853,9 @@ static void *start_filemgr_thread(void * pointer)
 					fprintf(fp, "Image with exportname \"%s\" could not be deleted.\n", arg);
 				}
 			} else if (strcmp(cmd, "shutdown") == 0) {
-				perform_shutdown(fp);
+				perform_shutdown(fp, true);
+			} else if (strcmp(cmd, "orphan") == 0) {
+				perform_shutdown(fp, false);
 			} else if (strcmp(cmd, "bgctl-query") == 0) {
 				return_code = handle_bgctl_command("bgctl-query EXPORTNAME", "--query", ARGC_RANGE(2, 2), buf, fp, p_thread_data->xnbd_bgctl_command, NULL, NULL, p_thread_data->p_child_process_count);
 			} else if (strcmp(cmd, "bgctl-switch") == 0) {
@@ -899,6 +905,7 @@ static void *start_filemgr_thread(void * pointer)
 					"  bgctl-reconnect ...  : Reconnect proxy to a given location\n"
 					"\n"
 					"  shutdown             : terminate all images and shutdown xnbd-wrapper instance\n"
+					"  orphan               : shutdown xnbd-wrapper instance, keep xnbd-server processes alive\n"
 					"  quit                 : quit (disconnect)\n");
 			else if (strcmp(cmd, "quit") == 0)
 				break;
