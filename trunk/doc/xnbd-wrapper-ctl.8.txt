@@ -31,6 +31,8 @@ SYNOPSIS
 
 *xnbd-wrapper-ctl* [options] [--target-exportname 'NAME'] --bgctl-reconnect  'LOCAL_EXPORTNAME' 'REMOTE_HOST' 'REMOTE_PORT'
 
+*xnbd-wrapper-ctl* [options] --shutdown
+
 
 DESCRIPTION
 -----------
@@ -81,6 +83,9 @@ The following commands are supported:
     Instruct the xnbd-wrapper to remove the volume exported on 'INDEX'
     from the list of exported xNBD devices.  Deprecated, please do not use.
 
+*--shutdown*|*-d*::
+    Send SIGTERM to xnbd-wrapper and all its child processes.
+
 *--help*|*-h*::
     Display a short usage overview
 
@@ -127,7 +132,7 @@ The following positional options are supported:
 
 SEE ALSO
 --------
-xnbd-wrapper(1), xnbd-server(8), xnbd-bgctl(1)
+xnbd-wrapper(1), xnbd-server(8), xnbd-bgctl(1), signal(7)
 
 
 AUTHOR
