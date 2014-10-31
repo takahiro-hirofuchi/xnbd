@@ -100,6 +100,8 @@ def parse_command_line(argv):
   %(prog)s [-s SOCKPATH] [--target-exportname NAME] --add-proxy LOCAL_EXPORTNAME REMOTE_HOST REMOTE_PORT CACHE_IMAGE BITMAP_IMAGE CONTROL_SOCKET_PATH
   %(prog)s [-s SOCKPATH] --remove-by-file FILE
   %(prog)s [-s SOCKPATH] --remove-by-exportname NAME
+
+  %(prog)s [-s SOCKPATH] --save
   %(prog)s [-s SOCKPATH] --orphan
   %(prog)s [-s SOCKPATH] --shutdown
 
@@ -129,6 +131,8 @@ def parse_command_line(argv):
                         help="remove all disk images from the xnbd-wrapper instance and stop it afterwards.")
     operations.add_argument("--orphan", action='store_true',
                         help="stop xnbd-wrapper but keep running xnbd-server processes alive.")
+    operations.add_argument("--save", action='store_true',
+                        help="make the xnbd-wrapper dump its database to a pre-configured location.")
 
     operations.add_argument("--bgctl-query", metavar='LOCAL_EXPORTNAME',
                         help="query current status of the proxy mode.")
@@ -164,6 +168,7 @@ def compose_command(options, argv):
         (options.list, 'list'),
         (options.orphan, 'orphan'),
         (options.shutdown, 'shutdown'),
+        (options.save, 'save'),
     )
     for dest, line in zero_arg_commands:
         if dest:
