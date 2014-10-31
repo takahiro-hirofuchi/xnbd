@@ -40,6 +40,8 @@ Improvements
  * xnbd-register: Support partial wrapper configuration
      (e.g. a custom port but defaults for everything else)
      without need to duplicate defaults in the config file
+ * xnbd-wrapper(-ctl): Add command `--orphan` to send SIGTERM to xnbd-wrapper
+     but not its child xnbd-server processes.
 
 
 0.3.0
