@@ -27,8 +27,7 @@ import sys
 import subprocess
 import json
 import re
-import os.path
-import types
+
 
 VERBOSE = True
 EXTRA_VERBOSE = False
