@@ -52,10 +52,11 @@ AC_FUNC_STRNLEN
 AC_CHECK_FUNCS([alarm dup2 ftruncate getpagesize memset munmap realpath socket strerror])
 
 # Compile flags
-AC_ARG_ENABLE([debug], AC_HELP_STRING([--enable-debug], [enable debugging [default=no]]), [
+AC_ARG_ENABLE([debug], AC_HELP_STRING([--enable-debug], [enable debugging [default=no]]), [DEBUGGING=${enableval}], [DEBUGGING=no])
+if test "${DEBUGGING}" != no ; then
 	CFLAGS+=" -g -O0"
 	CPPFLAGS+="-DXNBD_DEBUG"
-])
+fi
 
 CFLAGS+=" -Wall -Wextra -Wformat=2 -Wcast-align -Wwrite-strings -Wfloat-equal -Wpointer-arith -Wswitch-enum -fstack-protector -fstack-check"
 
