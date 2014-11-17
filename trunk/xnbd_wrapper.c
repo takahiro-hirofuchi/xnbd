@@ -418,13 +418,16 @@ static void add_disk_to_json_ghfunc(gpointer key, const t_disk_data * p_disk_dat
 
 	const char * mode = (p_disk_data->proxy.target_host) ? "proxy" : "target";
 	json_object_set_new(disk_property_dict, "mode", json_string(mode));
-	json_object_set_new(disk_property_dict, "disk_file_name", json_string(p_disk_data->disk_file_name));
+	json_object_set_new(disk_property_dict, "image_path", json_string(p_disk_data->disk_file_name));
 	if (p_disk_data->proxy.target_host) {
-		json_object_set_new(disk_property_dict, "target_host", json_string(p_disk_data->proxy.target_host));
-		json_object_set_new(disk_property_dict, "target_port", json_string(p_disk_data->proxy.target_port));
-		json_object_set_new(disk_property_dict, "bitmap_image", json_string(p_disk_data->proxy.bitmap_image));
+		json_object_set_new(disk_property_dict, "remote_host", json_string(p_disk_data->proxy.target_host));
+		json_object_set_new(disk_property_dict, "remote_port", json_string(p_disk_data->proxy.target_port));
+		json_object_set_new(disk_property_dict, "bitmap_path", json_string(p_disk_data->proxy.bitmap_image));
 		json_object_set_new(disk_property_dict, "control_socket_path", json_string(p_disk_data->proxy.control_socket_path));
-		json_object_set_new(disk_property_dict, "target_exportname", json_string(p_disk_data->proxy.target_exportname));
+		json_t * const target_exportname = (p_disk_data->proxy.target_exportname)
+				? json_string(p_disk_data->proxy.target_exportname)
+				: json_null();
+		json_object_set_new(disk_property_dict, "remote_export_name", target_exportname);
 	}
 }
 
@@ -505,7 +508,7 @@ static void dump_registered_images_UNLOCKED(FILE * fp, const char * json_filenam
 	/* Aggregate JSON */
 	json_t * const json_root = json_object();
 	json_t * const images_dict = json_object();
-	json_object_set_new(json_root, "version", json_string("1.0"));
+	json_object_set_new(json_root, "version", json_integer(2));
 	json_object_set_new(json_root, "images", images_dict);
 	g_hash_table_foreach(p_disk_dict, (GHFunc)add_disk_to_json_ghfunc, images_dict);
 	char * const json_content = json_dumps(json_root, JSON_INDENT(4) | JSON_SORT_KEYS);
