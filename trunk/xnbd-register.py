@@ -199,9 +199,19 @@ def stop_wrapper(data, options):
 	stop = [options.xnbd_wrapper_ctl, "--socket", data['socket'], "--shutdown"]
 	call(stop, "Shutting down all xnbd shares ...")
 
+def orphan_wrapper(data, options):
+	wrapper_socket = data.get(WRAPPER_SOCKET_KEY, DEFAULT_SOCKET)
+
+	orphan = [options.xnbd_wrapper_ctl, "--socket", wrapper_socket, "--orphan"]
+	call(orphan, "Terminating xnbd-wrapper process, keeping xnbd-server processes alive ...")
+
 def print_status(data, options):
 	status = [options.xnbd_wrapper_ctl, "--socket", data['socket'], "-l"]
 	call(status, "")
+
+def wrapper_is_running(data, options):
+	command = [options.xnbd_wrapper_ctl, "--socket", data['socket'], "-l"]
+	return 0 == call(command, 'Checking for running xnbd-wrapper ...', silence=True, fatal=False)
 
 
 parser = argparse.ArgumentParser(description='xNBD helper to (un)register xNBD devices')
@@ -209,6 +219,7 @@ parser = argparse.ArgumentParser(description='xNBD helper to (un)register xNBD d
 commands = parser.add_argument_group('commands').add_mutually_exclusive_group(required=True)
 commands.add_argument('--start', '-s', action='store_true', help='mount configured xNBD client connections and start configured xNBD wrapper')
 commands.add_argument('--stop', '-t', action='store_true', help='unmount configured xNBD client connections and stop configured xNBD wrapper')
+commands.add_argument('--reload', action='store_true', help='save xnbd-wrapper state to disk, terminate the xnbd-wrapper process, start a new instance, load state back into the running instance')
 commands.add_argument('--restart', '-r', action='store_true', help='(re-)mount configured xNBD client connections and (re-)start configured xNBD wrapper')
 commands.add_argument('--status', '-a', action='store_true', help='show xNBD wrapper status')
 
@@ -264,7 +275,7 @@ if (args.status):
 	print_status(configuration[WRAPPER_KEY], args)
 	sys.exit(0)
 
-if (not args.stop and not args.restart and not args.start):
+if (not args.stop and not args.restart and not args.start and not args.reload):
 	vprint("%s: One action is required" % sys.argv[0])
 	sys.exit(1)
 
@@ -285,5 +296,13 @@ if (args.start or args.restart):
 
 	for instance in client_device_names:
 		start_client(instance, configuration[instance], args)
+
+if args.reload:
+	if wrapper_configured:
+		wrapper_config = configuration[WRAPPER_KEY]
+		if not wrapper_is_running(wrapper_config, args):
+			sys.exit(3)
+		orphan_wrapper(wrapper_config, args)
+		start_wrapper(wrapper_config, args)
 
 sys.exit(0)
