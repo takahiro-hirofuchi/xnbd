@@ -16,6 +16,8 @@ SYNOPSIS
 
 *xnbd-register* ['OPTIONS'] --stop
 
+*xnbd-register* ['OPTIONS'] --reload
+
 *xnbd-register* ['OPTIONS'] --restart
 
 *xnbd-register* ['OPTIONS'] --status
@@ -49,6 +51,10 @@ The following options are supported:
 *--stop*::
     Analogous to the start option, the stop argument will stop all xnbd
     connection, being client or wrapper instances.
+
+*--reload*::
+    Save xnbd-wrapper state to disk, terminate the xnbd-wrapper process,
+    start a new instance, load state back into the running instance
 
 *--restart*::
     Restart all xnbd instances, being client or wrapper
