@@ -125,10 +125,6 @@ Similarly, a wrapper instance configures an xnbd-wrapper. Valid options are:
 *dbpath*::
     Specifies the path to the image database file to read and write
 
-*volumes*::
-    A mapping of volumes which are exported.
-    Mapping keys are export names, mapping values are disk image paths.
-
 ---------------------------
 "wrapper": {
     "address": "127.0.0.1",
@@ -136,11 +132,6 @@ Similarly, a wrapper instance configures an xnbd-wrapper. Valid options are:
     "socket": "/var/run/xnbd.ctl",
     "logpath": "/var/log/xnbd.log",
     "dbpath": "/etc/xnbd.state",
-    "volumes": {
-        "one": "/dev/volume",
-        "two": "/dev/sdb1",
-        "three": "/var/lib/image.file",
-    },
     "max_queue_size": 2000,
     "max_buf_size": 104857600
 }

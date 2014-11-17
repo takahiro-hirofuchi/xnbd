@@ -95,11 +95,17 @@ def check_syntax(data, config_file):
 					WRAPPER_SOCKET_KEY,
 					WRAPPER_VOLUMES_KEY,
 					])
-			config_keys = set(data[key].keys())
+			wrapper_config = data[key]
+			config_keys = set(wrapper_config.keys())
 			ukeys = config_keys - wrapper_keys
 			if (ukeys):
 				vprint("ERROR: Unknown wrapper option(s): %s\n" % ", ".join(ukeys))
 				sys.exit(1)
+
+			if WRAPPER_VOLUMES_KEY in wrapper_config:
+				database_path = wrapper_config.get(WRAPPER_DBPATH_KEY, DEFAULT_DBPATH)
+				vprint('WARNING: ignoring volumes configured in "%s". Configuration of volumes has moved to "%s".' \
+						% (config_file, database_path))
 
 		elif (key.startswith("nbd")):
 			if (not re.match("nbd\d+", key)):
@@ -188,20 +194,6 @@ def start_wrapper(data, options):
 
 	if call(start_cmd, "Starting `%s' ..." % options.xnbd_wrapper):
 		sys.exit(1)
-
-	if isinstance(data[WRAPPER_VOLUMES_KEY], types.ListType):
-		# List data, format of 0.1.0-pre*
-		exportname_volume_tuple_list = [(path, path) for path in data[WRAPPER_VOLUMES_KEY]]
-	else:
-		# Dict data, format of >=0.2.0
-		exportname_volume_tuple_list = list(data[WRAPPER_VOLUMES_KEY].items())
-
-	for exportname, volume in exportname_volume_tuple_list:
-		add_volume = [XNBD_WRAPPER_CTL, "--socket", data['socket'], "--add-target", exportname, volume]
-		if (os.path.exists(volume)):
-			call(add_volume, "Adding `%s' ..." % volume)
-		else:
-			vprint("%s: Can't access volume" % (volume))
 
 def stop_wrapper(data, options):
 	stop = [options.xnbd_wrapper_ctl, "--socket", data['socket'], "--shutdown"]
