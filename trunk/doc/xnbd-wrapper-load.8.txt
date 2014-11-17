@@ -36,6 +36,87 @@ The following options are supported:
     Override xnbd-wrapper-ctl command, defaults to xnbd-wrapper-ctl.
 
 
+FILE FORMAT
+-----------
+The image database file format is making use of JSON.
+
+EXAMPLE
+~~~~~~~
+Here is a full blown example:
+
+-------------------------------
+{
+    "images": {
+        "PROXY_PLAIN": {
+            "bitmap_path": "/path/to/PLAIN_BITMAP",
+            "control_socket_path": "/path/to/PLAIN_CONTROL",
+            "image_path": "/path/to/PLAIN_CACHE",
+            "mode": "proxy",
+            "remote_export_name": null,
+            "remote_host": "127.0.0.1",
+            "remote_port": "55551"
+        },
+        "PROXY_WRAPPED": {
+            "bitmap_path": "/path/to/WRAPPED_BITMAP",
+            "control_socket_path": "/path/to/WRAPPED_CONTROL",
+            "image_path": "/path/to/WRAPPED_CACHE",
+            "mode": "proxy",
+            "remote_export_name": "REMOTE_EXPORT",
+            "remote_host": "127.0.0.1",
+            "remote_port": "55552"
+        },
+        "TARGET": {
+            "image_path": "/path/to/TARGET",
+            "mode": "target"
+        }
+    },
+    "version": 2
+}
+-------------------------------
+
+
+DETAILS
+~~~~~~~
+In detail, these are the keys expected from a state.json file.
+
+
+*version*::
+    File format version indicator;
+    required, must be set to 2 (as an integer)
+
+*images.'NAME'.image_path*::
+    Path to the local image device;
+    required
+
+*images.'NAME'.mode*::
+    Mode to start xnbd-server in;
+    required, must be set to "proxy" or "target" (in lower case)
+
+
+For proxy mode images, there are these keys more:
+
+
+*images.'NAME'.bitmap_path*::
+    Path to the bitmap file;
+    required
+
+*images.'NAME'.control_socket_path*::
+    Path to the xnbd-server control socket;
+    required
+
+*images.'NAME'.remote_export_name*::
+    Export name to ask remote for;
+    can be omitted or set to null
+
+*images.'NAME'.remote_host*::
+    Host of remote side;
+    required
+
+*images.'NAME'.remote_port*::
+    TCP port of remote side;
+    required
+
+
 SEE ALSO
 --------
 xnbd-wrapper-ctl(8), xnbd-wrapper(1), xnbd-server(8)
