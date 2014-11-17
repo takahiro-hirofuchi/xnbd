@@ -108,7 +108,7 @@ The following options are supported:
 
 *--dbpath* 'PATH'::
     Use 'PATH' for persisting database state,
-    defaults to /var/lib/xnbd/state.json.
+    defaults to /etc/xnbd.state.
 
 
 SEE ALSO
