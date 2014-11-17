@@ -691,17 +691,17 @@ static bool load_database_json(const char * json_filename, json_t * root,
 			const char * const control_socket_path = json_string_value(control_socket_path_json);
 
 			json_t * const remote_export_name_json = json_object_get(properties_json, "remote_export_name");
-			if (! remote_export_name_json) {
-				info("Image \"%s\": Attribute \"remote_export_name\" must be set", local_export_name);
-				return false;
+			if (remote_export_name_json) {
+				if (! json_is_string(remote_export_name_json) && ! json_is_null(remote_export_name_json)) {
+					info("Image \"%s\": Attribute \"remote_export_name\" must be null or a string", local_export_name);
+					return false;
+				}
 			}
-			if (! json_is_string(remote_export_name_json) && ! json_is_null(remote_export_name_json)) {
-				info("Image \"%s\": Attribute \"remote_export_name\" must be null or a string", local_export_name);
-				return false;
-			}
-			const char * const remote_export_name = json_is_null(remote_export_name_json)
-					? NULL
-					: json_string_value(remote_export_name_json);
+			const char * const remote_export_name = remote_export_name_json
+					? (json_is_null(remote_export_name_json)
+						? NULL
+						: json_string_value(remote_export_name_json))
+					: NULL;
 
 			json_t * const remote_host_json = json_object_get(properties_json, "remote_host");
 			if (! remote_host_json) {
