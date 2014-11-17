@@ -42,6 +42,7 @@ Improvements
      without need to duplicate defaults in the config file
  * xnbd-wrapper(-ctl): Add command `--orphan` to send SIGTERM to xnbd-wrapper
      but not its child xnbd-server processes.
+ * xnbd-wrapper-load: New tool to load database state into a running xnbd-wrapper instance
 
 
 0.3.0

@@ -19,7 +19,8 @@ dist_man8_MANS = \
 	xnbd-register.8 \
 	xnbd-server.8 \
 	xnbd-wrapper.8 \
-	xnbd-wrapper-ctl.8
+	xnbd-wrapper-ctl.8 \
+	xnbd-wrapper-load.8
 
 
 _RAW_MANPAGES = $(dist_man1_MANS) $(dist_man8_MANS)
