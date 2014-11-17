@@ -109,6 +109,8 @@ The following options are supported:
 *--dbpath* 'PATH'::
     Use 'PATH' for persisting database state,
     defaults to /etc/xnbd.state.
+    For documentation of the database file format, please see
+    *xnbd-wrapper-load(8)*.
 
 
 SEE ALSO
