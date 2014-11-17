@@ -57,7 +57,10 @@ The following options are supported:
     Config file to use.  Defaults to /etc/xnbd.conf.
 
 *--quiet*::
-    Do not produce verbose output
+    Suppress regular output
+
+*--verbose*|*-v*::
+    Be more verbose
 
 
 CONFIGURATION FILE

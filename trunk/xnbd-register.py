@@ -34,6 +34,7 @@ XNBD_CLIENT = "xnbd-client"
 XNBD_WRAPPER = "xnbd-wrapper"
 XNBD_WRAPPER_CTL = "xnbd-wrapper-ctl"
 VERBOSE = True
+EXTRA_VERBOSE = False
 
 SERVER_KEY = 'server'
 WRAPPER_KEY = 'wrapper'
@@ -115,19 +116,30 @@ def check_syntax(data, config_file):
 
 
 def call(command, description):
-	vprint(description, end='')
+	if EXTRA_VERBOSE:
+		first_end = '\n'
+		indent = '  '
+	else:
+		first_end = ''
+		indent = ''
+
+	vprint(description, end=first_end)
+
+	if EXTRA_VERBOSE:
+		print('%s# %s' % (indent, ' '.join(command)))
+
 	try:
 		p = subprocess.Popen(command, stderr = subprocess.STDOUT)
 	except OSError:
-		vprint("failed")
+		vprint("%sfailed" % indent)
 		return 127
 
 	p.wait()
 	if (p.returncode != 0):
-		vprint("failed")
+		vprint("%sfailed" % indent)
 		sys.exit(p.returncode)
 	else:
-		vprint("ok")
+		vprint("%sok" % indent)
 	return p.returncode
 
 def start_client(device, data):
@@ -193,11 +205,15 @@ parser.add_argument('-r', '--restart', action='store_true', help='(re-)mount con
 parser.add_argument('-t', '--stop', action='store_true', help='unmount configured xNBD client connections and stop configured xNBD wrapper')
 parser.add_argument('-a', '--status', action='store_true', help='show xNBD wrapper status')
 parser.add_argument('--config', dest='config_file', default='/etc/xnbd.conf', help='config file to use (default: /etc/xnbd.conf)')
-parser.add_argument('--quiet', action='store_true', help='do not give verbose output')
+verbosity = parser.add_mutually_exclusive_group()
+verbosity.add_argument('--quiet', action='store_true', help='suppress regular output')
+verbosity.add_argument('-v', '--verbose', dest='extra_verbose', action='store_true', help='be more verbose')
 
 args = parser.parse_args()
 
-if(args.quiet):
+if args.extra_verbose:
+	EXTRA_VERBOSE = True
+elif args.quiet:
 	VERBOSE = False
 
 try:
