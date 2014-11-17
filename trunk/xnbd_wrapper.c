@@ -560,6 +560,298 @@ static void perform_shutdown(FILE * fp, bool kill_child_processes)
 	}
 }
 
+static void auto_save(const char * json_filename) {
+	FILE * const dev_null = fopen("/dev/null", "w");
+	perform_save(dev_null, json_filename);
+	fclose(dev_null);
+}
+
+static bool load_database_json(const char * json_filename, json_t * root,
+		int * p_count_added, int * p_count_skipped) {
+	g_assert(root);
+	g_assert(p_count_added);
+	g_assert(p_count_skipped);
+
+	if (! json_is_object(root)) {
+		info("Root must be an object/dictionary");
+		return false;
+	}
+
+	json_t * const version = json_object_get(root, "version");
+	if (version) {
+		const json_int_t version_int = json_integer_value(version);
+		if (version_int != 2) {
+			info("File format version " JSON_INTEGER_FORMAT " is not supported", version_int);
+			return false;
+		}
+	} else {
+		info("File format version must be an integer");
+		return false;
+	}
+
+	json_t * const images = json_object_get(root, "images");
+	if (! images) {
+		return true;
+	}
+
+	if (! json_is_object(images)) {
+		info("Images must be an object/dictionary");
+		return false;
+	}
+
+	void * iter = json_object_iter(images);
+	while (iter) {
+		const char * local_export_name = json_object_iter_key(iter);
+		json_t * const properties_json = json_object_iter_value(iter);
+		if (! properties_json) {
+			info("Image \"%s\": Properties missing", local_export_name);
+			return false;
+		}
+		if (! json_is_object(properties_json)) {
+			info("Image \"%s\": Properties must be an object/dictionary", local_export_name);
+			return false;
+		}
+		json_t * const mode_json = json_object_get(properties_json, "mode");
+		if (! mode_json) {
+			info("Image \"%s\": Attribute \"mode\" must be set", local_export_name);
+			return false;
+		}
+		if (! json_is_string(mode_json)) {
+			info("Image \"%s\": Attribute \"mode\" must be a string", local_export_name);
+			return false;
+		}
+
+		const char * const mode = json_string_value(mode_json);
+		if (! strcmp(mode, "target")) {
+			json_t * const image_path_json = json_object_get(properties_json, "image_path");
+			if (! image_path_json) {
+				info("Image \"%s\": Attribute \"image_path\" must be set", local_export_name);
+				return false;
+			}
+			if (! json_is_string(image_path_json)) {
+				info("Image \"%s\": Attribute \"image_path\" must be a string", local_export_name);
+				return false;
+			}
+			const char * const image_path = json_string_value(image_path_json);
+
+			t_disk_data * const p_disk_data = create_disk_data(
+					local_export_name, NOT_PROXIED, NOT_PROXIED, image_path,
+					NOT_PROXIED, NOT_PROXIED, NOT_PROXIED);
+			if (! p_disk_data)
+				err("%s", MESSAGE_ENOMEM);
+
+			const int ret = add_diskimg(p_disk_data);
+			if (ret == XNBD_IMAGE_ACCESS_ERROR) {
+				warn("Image \"%s\": Adding failed, failed to open", image_path);
+			} else if (ret == XNBD_NOT_ADDING_TWICE) {
+				warn("Image \"%s\": Adding failed, cannot add twice", image_path);
+			} else if (ret == XNBD_IMAGE_ADDED) {
+				info("Image \"%s\" added (%s)", local_export_name, image_path);
+			} else {
+				warn("Image \"%s\": Adding failed, unknown error %d", local_export_name, ret);
+			}
+
+			int * const p_count = (ret == XNBD_IMAGE_ADDED) ? p_count_added : p_count_skipped;
+			(*p_count)++;
+		} else if (! strcmp(mode, "proxy")) {
+			json_t * const image_path_json = json_object_get(properties_json, "image_path");
+			if (! image_path_json) {
+				info("Image \"%s\": Attribute \"image_path\" must be set", local_export_name);
+				return false;
+			}
+			if (! json_is_string(image_path_json)) {
+				info("Image \"%s\": Attribute \"image_path\" must be a string", local_export_name);
+				return false;
+			}
+			const char * const image_path = json_string_value(image_path_json);
+
+			json_t * const bitmap_path_json = json_object_get(properties_json, "bitmap_path");
+			if (! bitmap_path_json) {
+				info("Image \"%s\": Attribute \"bitmap_path\" must be set", local_export_name);
+				return false;
+			}
+			if (! json_is_string(bitmap_path_json)) {
+				info("Image \"%s\": Attribute \"bitmap_path\" must be a string", local_export_name);
+				return false;
+			}
+			const char * const bitmap_path = json_string_value(bitmap_path_json);
+
+			json_t * const control_socket_path_json = json_object_get(properties_json, "control_socket_path");
+			if (! control_socket_path_json) {
+				info("Image \"%s\": Attribute \"control_socket_path\" must be set", local_export_name);
+				return false;
+			}
+			if (! json_is_string(control_socket_path_json)) {
+				info("Image \"%s\": Attribute \"control_socket_path\" must be a string", local_export_name);
+				return false;
+			}
+			const char * const control_socket_path = json_string_value(control_socket_path_json);
+
+			json_t * const remote_export_name_json = json_object_get(properties_json, "remote_export_name");
+			if (! remote_export_name_json) {
+				info("Image \"%s\": Attribute \"remote_export_name\" must be set", local_export_name);
+				return false;
+			}
+			if (! json_is_string(remote_export_name_json) && ! json_is_null(remote_export_name_json)) {
+				info("Image \"%s\": Attribute \"remote_export_name\" must be null or a string", local_export_name);
+				return false;
+			}
+			const char * const remote_export_name = json_is_null(remote_export_name_json)
+					? NULL
+					: json_string_value(remote_export_name_json);
+
+			json_t * const remote_host_json = json_object_get(properties_json, "remote_host");
+			if (! remote_host_json) {
+				info("Image \"%s\": Attribute \"remote_host\" must be set", local_export_name);
+				return false;
+			}
+			if (! json_is_string(remote_host_json)) {
+				info("Image \"%s\": Attribute \"remote_host\" must be a string", local_export_name);
+				return false;
+			}
+			const char * const remote_host = json_string_value(remote_host_json);
+
+			json_t * const remote_port_json = json_object_get(properties_json, "remote_port");
+			if (! remote_port_json) {
+				info("Image \"%s\": Attribute \"remote_port\" must be set", local_export_name);
+				return false;
+			}
+			if (! json_is_string(remote_port_json)) {
+				info("Image \"%s\": Attribute \"remote_port\" must be a string", local_export_name);
+				return false;
+			}
+			const char * const remote_port = json_string_value(remote_port_json);
+
+			t_disk_data * const p_disk_data = create_disk_data(
+						local_export_name, remote_host, remote_port, image_path,
+						bitmap_path, control_socket_path, remote_export_name);
+			if (! p_disk_data)
+				err("%s", MESSAGE_ENOMEM);
+
+			const int ret = add_diskimg(p_disk_data);
+			if (ret == XNBD_IMAGE_ACCESS_ERROR) {
+				warn("Image \"%s\": Adding failed, failed to open", image_path);
+			} else if (ret == XNBD_NOT_ADDING_TWICE) {
+				warn("Image \"%s\": Adding failed, cannot add twice", image_path);
+			} else if (ret == XNBD_IMAGE_ADDED) {
+				info("Image \"%s\" added (%s:%s%s%s, %s, %s, %s)", local_export_name,
+						remote_host, remote_port,
+						remote_export_name ? ":" : "",
+						remote_export_name ? remote_export_name : "",
+						image_path, bitmap_path, control_socket_path);
+			} else {
+				warn("Image \"%s\": Adding failed, unknown error %d", local_export_name, ret);
+			}
+
+			int * const p_count = (ret == XNBD_IMAGE_ADDED) ? p_count_added : p_count_skipped;
+			(*p_count)++;
+		} else {
+			info("Image \"%s\": mode \"%s\" not supported", local_export_name, mode);
+			return false;
+		}
+
+		iter = json_object_iter_next(images, iter);
+	}
+	return true;
+}
+
+static void load_database_file_or_abort(const char * json_filename) {
+	const int fd = open(json_filename, O_RDONLY | O_NOFOLLOW);
+	if (fd == -1) {
+		const int errno_backup = errno;
+		if (errno_backup == ENOENT) {
+			info("No previous state to restore, file %s not found.", json_filename);
+			return;
+		} else {
+			err("File \"%s\": Could not open, error %d: %s", json_filename, errno_backup, strerror(errno_backup));
+		}
+	}
+
+	struct stat props;
+	const int fstat_res = fstat(fd, &props);
+	if (fstat_res == -1) {
+		const int errno_backup = errno;
+		err("File \"%s\": Could not fstat, error %d: %s", json_filename, errno_backup, strerror(errno_backup));
+	}
+
+	if (! S_ISREG(props.st_mode)) {
+		err("File \"%s\": Not a regular file, refusing to read from it", json_filename);
+	}
+
+	if (props.st_nlink > 1) {
+		err("File \"%s\": Detected hard-link, refusing to read from it", json_filename);
+	}
+
+	/* Interruptible read loop */
+	char * const json_buffer = malloc(props.st_size);
+	if (! json_buffer)
+		err("%s", MESSAGE_ENOMEM);
+
+	const ssize_t bytes_total = props.st_size;
+	ssize_t bytes_read = 0;
+	while (bytes_read < bytes_total) {
+		const ssize_t read_res = read(fd, json_buffer + bytes_read, bytes_total - bytes_read);
+		if (read_res == -1) {
+			const int errno_backup = errno;
+			if ((errno_backup != EINTR) && (errno_backup != EAGAIN) && (errno_backup != EWOULDBLOCK)) {
+				err("File \"%s\": Could not read, error %d: %s", json_filename, errno_backup, strerror(errno_backup));
+			}
+			sleep(1);
+		} else {
+			bytes_read += read_res;
+		}
+	}
+	close(fd);
+
+	json_error_t json_error;
+	json_t * const root = json_loadb(json_buffer, bytes_total, 0, &json_error);
+	free(json_buffer);
+	if (! root) {
+		err("File \"%s\" (line %d, column %d): Invalid JSON: %s", json_filename, json_error.line, json_error.column, json_error.text);
+	}
+
+	int count_added = 0;
+	int count_skipped = 0;
+
+	if (! load_database_json(json_filename, root, &count_added, &count_skipped))
+		err("Loading datebase state from %s failed.", json_filename);
+
+	json_decref(root);
+
+	info("Database loaded (%d of %d images skipped)", count_skipped, count_skipped + count_added);
+
+	if (count_skipped) {
+		/* Rename current file to .prev for human inspection since
+		 * on exit the original location is re-written with the skipped volumes removed */
+		char * backup_filename = NULL;
+		const int res = asprintf(&backup_filename, "%s.prev", json_filename);
+		if (res == -1)
+			err("%s", MESSAGE_ENOMEM);
+
+		const int unlink_res = unlink(backup_filename);
+		if (unlink_res == -1) {
+			const int errno_backup = errno;
+			if (errno_backup != ENOENT) {
+				warn("File \"%s\": Could not remove, error %d: %s", backup_filename, errno_backup, strerror(errno_backup));
+			}
+		} else {
+			info("File \"%s\" removed", backup_filename);
+		}
+
+		const int rename_res = rename(json_filename, backup_filename);
+		if (rename_res == -1) {
+			const int errno_backup = errno;
+			warn("File \"%s\": Could not rename to \"%s\", error %d: %s", json_filename, backup_filename, errno_backup, strerror(errno_backup));
+		} else {
+			info("File \"%s\" renamed to \"%s\".", json_filename, backup_filename);
+		}
+
+		free(backup_filename);
+
+		auto_save(json_filename);
+	}
+}
+
 static int hexdig_char_to_int(char c)
 {
 	switch (c) {
@@ -1498,6 +1790,7 @@ int main(int argc, char **argv) {
 
 	exec_srv_params.target_mode = server_target;
 
+	load_database_file_or_abort(dbpath);
 
         if (daemonize)
 		if (daemon(0, 0) == -1)
