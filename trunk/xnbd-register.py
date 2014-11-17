@@ -115,7 +115,7 @@ def check_syntax(data, config_file):
 			sys.exit(1)
 
 
-def call(command, description):
+def call(command, description, silence=False, fatal=True):
 	if EXTRA_VERBOSE:
 		first_end = '\n'
 		indent = '  '
@@ -123,21 +123,31 @@ def call(command, description):
 		first_end = ''
 		indent = ''
 
-	vprint(description, end=first_end)
+	if description:
+		vprint(description, end=first_end)
 
 	if EXTRA_VERBOSE:
 		print('%s# %s' % (indent, ' '.join(command)))
 
+	if silence:
+		stdout_target = open('/dev/null', 'w')
+	else:
+		stdout_target = None
+
 	try:
-		p = subprocess.Popen(command, stderr = subprocess.STDOUT)
+		p = subprocess.Popen(command, stdout=stdout_target, stderr=subprocess.STDOUT)
 	except OSError:
 		vprint("%sfailed" % indent)
 		return 127
+	finally:
+		if silence:
+			stdout_target.close()
 
 	p.wait()
 	if (p.returncode != 0):
 		vprint("%sfailed" % indent)
-		sys.exit(p.returncode)
+		if fatal:
+			sys.exit(p.returncode)
 	else:
 		vprint("%sok" % indent)
 	return p.returncode
