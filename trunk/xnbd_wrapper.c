@@ -460,16 +460,16 @@ static bool ensure_directory_of_file_exists(FILE * fp, const char * filename) {
 	return true;
 }
 
-static void dump_registered_images_UNLOCKED(FILE * fp, const char * json_filename) {
+static bool dump_registered_images_UNLOCKED(FILE * fp, const char * json_filename) {
 	if (! ensure_directory_of_file_exists(fp, json_filename)) {
-		return;
+		return false;
 	}
 
 	const int fd = open(json_filename, O_WRONLY | O_CREAT | O_NOFOLLOW, 0600);
 	if (fd == -1) {
 		const int errno_backup = errno;
 		fprintf(fp, "File \"%s\": Could not open/create, error %d: %s\n", json_filename, errno_backup, strerror(errno_backup));
-		return;
+		return false;
 	}
 
 	struct stat props;
@@ -479,21 +479,21 @@ static void dump_registered_images_UNLOCKED(FILE * fp, const char * json_filenam
 		fprintf(fp, "File \"%s\": Could not fstat, error %d: %s\n", json_filename, errno_backup, strerror(errno_backup));
 
 		close(fd);
-		return;
+		return false;
 	}
 
 	if (! S_ISREG(props.st_mode)) {
 		fprintf(fp, "File \"%s\": Not a regular file, refusing to write to it\n", json_filename);
 
 		close(fd);
-		return;
+		return false;
 	}
 
 	if (props.st_nlink > 1) {
 		fprintf(fp, "File \"%s\": Detected hard-link, refusing to write to it\n", json_filename);
 
 		close(fd);
-		return;
+		return false;
 	}
 
 	const int ftruncate_res = ftruncate(fd, 0);
@@ -502,7 +502,7 @@ static void dump_registered_images_UNLOCKED(FILE * fp, const char * json_filenam
 		fprintf(fp, "File \"%s\": Could not truncate, error %d: %s\n", json_filename, errno_backup, strerror(errno_backup));
 
 		close(fd);
-		return;
+		return false;
 	}
 
 	/* Aggregate JSON */
@@ -526,7 +526,7 @@ static void dump_registered_images_UNLOCKED(FILE * fp, const char * json_filenam
 
 				free(json_content);
 				close(fd);
-				return;
+				return false;
 			}
 			sleep(1);
 		} else {
@@ -538,12 +538,14 @@ static void dump_registered_images_UNLOCKED(FILE * fp, const char * json_filenam
 	close(fd);
 
 	fprintf(fp, "Database written to file \"%s\".\n", json_filename);
+	return true;
 }
 
-static void perform_save(FILE * fp, const char * json_filename) {
+static bool perform_save(FILE * fp, const char * json_filename) {
 	pthread_mutex_lock(&mutex);
-	dump_registered_images_UNLOCKED(fp, json_filename);
+	const bool success = dump_registered_images_UNLOCKED(fp, json_filename);
 	pthread_mutex_unlock(&mutex);
+	return success;
 }
 
 static void perform_shutdown(FILE * fp, bool kill_child_processes)
@@ -558,8 +560,13 @@ static void perform_shutdown(FILE * fp, bool kill_child_processes)
 
 static void auto_save(const char * json_filename) {
 	FILE * const dev_null = fopen("/dev/null", "w");
-	perform_save(dev_null, json_filename);
+	const bool success = perform_save(dev_null, json_filename);
 	fclose(dev_null);
+
+	if (success)
+		info("Database saved");
+	else
+		warn("Failed to write database to \"%s\"", json_filename);
 }
 
 static bool load_database_json(const char * json_filename, json_t * root,
