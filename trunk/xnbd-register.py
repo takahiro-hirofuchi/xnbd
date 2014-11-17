@@ -30,9 +30,6 @@ import re
 import os.path
 import types
 
-XNBD_CLIENT = "xnbd-client"
-XNBD_WRAPPER = "xnbd-wrapper"
-XNBD_WRAPPER_CTL = "xnbd-wrapper-ctl"
 VERBOSE = True
 EXTRA_VERBOSE = False
 
@@ -152,8 +149,8 @@ def call(command, description, silence=False, fatal=True):
 		vprint("%sok" % indent)
 	return p.returncode
 
-def start_client(device, data):
-	start_cmd = [XNBD_CLIENT, '/dev/%s' % (device), '--connect']
+def start_client(device, data, options):
+	start_cmd = [options.xnbd_client, '/dev/%s' % (device), '--connect']
 	if ('name' in data):
 		start_cmd.append("--exportname")
 		start_cmd.append(data['name'])
@@ -162,16 +159,18 @@ def start_client(device, data):
 	start_cmd.append(str(data['port']))
 	call(start_cmd, "Starting /dev/%s ... " % (device))
 
-def stop_client(device, data):
-	stop_cmd = [XNBD_CLIENT,  '--disconnect', '/dev/%s' % (device)]
+def stop_client(device, data, options):
+	stop_cmd = [options.xnbd_client,  '--disconnect', '/dev/%s' % (device)]
 	call(stop_cmd, "Stopping /dev/%s ... " % (device))
 
-def start_wrapper(data):
-	start_cmd = [XNBD_WRAPPER, "--daemonize",
+def start_wrapper(data, options):
+	start_cmd = [options.xnbd_wrapper, "--daemonize",
 			"--logpath", data.get(WRAPPER_LOGPATH_KEY, DEFAULT_LOGPATH),
 			"--laddr", data.get(WRAPPER_ADDRESS_KEY, DEFAULT_ADDRESS),
 			"--port", str(data.get(WRAPPER_PORT_KEY, DEFAULT_PORT)),
 			"--socket", data.get(WRAPPER_SOCKET_KEY, DEFAULT_SOCKET),
+			"--xnbd-bgctl", options.xnbd_bgctl,
+			"--xnbd-server", options.xnbd_server,
 			]
 
 	for parameter, config_key in (
@@ -183,7 +182,7 @@ def start_wrapper(data):
 			start_cmd.append(parameter)
 			start_cmd.append(str(number))
 
-	if call(start_cmd, "Starting `%s' ..." % (XNBD_WRAPPER)):
+	if call(start_cmd, "Starting `%s' ..." % options.xnbd_wrapper):
 		sys.exit(1)
 
 	if isinstance(data[WRAPPER_VOLUMES_KEY], types.ListType):
@@ -200,12 +199,12 @@ def start_wrapper(data):
 		else:
 			vprint("%s: Can't access volume" % (volume))
 
-def stop_wrapper(data):
-	stop = [XNBD_WRAPPER_CTL, "--socket", data['socket'], "--shutdown"]
+def stop_wrapper(data, options):
+	stop = [options.xnbd_wrapper_ctl, "--socket", data['socket'], "--shutdown"]
 	call(stop, "Shutting down all xnbd shares ...")
 
-def print_status(data):
-	status = [XNBD_WRAPPER_CTL, "--socket", data['socket'], "-l"]
+def print_status(data, options):
+	status = [options.xnbd_wrapper_ctl, "--socket", data['socket'], "-l"]
 	call(status, "")
 
 
@@ -215,6 +214,14 @@ parser.add_argument('-r', '--restart', action='store_true', help='(re-)mount con
 parser.add_argument('-t', '--stop', action='store_true', help='unmount configured xNBD client connections and stop configured xNBD wrapper')
 parser.add_argument('-a', '--status', action='store_true', help='show xNBD wrapper status')
 parser.add_argument('--config', dest='config_file', default='/etc/xnbd.conf', help='config file to use (default: /etc/xnbd.conf)')
+
+override = parser.add_argument_group('overriding options')
+override.add_argument('--xnbd-bgctl', metavar='COMMAND', default='xnbd-bgctl', help='xnbd-bgctl command (default: %(default)s)')
+override.add_argument('--xnbd-client', metavar='COMMAND', default='xnbd-client', help='xnbd-client command (default: %(default)s)')
+override.add_argument('--xnbd-server', metavar='COMMAND', default='xnbd-server', help='xnbd-server command (default: %(default)s)')
+override.add_argument('--xnbd-wrapper', metavar='COMMAND', default='xnbd-wrapper', help='xnbd-wrapper command (default: %(default)s)')
+override.add_argument('--xnbd-wrapper-ctl', metavar='COMMAND', default='xnbd-wrapper-ctl', help='xnbd-wrapper-ctl command (default: %(default)s)')
+
 verbosity = parser.add_mutually_exclusive_group()
 verbosity.add_argument('--quiet', action='store_true', help='suppress regular output')
 verbosity.add_argument('-v', '--verbose', dest='extra_verbose', action='store_true', help='be more verbose')
@@ -255,7 +262,7 @@ if (args.status):
 	if (not wrapper_configured):
 		vprint("WARNING: Wrapper socket unknown (since no wrapper is configured)")
 		sys.exit(2)
-	print_status(configuration[WRAPPER_KEY])
+	print_status(configuration[WRAPPER_KEY], args)
 	sys.exit(0)
 
 if (not args.stop and not args.restart and not args.start):
@@ -267,17 +274,17 @@ client_device_names = [k for k in configuration.keys() if k != WRAPPER_KEY]
 if (args.stop or args.restart):
 	# Stop clients first, they may be using our own wrapper
 	for instance in client_device_names:
-		stop_client(instance, configuration[instance])
+		stop_client(instance, configuration[instance], args)
 
 	if wrapper_configured:
-		stop_wrapper(configuration[WRAPPER_KEY])
+		stop_wrapper(configuration[WRAPPER_KEY], args)
 
 if (args.start or args.restart):
 	# Start wrapper frist, it may be used our own clients
 	if wrapper_configured:
-		start_wrapper(configuration[WRAPPER_KEY])
+		start_wrapper(configuration[WRAPPER_KEY], args)
 
 	for instance in client_device_names:
-		start_client(instance, configuration[instance])
+		start_client(instance, configuration[instance], args)
 
 sys.exit(0)
