@@ -209,10 +209,13 @@ def print_status(data, options):
 
 
 parser = argparse.ArgumentParser(description='xNBD helper to (un)register xNBD devices')
-parser.add_argument('-s', '--start', action='store_true', help='mount configured xNBD client connections and start configured xNBD wrapper')
-parser.add_argument('-r', '--restart', action='store_true', help='(re-)mount configured xNBD client connections and (re-)start configured xNBD wrapper')
-parser.add_argument('-t', '--stop', action='store_true', help='unmount configured xNBD client connections and stop configured xNBD wrapper')
-parser.add_argument('-a', '--status', action='store_true', help='show xNBD wrapper status')
+
+commands = parser.add_argument_group('commands').add_mutually_exclusive_group(required=True)
+commands.add_argument('--start', '-s', action='store_true', help='mount configured xNBD client connections and start configured xNBD wrapper')
+commands.add_argument('--stop', '-t', action='store_true', help='unmount configured xNBD client connections and stop configured xNBD wrapper')
+commands.add_argument('--restart', '-r', action='store_true', help='(re-)mount configured xNBD client connections and (re-)start configured xNBD wrapper')
+commands.add_argument('--status', '-a', action='store_true', help='show xNBD wrapper status')
+
 parser.add_argument('--config', dest='config_file', default='/etc/xnbd.conf', help='config file to use (default: /etc/xnbd.conf)')
 
 override = parser.add_argument_group('overriding options')
