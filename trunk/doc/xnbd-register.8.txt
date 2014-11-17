@@ -122,6 +122,9 @@ Similarly, a wrapper instance configures an xnbd-wrapper. Valid options are:
 *logpath*::
     Specifies the log path where logging output is being redirected to
 
+*dbpath*::
+    Specifies the path to the image database file to read and write
+
 *volumes*::
     A mapping of volumes which are exported.
     Mapping keys are export names, mapping values are disk image paths.
@@ -132,6 +135,7 @@ Similarly, a wrapper instance configures an xnbd-wrapper. Valid options are:
     "port": 8520,
     "socket": "/var/run/xnbd.ctl",
     "logpath": "/var/log/xnbd.log",
+    "dbpath": "/etc/xnbd.state",
     "volumes": {
         "one": "/dev/volume",
         "two": "/dev/sdb1",

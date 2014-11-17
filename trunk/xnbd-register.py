@@ -37,6 +37,7 @@ SERVER_KEY = 'server'
 WRAPPER_KEY = 'wrapper'
 
 WRAPPER_ADDRESS_KEY = 'address'
+WRAPPER_DBPATH_KEY = 'dbpath'
 WRAPPER_LOGPATH_KEY = 'logpath'
 WRAPPER_PORT_KEY = 'port'
 WRAPPER_SOCKET_KEY = 'socket'
@@ -48,6 +49,7 @@ DEFAULT_ADDRESS = '127.0.0.1'
 DEFAULT_PORT = 8520
 DEFAULT_LOGPATH = '/var/log/xnbd.log'
 DEFAULT_SOCKET = '/var/run/xnbd-wrapper.ctl'
+DEFAULT_DBPATH = '/etc/xnbd.state'
 
 
 def vprint(msg, **kwargs):
@@ -85,6 +87,7 @@ def check_syntax(data, config_file):
 		if (key == WRAPPER_KEY):
 			wrapper_keys = set([
 					WRAPPER_ADDRESS_KEY,
+					WRAPPER_DBPATH_KEY,
 					WRAPPER_LOGPATH_KEY,
 					WRAPPER_MAX_BUF_SIZE_KEY,
 					WRAPPER_MAX_QUEUE_SIZE_KEY,
@@ -165,6 +168,7 @@ def stop_client(device, data, options):
 
 def start_wrapper(data, options):
 	start_cmd = [options.xnbd_wrapper, "--daemonize",
+			"--dbpath", data.get(WRAPPER_DBPATH_KEY, DEFAULT_DBPATH),
 			"--logpath", data.get(WRAPPER_LOGPATH_KEY, DEFAULT_LOGPATH),
 			"--laddr", data.get(WRAPPER_ADDRESS_KEY, DEFAULT_ADDRESS),
 			"--port", str(data.get(WRAPPER_PORT_KEY, DEFAULT_PORT)),
