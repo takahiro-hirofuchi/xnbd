@@ -97,7 +97,7 @@ def check_syntax(data, config_file):
 			config_keys = set(data[key].keys())
 			ukeys = config_keys - wrapper_keys
 			if (ukeys):
-				vprint("WARNING: Unknown wrapper option(s): %s\n" % ", ".join(ukeys))
+				vprint("ERROR: Unknown wrapper option(s): %s\n" % ", ".join(ukeys))
 				sys.exit(1)
 
 		elif (key.startswith("nbd")):
