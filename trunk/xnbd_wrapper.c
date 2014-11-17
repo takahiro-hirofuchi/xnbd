@@ -1216,6 +1216,9 @@ static void *start_filemgr_thread(void * pointer)
 						else if (ret == XNBD_NOT_ADDING_TWICE)
 							fprintf(fp, "image cannot be added twice\n");
 
+						if (ret == XNBD_IMAGE_ADDED)
+							auto_save(p_thread_data->database_file_name);
+
 						return_code = (ret == XNBD_IMAGE_ADDED) ? EXIT_SUCCESS : EXIT_FAILURE;
 					}
 					else
@@ -1259,6 +1262,9 @@ static void *start_filemgr_thread(void * pointer)
 						else if (ret == XNBD_NOT_ADDING_TWICE)
 							fprintf(fp, "image cannot be added twice\n");
 
+						if (ret == XNBD_IMAGE_ADDED)
+							auto_save(p_thread_data->database_file_name);
+
 						return_code = (ret == XNBD_IMAGE_ADDED) ? EXIT_SUCCESS : EXIT_FAILURE;
 					}
 					g_strfreev(argv);
@@ -1268,21 +1274,27 @@ static void *start_filemgr_thread(void * pointer)
 				const int number = atoi(arg);
 				return_code = del_diskimg_by_index(number);
 
-				if (return_code != EXIT_SUCCESS) {
+				if (return_code == EXIT_SUCCESS) {
+					auto_save(p_thread_data->database_file_name);
+				} else {
 					fprintf(fp, "Image number %d could not be deleted.\n", number);
 				}
 			} else if (strcmp(cmd, "del-file") == 0) {
 				decode_percent_encoding(arg);
 				return_code = del_diskimg_by_file(arg);
 
-				if (return_code != EXIT_SUCCESS) {
+				if (return_code == EXIT_SUCCESS) {
+					auto_save(p_thread_data->database_file_name);
+				} else {
 					fprintf(fp, "Image with filename \"%s\" could not be deleted.\n", arg);
 				}
 			} else if (strcmp(cmd, "del-exportname") == 0) {
 				decode_percent_encoding(arg);
 				return_code = del_diskimg_by_exportname(arg);
 
-				if (return_code != EXIT_SUCCESS) {
+				if (return_code == EXIT_SUCCESS) {
+					auto_save(p_thread_data->database_file_name);
+				} else {
 					fprintf(fp, "Image with exportname \"%s\" could not be deleted.\n", arg);
 				}
 			} else if (strcmp(cmd, "shutdown") == 0) {
@@ -1299,6 +1311,8 @@ static void *start_filemgr_thread(void * pointer)
 				if (return_code == EXIT_SUCCESS) {
 					const char * const local_exportname = argv[1];
 					mark_proxy_mode_ended(local_exportname);
+
+					auto_save(p_thread_data->database_file_name);
 				}
 
 				g_strfreev(argv);
@@ -1316,6 +1330,8 @@ static void *start_filemgr_thread(void * pointer)
 					const char * const target_exportname = (argc >= 5) ? argv[4] : NULL;
 
 					update_proxy_settings(local_exportname, host, port, target_exportname);
+
+					auto_save(p_thread_data->database_file_name);
 				}
 
 				g_strfreev(argv);
