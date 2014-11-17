@@ -1,0 +1,52 @@
+XNBD-WRAPPER-LOAD(8)
+===================
+:man source:   {manual_package}
+:man version:  {manual_version}
+:man manual:   {manual_title}
+
+
+NAME
+----
+xnbd-wrapper-load - Load database state back into a running xnbd-wrapper(8) instance
+
+
+SYNOPSIS
+--------
+*xnbd-wrapper-load* [--from 'FILE'] [--socket 'PATH'] [--xnbd-wrapper-ctl 'COMMAND']
+
+
+DESCRIPTION
+-----------
+*xnbd-wrapper-load* loads xnbd-wrapper state saved by `xnbd-wrapper-ctl --save`
+back into a running xnbd-wrapper instance.
+
+
+OPTIONS
+-------
+The following options are supported:
+
+*--from* 'FILE'::
+    Location of JSON state file to load, defaults to /etc/xnbd.state.
+
+*--socket*|*-s* 'PATH'::
+    Override xnbd-wrapper control socket location.
+    Defaults to /var/run/xnbd-wrapper.ctl.
+
+*--xnbd-wrapper-ctl* 'COMMAND'::
+    Override xnbd-wrapper-ctl command, defaults to xnbd-wrapper-ctl.
+
+
+SEE ALSO
+--------
+xnbd-wrapper-ctl(8), xnbd-wrapper(1), xnbd-server(8)
+
+
+AUTHOR
+------
+include::author_xnbd.txt[]
+
+*xnbd-wrapper-load* and this manual page have been written by
+Sebastian Pipping (sebastian@pipping.org).
+Permission is granted to copy, distribute and/or modify this document
+under the terms of the GNU General Public License, version 2, as published
+by the Free Software Foundation.
