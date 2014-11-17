@@ -548,10 +548,6 @@ static void perform_save(FILE * fp, const char * json_filename) {
 
 static void perform_shutdown(FILE * fp, bool kill_child_processes)
 {
-	pthread_mutex_lock(&mutex);
-	g_hash_table_destroy(p_disk_dict);
-	pthread_mutex_unlock(&mutex);
-
 	if (kill_child_processes) {
 		fprintf(fp, "All images terminated\n");
 		kill(0, SIGTERM);  /* includes ourselves */
@@ -1857,6 +1853,12 @@ int main(int argc, char **argv) {
 				if (rbytes != sizeof(sfd_siginfo))
 					err("read sigfd : %m");
 				if (sfd_siginfo.ssi_signo == SIGTERM || sfd_siginfo.ssi_signo == SIGINT) {
+					auto_save(dbpath);
+
+					pthread_mutex_lock(&mutex);
+					g_hash_table_destroy(p_disk_dict);
+					pthread_mutex_unlock(&mutex);
+
 					close(epoll_fd);
 					close(sockfd);
 					close(ux_sockfd);
