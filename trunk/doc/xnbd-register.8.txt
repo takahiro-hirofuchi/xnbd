@@ -87,6 +87,14 @@ Similarly, a wrapper instance configures an xnbd-wrapper. Valid options are:
 *address*::
     Specifies the listening address
 
+*max_buf_size*::
+    Specifies the maximum internal buffer size in bytes (per xnbd-server process).
+    See *xnbd-server(8)* for details.
+
+*max_queue_size*::
+    Specifies the maximum queue size in bytes (per xnbd-server process).
+    See *xnbd-server(8)* for details.
+
 *port*::
     Specifies the listening port
 
@@ -110,7 +118,9 @@ Similarly, a wrapper instance configures an xnbd-wrapper. Valid options are:
         "one": "/dev/volume",
         "two": "/dev/sdb1",
         "three": "/var/lib/image.file",
-    }
+    },
+    "max_queue_size": 2000,
+    "max_buf_size": 104857600
 }
 ---------------------------
 
