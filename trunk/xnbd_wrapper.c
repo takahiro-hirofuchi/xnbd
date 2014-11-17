@@ -493,7 +493,7 @@ static void dump_registered_images_UNLOCKED(FILE * fp, const char * json_filenam
 		return;
 	}
 
-	const ftruncate_res = ftruncate(fd, 0);
+	const int ftruncate_res = ftruncate(fd, 0);
 	if (ftruncate_res == -1) {
 		const int errno_backup = errno;
 		fprintf(fp, "File \"%s\": Could not truncate, error %d: %s\n", json_filename, errno_backup, strerror(errno_backup));
