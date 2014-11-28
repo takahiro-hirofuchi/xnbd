@@ -514,25 +514,9 @@ static bool dump_registered_images_UNLOCKED(FILE * fp, const char * json_filenam
 	char * const json_content = json_dumps(json_root, JSON_INDENT(4) | JSON_SORT_KEYS);
 	json_decref(json_root);
 
-	/* Interruptible write loop */
+	/* Write data to the dbpath */
 	const ssize_t bytes_total = strlen(json_content);
-	ssize_t bytes_written = 0;
-	while (bytes_written < bytes_total) {
-		const ssize_t write_res = write(fd, json_content + bytes_written, bytes_total - bytes_written);
-		if (write_res == -1) {
-			const int errno_backup = errno;
-			if ((errno_backup != EINTR) && (errno_backup != EAGAIN) && (errno_backup != EWOULDBLOCK)) {
-				fprintf(fp, "File \"%s\": Could not write, error %d: %s\n", json_filename, errno_backup, strerror(errno_backup));
-
-				free(json_content);
-				close(fd);
-				return false;
-			}
-			sleep(1);
-		} else {
-			bytes_written += write_res;
-		}
-	}
+	net_send_all_or_error(fd, json_content, bytes_total);
 
 	free(json_content);
 	close(fd);
@@ -785,25 +769,10 @@ static void load_database_file_or_abort(const char * json_filename) {
 		err("File \"%s\": Detected hard-link, refusing to read from it", json_filename);
 	}
 
-	/* Interruptible read loop */
-	char * const json_buffer = malloc(props.st_size);
-	if (! json_buffer)
-		err("%s", MESSAGE_ENOMEM);
-
+	/* Read data from the dbpath */
 	const ssize_t bytes_total = props.st_size;
-	ssize_t bytes_read = 0;
-	while (bytes_read < bytes_total) {
-		const ssize_t read_res = read(fd, json_buffer + bytes_read, bytes_total - bytes_read);
-		if (read_res == -1) {
-			const int errno_backup = errno;
-			if ((errno_backup != EINTR) && (errno_backup != EAGAIN) && (errno_backup != EWOULDBLOCK)) {
-				err("File \"%s\": Could not read, error %d: %s", json_filename, errno_backup, strerror(errno_backup));
-			}
-			sleep(1);
-		} else {
-			bytes_read += read_res;
-		}
-	}
+	char * const json_buffer = g_malloc(bytes_total);
+	net_recv_all_or_abort(fd, json_buffer, bytes_total);
 	close(fd);
 
 	json_error_t json_error;
