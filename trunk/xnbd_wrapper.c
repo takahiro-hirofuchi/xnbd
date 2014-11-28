@@ -444,10 +444,8 @@ static bool ensure_directory_of_file_exists(FILE * fp, const char * filename) {
 	if (strcmp(dir, "") && strcmp(dir, ".") && strcmp(dir, "/")) {
 		const int mkdir_res = mkdir(dir, 0700);
 		if (mkdir_res == -1) {
-			const int errno_backup = errno;
-			if (errno_backup != EEXIST) {
-				fprintf(fp, "Directory \"%s\": Could not create, error %d: %s\n", dir, errno_backup, strerror(errno_backup));
-
+			if (errno != EEXIST) {
+				fprintf(fp, "Directory \"%s\": Could not create, error %d: %s\n", dir, errno, strerror(errno));
 				free(dup);
 				return false;
 			}
@@ -467,40 +465,33 @@ static bool dump_registered_images_UNLOCKED(FILE * fp, const char * json_filenam
 
 	const int fd = open(json_filename, O_WRONLY | O_CREAT | O_NOFOLLOW, 0600);
 	if (fd == -1) {
-		const int errno_backup = errno;
-		fprintf(fp, "File \"%s\": Could not open/create, error %d: %s\n", json_filename, errno_backup, strerror(errno_backup));
+		fprintf(fp, "File \"%s\": Could not open/create, error %d: %s\n", json_filename, errno, strerror(errno));
 		return false;
 	}
 
 	struct stat props;
 	const int fstat_res = fstat(fd, &props);
 	if (fstat_res == -1) {
-		const int errno_backup = errno;
-		fprintf(fp, "File \"%s\": Could not fstat, error %d: %s\n", json_filename, errno_backup, strerror(errno_backup));
-
+		fprintf(fp, "File \"%s\": Could not fstat, error %d: %s\n", json_filename, errno, strerror(errno));
 		close(fd);
 		return false;
 	}
 
 	if (! S_ISREG(props.st_mode)) {
 		fprintf(fp, "File \"%s\": Not a regular file, refusing to write to it\n", json_filename);
-
 		close(fd);
 		return false;
 	}
 
 	if (props.st_nlink > 1) {
 		fprintf(fp, "File \"%s\": Detected hard-link, refusing to write to it\n", json_filename);
-
 		close(fd);
 		return false;
 	}
 
 	const int ftruncate_res = ftruncate(fd, 0);
 	if (ftruncate_res == -1) {
-		const int errno_backup = errno;
-		fprintf(fp, "File \"%s\": Could not truncate, error %d: %s\n", json_filename, errno_backup, strerror(errno_backup));
-
+		fprintf(fp, "File \"%s\": Could not truncate, error %d: %s\n", json_filename, errno, strerror(errno));
 		close(fd);
 		return false;
 	}
@@ -745,20 +736,18 @@ static bool load_database_json(const char * json_filename, json_t * root,
 static void load_database_file_or_abort(const char * json_filename) {
 	const int fd = open(json_filename, O_RDONLY | O_NOFOLLOW);
 	if (fd == -1) {
-		const int errno_backup = errno;
-		if (errno_backup == ENOENT) {
+		if (errno == ENOENT) {
 			info("No previous state to restore, file %s not found.", json_filename);
 			return;
 		} else {
-			err("File \"%s\": Could not open, error %d: %s", json_filename, errno_backup, strerror(errno_backup));
+			err("File \"%s\": Could not open, error %d: %s", json_filename, errno, strerror(errno));
 		}
 	}
 
 	struct stat props;
 	const int fstat_res = fstat(fd, &props);
 	if (fstat_res == -1) {
-		const int errno_backup = errno;
-		err("File \"%s\": Could not fstat, error %d: %s", json_filename, errno_backup, strerror(errno_backup));
+		err("File \"%s\": Could not fstat, error %d: %s", json_filename, errno, strerror(errno));
 	}
 
 	if (! S_ISREG(props.st_mode)) {
@@ -802,9 +791,8 @@ static void load_database_file_or_abort(const char * json_filename) {
 
 		const int unlink_res = unlink(backup_filename);
 		if (unlink_res == -1) {
-			const int errno_backup = errno;
-			if (errno_backup != ENOENT) {
-				warn("File \"%s\": Could not remove, error %d: %s", backup_filename, errno_backup, strerror(errno_backup));
+			if (errno != ENOENT) {
+				warn("File \"%s\": Could not remove, error %d: %s", backup_filename, errno, strerror(errno));
 			}
 		} else {
 			info("File \"%s\" removed", backup_filename);
@@ -812,8 +800,7 @@ static void load_database_file_or_abort(const char * json_filename) {
 
 		const int rename_res = rename(json_filename, backup_filename);
 		if (rename_res == -1) {
-			const int errno_backup = errno;
-			warn("File \"%s\": Could not rename to \"%s\", error %d: %s", json_filename, backup_filename, errno_backup, strerror(errno_backup));
+			warn("File \"%s\": Could not rename to \"%s\", error %d: %s", json_filename, backup_filename, errno, strerror(errno));
 		} else {
 			info("File \"%s\" renamed to \"%s\".", json_filename, backup_filename);
 		}
