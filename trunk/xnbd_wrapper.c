@@ -584,7 +584,7 @@ static bool load_database_json(const char * json_filename, json_t * root,
 	if (version) {
 		const json_int_t version_int = json_integer_value(version);
 		if (version_int != 2) {
-			info("File format version " JSON_INTEGER_FORMAT " is not supported", version_int);
+			info("File format version %" JSON_INTEGER_FORMAT " is not supported", version_int);
 			return false;
 		}
 	} else {
