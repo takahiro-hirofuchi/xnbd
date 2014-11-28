@@ -511,25 +511,9 @@ static void dump_registered_images_UNLOCKED(FILE * fp, const char * json_filenam
 	char * const json_content = json_dumps(json_root, JSON_INDENT(4) | JSON_SORT_KEYS);
 	json_decref(json_root);
 
-	/* Interruptible write loop */
+	/* Write data to the dbpath */
 	const ssize_t bytes_total = strlen(json_content);
-	ssize_t bytes_written = 0;
-	while (bytes_written < bytes_total) {
-		const ssize_t write_res = write(fd, json_content + bytes_written, bytes_total - bytes_written);
-		if (write_res == -1) {
-			const int errno_backup = errno;
-			if ((errno_backup != EINTR) && (errno_backup != EAGAIN) && (errno_backup != EWOULDBLOCK)) {
-				fprintf(fp, "File \"%s\": Could not write, error %d: %s\n", json_filename, errno_backup, strerror(errno_backup));
-
-				free(json_content);
-				close(fd);
-				return;
-			}
-			sleep(1);
-		} else {
-			bytes_written += write_res;
-		}
-	}
+	net_send_all_or_error(fd, json_content, bytes_total);
 
 	free(json_content);
 	close(fd);
