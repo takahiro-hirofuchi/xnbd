@@ -441,9 +441,8 @@ static bool ensure_directory_of_file_exists(FILE * fp, const char * filename) {
 	if (strcmp(dir, "") && strcmp(dir, ".") && strcmp(dir, "/")) {
 		const int mkdir_res = mkdir(dir, 0700);
 		if (mkdir_res == -1) {
-			const int errno_backup = errno;
-			if (errno_backup != EEXIST) {
-				fprintf(fp, "Directory \"%s\": Could not create, error %d: %s\n", dir, errno_backup, strerror(errno_backup));
+			if (errno != EEXIST) {
+				fprintf(fp, "Directory \"%s\": Could not create, error %d: %s\n", dir, errno, strerror(errno));
 
 				free(dup);
 				return false;
@@ -464,40 +463,33 @@ static void dump_registered_images_UNLOCKED(FILE * fp, const char * json_filenam
 
 	const int fd = open(json_filename, O_WRONLY | O_CREAT | O_NOFOLLOW, 0600);
 	if (fd == -1) {
-		const int errno_backup = errno;
-		fprintf(fp, "File \"%s\": Could not open/create, error %d: %s\n", json_filename, errno_backup, strerror(errno_backup));
+		fprintf(fp, "File \"%s\": Could not open/create, error %d: %s\n", json_filename, errno, strerror(errno));
 		return;
 	}
 
 	struct stat props;
 	const int fstat_res = fstat(fd, &props);
 	if (fstat_res == -1) {
-		const int errno_backup = errno;
-		fprintf(fp, "File \"%s\": Could not fstat, error %d: %s\n", json_filename, errno_backup, strerror(errno_backup));
-
+		fprintf(fp, "File \"%s\": Could not fstat, error %d: %s\n", json_filename, errno, strerror(errno));
 		close(fd);
 		return;
 	}
 
 	if (! S_ISREG(props.st_mode)) {
 		fprintf(fp, "File \"%s\": Not a regular file, refusing to write to it\n", json_filename);
-
 		close(fd);
 		return;
 	}
 
 	if (props.st_nlink > 1) {
 		fprintf(fp, "File \"%s\": Detected hard-link, refusing to write to it\n", json_filename);
-
 		close(fd);
 		return;
 	}
 
 	const ftruncate_res = ftruncate(fd, 0);
 	if (ftruncate_res == -1) {
-		const int errno_backup = errno;
-		fprintf(fp, "File \"%s\": Could not truncate, error %d: %s\n", json_filename, errno_backup, strerror(errno_backup));
-
+		fprintf(fp, "File \"%s\": Could not truncate, error %d: %s\n", json_filename, errno, strerror(errno));
 		close(fd);
 		return;
 	}
