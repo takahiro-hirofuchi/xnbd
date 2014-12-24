@@ -544,7 +544,7 @@ static void auto_save(const char * json_filename) {
 		warn("Failed to write database to \"%s\"", json_filename);
 }
 
-static bool load_database_json(const char * json_filename, json_t * root,
+static bool load_database_json(json_t * root,
 		int * p_count_added, int * p_count_skipped) {
 	g_assert(root);
 	g_assert(p_count_added);
@@ -774,7 +774,7 @@ static void load_database_file_or_abort(const char * json_filename) {
 	int count_added = 0;
 	int count_skipped = 0;
 
-	if (! load_database_json(json_filename, root, &count_added, &count_skipped))
+	if (! load_database_json(root, &count_added, &count_skipped))
 		err("Loading datebase state from %s failed.", json_filename);
 
 	json_decref(root);
