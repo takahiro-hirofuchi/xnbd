@@ -458,6 +458,25 @@ static bool ensure_directory_of_file_exists(FILE * fp, const char * filename) {
 	return true;
 }
 
+static ssize_t io_all(int fd, char *buf, size_t bytes_total, int reading)
+{
+	size_t bytes_done = 0;
+	while (bytes_done < bytes_total) {
+		ssize_t res;
+		if (reading)
+			res = read(fd, buf + bytes_done, bytes_total - bytes_done);
+		else
+			res = write(fd, buf + bytes_done, bytes_total - bytes_done);
+
+		if (res == -1)
+			return -1;
+		else
+			bytes_done += res;
+	}
+
+	return bytes_done;
+}
+
 static bool dump_registered_images_UNLOCKED(FILE * fp, const char * json_filename) {
 	if (! ensure_directory_of_file_exists(fp, json_filename)) {
 		return false;
@@ -507,7 +526,14 @@ static bool dump_registered_images_UNLOCKED(FILE * fp, const char * json_filenam
 
 	/* Write data to the dbpath */
 	const ssize_t bytes_total = strlen(json_content);
-	net_send_all_or_error(fd, json_content, bytes_total);
+	const ssize_t write_res = io_all(fd, json_content, bytes_total, 0);
+	if (write_res == -1) {
+		fprintf(fp, "File \"%s\": Could not write, error %d: %s\n", json_filename, errno, strerror(errno));
+
+		free(json_content);
+		close(fd);
+		return false;
+	}
 
 	free(json_content);
 	close(fd);
@@ -761,7 +787,10 @@ static void load_database_file_or_abort(const char * json_filename) {
 	/* Read data from the dbpath */
 	const ssize_t bytes_total = props.st_size;
 	char * const json_buffer = g_malloc(bytes_total);
-	net_recv_all_or_abort(fd, json_buffer, bytes_total);
+	const ssize_t read_res = io_all(fd, json_buffer, bytes_total, 1);
+	if (read_res == -1) {
+		err("File \"%s\": Could not read, error %d: %s", json_filename, errno, strerror(errno));
+	}
 	close(fd);
 
 	json_error_t json_error;
