@@ -397,5 +397,9 @@ void punch_hole(int fd, off_t iofrom, off_t iolen)
 	int ret = fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, iofrom, iolen);
 	if (ret < 0)
 		warn("fallocate %m");
+#else
+	(void)fd;
+	(void)iofrom;
+	(void)iolen;
 #endif
 }
