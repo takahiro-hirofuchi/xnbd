@@ -4,7 +4,7 @@
  * Copyright (C) 2008-2014 National Institute of Advanced Industrial Science
  * and Technology
  *
- * Author: Takahiro Hirofuchi <t.hirofuchi _at_ aist.go.jp>
+ * Author: Takahiro Hirofuchi <t.hirofuchi+xnbd _at_ aist.go.jp>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
