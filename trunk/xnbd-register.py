@@ -48,7 +48,7 @@ DEFAULT_ADDRESS = '127.0.0.1'
 DEFAULT_PORT = 8520
 DEFAULT_LOGPATH = '/var/log/xnbd.log'
 DEFAULT_SOCKET = '/var/run/xnbd-wrapper.ctl'
-DEFAULT_DBPATH = '/etc/xnbd.state'
+DEFAULT_DBPATH = '/var/lib/xnbd/xnbd.state'
 
 
 def vprint(msg, **kwargs):

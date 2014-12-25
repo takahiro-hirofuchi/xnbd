@@ -137,7 +137,7 @@ Similarly, a wrapper instance configures an xnbd-wrapper. Valid options are:
     "port": 8520,
     "socket": "/var/run/xnbd.ctl",
     "logpath": "/var/log/xnbd.log",
-    "dbpath": "/etc/xnbd.state",
+    "dbpath": "/var/lib/xnbd/xnbd.state",
     "max_queue_size": 2000,
     "max_buf_size": 104857600
 }
