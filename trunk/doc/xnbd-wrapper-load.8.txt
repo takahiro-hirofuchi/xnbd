@@ -26,7 +26,7 @@ OPTIONS
 The following options are supported:
 
 *--from* 'FILE'::
-    Location of JSON state file to load, defaults to /etc/xnbd.state.
+    Location of JSON state file to load, defaults to /var/lib/xnbd/xnbd.state.
 
 *--socket*|*-s* 'PATH'::
     Override xnbd-wrapper control socket location.

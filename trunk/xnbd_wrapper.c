@@ -1578,7 +1578,7 @@ static const char help_string[] =
 	"  --imgfile      path to a disk image file. This options can be used multiple times.\n"
 	"                 Use also xnbd-wrapper-ctl to (de)register disk images dynamically.\n"
 	"  --logpath PATH use the given path for logging (default: stderr/syslog)\n"
-	"  --dbpath PATH  use the given path for persisting database state (default: /etc/xnbd.state)\n"
+	"  --dbpath PATH  use the given path for persisting database state (default: /var/lib/xnbd/xnbd.state)\n"
 	"  --socket       unix socket path to listen on (default: /var/run/xnbd-wrapper.ctl).\n"
 	"  --syslog       use syslog for logging\n"
 	"  --max-queue-size SIZE\n"
@@ -1610,7 +1610,7 @@ int main(int argc, char **argv) {
 	int daemonize = 0;
 	int syslog = 0;
 	const char *logpath = NULL;
-	const char *dbpath = "/etc/xnbd.state";
+	const char *dbpath = "/var/lib/xnbd/xnbd.state";
 	struct exec_params exec_srv_params = { .readonly = 0 };
 	const char * xnbd_bgctl_command = "xnbd-bgctl";
 

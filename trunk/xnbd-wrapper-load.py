@@ -143,7 +143,7 @@ def run(options):
 def main(argv):
 	parser = argparse.ArgumentParser()
 	parser.add_argument('--from', dest='json_filename', metavar='FILE',
-			default='/etc/xnbd.state',
+			default='/var/lib/xnbd/xnbd.state',
 			help='Location of JSON state file to load (default: %(default)s)')
 	parser.add_argument('--xnbd-wrapper-ctl', metavar='COMMAND', default='xnbd-wrapper-ctl',
 			help='Override xnbd-wrapper-ctl command (default: %(default)s)')
