@@ -20,7 +20,8 @@ lib_LTLIBRARIES = \
 
 dist_sbin_SCRIPTS = \
 	xnbd-register.py \
-	xnbd-wrapper-ctl.py
+	xnbd-wrapper-ctl.py \
+	xnbd-wrapper-load.py
 
 
 libxnbd_internal_la_SOURCES = \
@@ -85,9 +86,11 @@ AM_LDFLAGS = @GLIB_LIBS@
 install-exec-hook:
 	mv $(DESTDIR)$(sbindir)/xnbd-register{.py,}
 	mv $(DESTDIR)$(sbindir)/xnbd-wrapper-ctl{.py,}
+	mv $(DESTDIR)$(sbindir)/xnbd-wrapper-load{.py,}
 
 uninstall-hook:
 	rm $(DESTDIR)$(sbindir)/xnbd-wrapper-ctl
+	rm $(DESTDIR)$(sbindir)/xnbd-wrapper-load
 	rm $(DESTDIR)$(sbindir)/xnbd-register
 
 

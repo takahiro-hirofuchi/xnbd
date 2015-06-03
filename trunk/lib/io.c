@@ -4,7 +4,7 @@
  * Copyright (C) 2008-2014 National Institute of Advanced Industrial Science
  * and Technology
  *
- * Author: Takahiro Hirofuchi <t.hirofuchi _at_ aist.go.jp>
+ * Author: Takahiro Hirofuchi <t.hirofuchi+xnbd _at_ aist.go.jp>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -397,5 +397,9 @@ void punch_hole(int fd, off_t iofrom, off_t iolen)
 	int ret = fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, iofrom, iolen);
 	if (ret < 0)
 		warn("fallocate %m");
+#else
+	(void)fd;
+	(void)iofrom;
+	(void)iolen;
 #endif
 }

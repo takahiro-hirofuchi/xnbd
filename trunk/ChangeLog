@@ -26,6 +26,7 @@ Bugfixes
  * xnbd-register: Wrapper options "max_buf_size" and "max_queue_size" were
      required rather than optional; a mis-leading error message made things worse
      (issue #11)
+ * configure: Fix explicit `--disable-debug`
 
 Improvements
 ~~~~~~~~~~~~
@@ -37,11 +38,19 @@ Improvements
  * xnbd-server: Remove the limitation that the cache block size should be a
      multiple of 4096.  Now support any disk size that is a power of 2.
  * xnbd-server: Skip ftruncate() when a local cache image is larger than a remote one.
+ * xnbd-register: Make `--start/stop/restart/status` mutually exclusive
+ * xnbd-register: Add `--reload` command
+ * xnbd-register: Add `--verbose` switch
+ * xnbd-register: Add `--xnbd-*` options for custom commands
  * xnbd-register: Support partial wrapper configuration
      (e.g. a custom port but defaults for everything else)
      without need to duplicate defaults in the config file
+ * xnbd-wrapper: Now uses /var/lib/xnbd/xnbd.state as a volume database.
+     That file is loaded during start-up and re-written during shutdown.
  * xnbd-wrapper(-ctl): Add command `--orphan` to send SIGTERM to xnbd-wrapper
      but not its child xnbd-server processes.
+ * xnbd-wrapper-ctl: Add command `--save` to trigger a re-writing of the database file
+ * xnbd-wrapper-load: New tool to load database state into a running xnbd-wrapper instance
 
 
 0.3.0
@@ -66,6 +75,7 @@ Improvements
  * xnbd-wrapper: Support passing custom `--max-(buf|queue)-size` to xnbd-server
  * xnbd-register: Add support for wrapper options max_buf_size and max_queue_size
  * xnbd-register: Fix warning on unknown wrapper option keys
+ * xnbd-register: Add --verbose switch
 
 
 0.2.0-rc2

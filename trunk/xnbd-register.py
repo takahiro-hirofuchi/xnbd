@@ -27,18 +27,16 @@ import sys
 import subprocess
 import json
 import re
-import os.path
-import types
 
-XNBD_CLIENT = "xnbd-client"
-XNBD_WRAPPER = "xnbd-wrapper"
-XNBD_WRAPPER_CTL = "xnbd-wrapper-ctl"
+
 VERBOSE = True
+EXTRA_VERBOSE = False
 
 SERVER_KEY = 'server'
 WRAPPER_KEY = 'wrapper'
 
 WRAPPER_ADDRESS_KEY = 'address'
+WRAPPER_DBPATH_KEY = 'dbpath'
 WRAPPER_LOGPATH_KEY = 'logpath'
 WRAPPER_PORT_KEY = 'port'
 WRAPPER_SOCKET_KEY = 'socket'
@@ -50,6 +48,7 @@ DEFAULT_ADDRESS = '127.0.0.1'
 DEFAULT_PORT = 8520
 DEFAULT_LOGPATH = '/var/log/xnbd.log'
 DEFAULT_SOCKET = '/var/run/xnbd-wrapper.ctl'
+DEFAULT_DBPATH = '/var/lib/xnbd/xnbd.state'
 
 
 def vprint(msg, **kwargs):
@@ -87,6 +86,7 @@ def check_syntax(data, config_file):
 		if (key == WRAPPER_KEY):
 			wrapper_keys = set([
 					WRAPPER_ADDRESS_KEY,
+					WRAPPER_DBPATH_KEY,
 					WRAPPER_LOGPATH_KEY,
 					WRAPPER_MAX_BUF_SIZE_KEY,
 					WRAPPER_MAX_QUEUE_SIZE_KEY,
@@ -94,11 +94,17 @@ def check_syntax(data, config_file):
 					WRAPPER_SOCKET_KEY,
 					WRAPPER_VOLUMES_KEY,
 					])
-			config_keys = set(data[key].keys())
+			wrapper_config = data[key]
+			config_keys = set(wrapper_config.keys())
 			ukeys = config_keys - wrapper_keys
 			if (ukeys):
-				vprint("WARNING: Unknown wrapper option(s): %s\n" % ", ".join(ukeys))
+				vprint("ERROR: Unknown wrapper option(s): %s\n" % ", ".join(ukeys))
 				sys.exit(1)
+
+			if WRAPPER_VOLUMES_KEY in wrapper_config:
+				database_path = wrapper_config.get(WRAPPER_DBPATH_KEY, DEFAULT_DBPATH)
+				vprint('WARNING: ignoring volumes configured in "%s". Configuration of volumes has moved to "%s".' \
+						% (config_file, database_path))
 
 		elif (key.startswith("nbd")):
 			if (not re.match("nbd\d+", key)):
@@ -114,24 +120,45 @@ def check_syntax(data, config_file):
 			sys.exit(1)
 
 
-def call(command, description):
-	vprint(description, end='')
+def call(command, description, silence=False, fatal=True):
+	if EXTRA_VERBOSE:
+		first_end = '\n'
+		indent = '  '
+	else:
+		first_end = ''
+		indent = ''
+
+	if description:
+		vprint(description, end=first_end)
+
+	if EXTRA_VERBOSE:
+		print('%s# %s' % (indent, ' '.join(command)))
+
+	if silence:
+		stdout_target = open('/dev/null', 'w')
+	else:
+		stdout_target = None
+
 	try:
-		p = subprocess.Popen(command, stderr = subprocess.STDOUT)
+		p = subprocess.Popen(command, stdout=stdout_target, stderr=subprocess.STDOUT)
 	except OSError:
-		vprint("failed")
+		vprint("%sfailed" % indent)
 		return 127
+	finally:
+		if silence:
+			stdout_target.close()
 
 	p.wait()
 	if (p.returncode != 0):
-		vprint("failed")
-		sys.exit(p.returncode)
+		vprint("%sfailed" % indent)
+		if fatal:
+			sys.exit(p.returncode)
 	else:
-		vprint("ok")
+		vprint("%sok" % indent)
 	return p.returncode
 
-def start_client(device, data):
-	start_cmd = [XNBD_CLIENT, '/dev/%s' % (device), '--connect']
+def start_client(device, data, options):
+	start_cmd = [options.xnbd_client, '/dev/%s' % (device), '--connect']
 	if ('name' in data):
 		start_cmd.append("--exportname")
 		start_cmd.append(data['name'])
@@ -140,16 +167,19 @@ def start_client(device, data):
 	start_cmd.append(str(data['port']))
 	call(start_cmd, "Starting /dev/%s ... " % (device))
 
-def stop_client(device, data):
-	stop_cmd = [XNBD_CLIENT,  '--disconnect', '/dev/%s' % (device)]
+def stop_client(device, data, options):
+	stop_cmd = [options.xnbd_client,  '--disconnect', '/dev/%s' % (device)]
 	call(stop_cmd, "Stopping /dev/%s ... " % (device))
 
-def start_wrapper(data):
-	start_cmd = [XNBD_WRAPPER, "--daemonize",
+def start_wrapper(data, options):
+	start_cmd = [options.xnbd_wrapper, "--daemonize",
+			"--dbpath", data.get(WRAPPER_DBPATH_KEY, DEFAULT_DBPATH),
 			"--logpath", data.get(WRAPPER_LOGPATH_KEY, DEFAULT_LOGPATH),
 			"--laddr", data.get(WRAPPER_ADDRESS_KEY, DEFAULT_ADDRESS),
 			"--port", str(data.get(WRAPPER_PORT_KEY, DEFAULT_PORT)),
 			"--socket", data.get(WRAPPER_SOCKET_KEY, DEFAULT_SOCKET),
+			"--xnbd-bgctl", options.xnbd_bgctl,
+			"--xnbd-server", options.xnbd_server,
 			]
 
 	for parameter, config_key in (
@@ -161,43 +191,55 @@ def start_wrapper(data):
 			start_cmd.append(parameter)
 			start_cmd.append(str(number))
 
-	if call(start_cmd, "Starting `%s' ..." % (XNBD_WRAPPER)):
+	if call(start_cmd, "Starting `%s' ..." % options.xnbd_wrapper):
 		sys.exit(1)
 
-	if isinstance(data[WRAPPER_VOLUMES_KEY], types.ListType):
-		# List data, format of 0.1.0-pre*
-		exportname_volume_tuple_list = [(path, path) for path in data[WRAPPER_VOLUMES_KEY]]
-	else:
-		# Dict data, format of >=0.2.0
-		exportname_volume_tuple_list = list(data[WRAPPER_VOLUMES_KEY].items())
-
-	for exportname, volume in exportname_volume_tuple_list:
-		add_volume = [XNBD_WRAPPER_CTL, "--socket", data['socket'], "--add-target", exportname, volume]
-		if (os.path.exists(volume)):
-			call(add_volume, "Adding `%s' ..." % volume)
-		else:
-			vprint("%s: Can't access volume" % (volume))
-
-def stop_wrapper(data):
-	stop = [XNBD_WRAPPER_CTL, "--socket", data['socket'], "--shutdown"]
+def stop_wrapper(data, options):
+	stop = [options.xnbd_wrapper_ctl, "--socket", data['socket'], "--shutdown"]
 	call(stop, "Shutting down all xnbd shares ...")
 
-def print_status(data):
-	status = [XNBD_WRAPPER_CTL, "--socket", data['socket'], "-l"]
+def orphan_wrapper(data, options):
+	wrapper_socket = data.get(WRAPPER_SOCKET_KEY, DEFAULT_SOCKET)
+
+	orphan = [options.xnbd_wrapper_ctl, "--socket", wrapper_socket, "--orphan"]
+	call(orphan, "Terminating xnbd-wrapper process, keeping xnbd-server processes alive ...")
+
+def print_status(data, options):
+	status = [options.xnbd_wrapper_ctl, "--socket", data['socket'], "-l"]
 	call(status, "")
+
+def wrapper_is_running(data, options):
+	command = [options.xnbd_wrapper_ctl, "--socket", data['socket'], "-l"]
+	return 0 == call(command, 'Checking for running xnbd-wrapper ...', silence=True, fatal=False)
 
 
 parser = argparse.ArgumentParser(description='xNBD helper to (un)register xNBD devices')
-parser.add_argument('-s', '--start', action='store_true', help='mount configured xNBD client connections and start configured xNBD wrapper')
-parser.add_argument('-r', '--restart', action='store_true', help='(re-)mount configured xNBD client connections and (re-)start configured xNBD wrapper')
-parser.add_argument('-t', '--stop', action='store_true', help='unmount configured xNBD client connections and stop configured xNBD wrapper')
-parser.add_argument('-a', '--status', action='store_true', help='show xNBD wrapper status')
+
+commands = parser.add_argument_group('commands').add_mutually_exclusive_group(required=True)
+commands.add_argument('--start', '-s', action='store_true', help='mount configured xNBD client connections and start configured xNBD wrapper')
+commands.add_argument('--stop', '-t', action='store_true', help='unmount configured xNBD client connections and stop configured xNBD wrapper')
+commands.add_argument('--reload', action='store_true', help='save xnbd-wrapper state to disk, terminate the xnbd-wrapper process, start a new instance, load state back into the running instance')
+commands.add_argument('--restart', '-r', action='store_true', help='(re-)mount configured xNBD client connections and (re-)start configured xNBD wrapper')
+commands.add_argument('--status', '-a', action='store_true', help='show xNBD wrapper status')
+
 parser.add_argument('--config', dest='config_file', default='/etc/xnbd.conf', help='config file to use (default: /etc/xnbd.conf)')
-parser.add_argument('--quiet', action='store_true', help='do not give verbose output')
+
+override = parser.add_argument_group('overriding options')
+override.add_argument('--xnbd-bgctl', metavar='COMMAND', default='xnbd-bgctl', help='xnbd-bgctl command (default: %(default)s)')
+override.add_argument('--xnbd-client', metavar='COMMAND', default='xnbd-client', help='xnbd-client command (default: %(default)s)')
+override.add_argument('--xnbd-server', metavar='COMMAND', default='xnbd-server', help='xnbd-server command (default: %(default)s)')
+override.add_argument('--xnbd-wrapper', metavar='COMMAND', default='xnbd-wrapper', help='xnbd-wrapper command (default: %(default)s)')
+override.add_argument('--xnbd-wrapper-ctl', metavar='COMMAND', default='xnbd-wrapper-ctl', help='xnbd-wrapper-ctl command (default: %(default)s)')
+
+verbosity = parser.add_mutually_exclusive_group()
+verbosity.add_argument('--quiet', action='store_true', help='suppress regular output')
+verbosity.add_argument('-v', '--verbose', dest='extra_verbose', action='store_true', help='be more verbose')
 
 args = parser.parse_args()
 
-if(args.quiet):
+if args.extra_verbose:
+	EXTRA_VERBOSE = True
+elif args.quiet:
 	VERBOSE = False
 
 try:
@@ -229,10 +271,10 @@ if (args.status):
 	if (not wrapper_configured):
 		vprint("WARNING: Wrapper socket unknown (since no wrapper is configured)")
 		sys.exit(2)
-	print_status(configuration[WRAPPER_KEY])
+	print_status(configuration[WRAPPER_KEY], args)
 	sys.exit(0)
 
-if (not args.stop and not args.restart and not args.start):
+if (not args.stop and not args.restart and not args.start and not args.reload):
 	vprint("%s: One action is required" % sys.argv[0])
 	sys.exit(1)
 
@@ -241,17 +283,25 @@ client_device_names = [k for k in configuration.keys() if k != WRAPPER_KEY]
 if (args.stop or args.restart):
 	# Stop clients first, they may be using our own wrapper
 	for instance in client_device_names:
-		stop_client(instance, configuration[instance])
+		stop_client(instance, configuration[instance], args)
 
 	if wrapper_configured:
-		stop_wrapper(configuration[WRAPPER_KEY])
+		stop_wrapper(configuration[WRAPPER_KEY], args)
 
 if (args.start or args.restart):
 	# Start wrapper frist, it may be used our own clients
 	if wrapper_configured:
-		start_wrapper(configuration[WRAPPER_KEY])
+		start_wrapper(configuration[WRAPPER_KEY], args)
 
 	for instance in client_device_names:
-		start_client(instance, configuration[instance])
+		start_client(instance, configuration[instance], args)
+
+if args.reload:
+	if wrapper_configured:
+		wrapper_config = configuration[WRAPPER_KEY]
+		if not wrapper_is_running(wrapper_config, args):
+			sys.exit(3)
+		orphan_wrapper(wrapper_config, args)
+		start_wrapper(wrapper_config, args)
 
 sys.exit(0)

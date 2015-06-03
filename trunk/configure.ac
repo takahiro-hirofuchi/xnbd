@@ -2,12 +2,16 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.67])
-AC_INIT([xNBD], [0.3.1], [t.hirofuchi@aist.go.jp], [xnbd], [https://bitbucket.org/hirofuchi/xnbd/])
+AC_INIT([xNBD], [0.3.1], [t.hirofuchi+xnbd@aist.go.jp], [xnbd], [https://bitbucket.org/hirofuchi/xnbd/])
 AM_INIT_AUTOMAKE([foreign dist-bzip2 no-dist-gzip])
 AM_SILENT_RULES([yes])
 AC_CONFIG_SRCDIR([xnbd_proxy.c])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
+
+# Prevent CFLAGS from being set to "-g -O2" automatically
+CFLAGS="${CFLAGS}"
+
 AC_USE_SYSTEM_EXTENSIONS
 LT_INIT([disable-static])
 
@@ -52,10 +56,22 @@ AC_FUNC_STRNLEN
 AC_CHECK_FUNCS([alarm dup2 ftruncate getpagesize memset munmap realpath socket strerror])
 
 # Compile flags
-AC_ARG_ENABLE([debug], AC_HELP_STRING([--enable-debug], [enable debugging [default=no]]), [
+AC_ARG_ENABLE([debug], AC_HELP_STRING([--enable-debug], [enable debugging [default=no]]), [DEBUGGING=${enableval}], [DEBUGGING=no])
+if test "${DEBUGGING}" != no ; then
 	CFLAGS+=" -g -O0"
 	CPPFLAGS+="-DXNBD_DEBUG"
-])
+fi
+
+ac_temp_opt_flag=""
+for option in $CFLAGS
+do
+	case $option in
+		-O*) ac_temp_opt_flag=$option;;
+	esac
+done
+if test x"${ac_temp_opt_flag}" = "x"; then
+	CFLAGS+="-O2"
+fi
 
 CFLAGS+=" -Wall -Wextra -Wformat=2 -Wcast-align -Wwrite-strings -Wfloat-equal -Wpointer-arith -Wswitch-enum -fstack-protector -fstack-check"
 

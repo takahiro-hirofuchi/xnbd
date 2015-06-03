@@ -16,6 +16,8 @@ SYNOPSIS
 
 *xnbd-register* ['OPTIONS'] --stop
 
+*xnbd-register* ['OPTIONS'] --reload
+
 *xnbd-register* ['OPTIONS'] --restart
 
 *xnbd-register* ['OPTIONS'] --status
@@ -50,6 +52,10 @@ The following options are supported:
     Analogous to the start option, the stop argument will stop all xnbd
     connection, being client or wrapper instances.
 
+*--reload*::
+    Save xnbd-wrapper state to disk, terminate the xnbd-wrapper process,
+    start a new instance, load state back into the running instance
+
 *--restart*::
     Restart all xnbd instances, being client or wrapper
 
@@ -57,7 +63,25 @@ The following options are supported:
     Config file to use.  Defaults to /etc/xnbd.conf.
 
 *--quiet*::
-    Do not produce verbose output
+    Suppress regular output
+
+*--verbose*|*-v*::
+    Be more verbose
+
+*--xnbd-bgctl* 'COMMAND'::
+    Override xnbd-bgctl command
+
+*--xnbd-client* 'COMMAND'::
+    Override xnbd-client command
+
+*--xnbd-server* 'COMMAND'::
+    Override xnbd-server command
+
+*--xnbd-wrapper* 'COMMAND'::
+    Override xnbd-wrapper command
+
+*--xnbd-wrapper-ctl* 'COMMAND'::
+    Override xnbd-wrapper-ctl command
 
 
 CONFIGURATION FILE
@@ -87,6 +111,14 @@ Similarly, a wrapper instance configures an xnbd-wrapper. Valid options are:
 *address*::
     Specifies the listening address
 
+*max_buf_size*::
+    Specifies the maximum internal buffer size in bytes (per xnbd-server process).
+    See *xnbd-server(8)* for details.
+
+*max_queue_size*::
+    Specifies the maximum queue size in bytes (per xnbd-server process).
+    See *xnbd-server(8)* for details.
+
 *port*::
     Specifies the listening port
 
@@ -96,9 +128,8 @@ Similarly, a wrapper instance configures an xnbd-wrapper. Valid options are:
 *logpath*::
     Specifies the log path where logging output is being redirected to
 
-*volumes*::
-    A mapping of volumes which are exported.
-    Mapping keys are export names, mapping values are disk image paths.
+*dbpath*::
+    Specifies the path to the image database file to read and write
 
 ---------------------------
 "wrapper": {
@@ -106,11 +137,9 @@ Similarly, a wrapper instance configures an xnbd-wrapper. Valid options are:
     "port": 8520,
     "socket": "/var/run/xnbd.ctl",
     "logpath": "/var/log/xnbd.log",
-    "volumes": {
-        "one": "/dev/volume",
-        "two": "/dev/sdb1",
-        "three": "/var/lib/image.file",
-    }
+    "dbpath": "/var/lib/xnbd/xnbd.state",
+    "max_queue_size": 2000,
+    "max_buf_size": 104857600
 }
 ---------------------------
 

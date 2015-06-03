@@ -142,7 +142,7 @@ The following positional options are supported:
 
 SEE ALSO
 --------
-xnbd-wrapper(1), xnbd-server(8), xnbd-bgctl(1), signal(7)
+xnbd-wrapper-load(8), xnbd-wrapper(1), xnbd-server(8), xnbd-bgctl(1), signal(7)
 
 
 AUTHOR

@@ -108,12 +108,14 @@ The following options are supported:
 
 *--dbpath* 'PATH'::
     Use 'PATH' for persisting database state,
-    defaults to /var/lib/xnbd/state.json.
+    defaults to /var/lib/xnbd/xnbd.state.
+    For documentation of the database file format, please see
+    *xnbd-wrapper-load(8)*.
 
 
 SEE ALSO
 --------
-xnbd-client(1), xnbd-server(8), xnbd-wrapper-ctl(8)
+xnbd-client(1), xnbd-server(8), xnbd-wrapper-ctl(8), xnbd-wrapper-load(8)
 
 
 AUTHOR
