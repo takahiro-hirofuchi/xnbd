@@ -75,7 +75,7 @@ typedef struct _t_disk_data {
 } t_disk_data;
 
 typedef struct _t_thread_data {
-	int unix_sock_fd;
+	int conn_uxsock;
 	const char * xnbd_bgctl_command;
 	const char * database_file_name;
 	int * p_child_process_count;
@@ -1153,12 +1153,7 @@ static void *start_filemgr_thread(void * pointer)
 	char arg[rbufsize];
 	int ret;
 
-	int conn_uxsock = accept(p_thread_data->unix_sock_fd, NULL, NULL);
-	if (conn_uxsock == -1) {
-		warn("accept(AF_UNIX): %m");
-		pthread_exit(NULL);
-	}
-	FILE *fp = fdopen(conn_uxsock, "r+");
+	FILE *fp = fdopen(p_thread_data->conn_uxsock, "r+");
 	if (count_mgr_threads(1) <= MAX_CTL_CONNS) {
 		fprintf(fp, "\"help\" command displays help for other commands\n");
 		for(;;) {
@@ -1358,7 +1353,7 @@ static void *start_filemgr_thread(void * pointer)
 		fflush(fp);
 	}
 	fclose(fp);
-	close(conn_uxsock);
+	close(p_thread_data->conn_uxsock);
 	count_mgr_threads(-1);
 
 	g_free(p_thread_data);
@@ -1878,11 +1873,17 @@ int main(int argc, char **argv) {
 				}
 			} else if (ep_events[c_ev].data.fd == ux_sockfd) {
 				/* unix socket */
+				const int conn_uxsock = accept(ux_sockfd, NULL, NULL);
+				if (conn_uxsock == -1) {
+					warn("accept(AF_UNIX): %m");
+					continue;
+				}
+
 				t_thread_data * const p_thread_data = g_try_new(t_thread_data, 1);
 				if (! p_thread_data) {
 					warn("Could not start thread: %s", MESSAGE_ENOMEM);
 				} else {
-					p_thread_data->unix_sock_fd = ux_sockfd;
+					p_thread_data->conn_uxsock = conn_uxsock;
 					p_thread_data->xnbd_bgctl_command = xnbd_bgctl_command;
 					p_thread_data->database_file_name = dbpath;
 					p_thread_data->p_child_process_count = &child_process_count;
