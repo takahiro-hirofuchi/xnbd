@@ -172,16 +172,26 @@ int target_mode_main_mmap(struct xnbd_session *ses)
 
 	dbg("direct mode");
 
-	struct mmap_region *mpinfo = mmap_region_create(xnbd->target_diskfd, iofrom, iolen, xnbd->readonly);
-
 	switch (iotype) {
 		case NBD_CMD_WRITE:
 			dbg("disk write iofrom %ju iolen %zu", iofrom, iolen);
 
-			net_recv_all_or_abort(csock, mpinfo->iobuf, iolen);
-			net_send_all_or_abort(csock, &reply, sizeof(reply));
+			{
+				struct mmap_region *mpinfo = mmap_region_create(xnbd->target_diskfd, iofrom, iolen, xnbd->readonly);
 
-			/* call mmap_region_msync(mpinfo) if writeout is necessary now */
+				int ret = net_recv_all_or_error(csock, mpinfo->iobuf, iolen);
+				if (ret < 0) {
+					if (errno == EIO)
+						reply.error = htonl(EIO);
+					else
+						err("CMD_WRITE: fatal error %m");
+				}
+
+				net_send_all_or_abort(csock, &reply, sizeof(reply));
+
+				/* call mmap_region_msync(mpinfo) if writeout is necessary now */
+				mmap_region_free(mpinfo);
+			}
 			break;
 
 		case NBD_CMD_READ:
@@ -192,21 +202,43 @@ int target_mode_main_mmap(struct xnbd_session *ses)
 				memset(&iov, 0, sizeof(iov));
 				iov[0].iov_base = &reply;
 				iov[0].iov_len  = sizeof(reply);
-				iov[1].iov_base = mpinfo->iobuf;
-				iov[1].iov_len  = iolen;
 
-				net_writev_all_or_abort(csock, iov, 2);
+
+				int ret = lseek(xnbd->target_diskfd, iofrom, SEEK_SET);
+				if (ret < 0) {
+					/* We already confirmed the request
+					 * never exceeds the end of the file.
+					 * This lseek should never return an
+					 * error. */
+					err("CMD_READ: lseek %m");
+				}
+
+				/* We expect a client never sends insane iolen.
+				 * In such case, the server exits (i.e., disconnect). */
+				char *buf = g_malloc(iolen);
+
+				ret = net_recv_all_or_error(xnbd->target_diskfd, buf, iolen);
+				if (ret < 0) {
+					if (errno == EIO)
+						reply.error = htonl(EIO);
+					else
+						err("CMD_READ: fatal error %m");
+				}
+
+				if (reply.error == 0) {
+					iov[1].iov_base = buf;
+					iov[1].iov_len  = iolen;
+					net_writev_all_or_abort(csock, iov, 2);
+				} else
+					net_writev_all_or_abort(csock, iov, 1);
+
+				g_free(buf);
 			}
-			break;
-
 			break;
 
 		default:
 			err("unknown command in the target mode, %u (%s)", iotype, nbd_get_iotype_string(iotype));
 	}
-
-
-	mmap_region_free(mpinfo);
 
 	return 0;
 }
