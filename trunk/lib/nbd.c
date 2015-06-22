@@ -196,11 +196,11 @@ void nbd_client_send_disc_request(int remotefd)
 
 /**
  * Returning 0:  request is good.
- * Returning -1: bad request.
+ * Returning NBD_SERVER_RECV__BAD_REQUEST: bad request.
  * 		An error is notified the client by using reply.errcode.
- * Returning -2: protocol violation.
+ * Returning NBD_SERVER_RECV__MAGIC_MISMATCH: protocol violation.
  * 	 	The connection is going to be discarded.
- * Returning -3: terminate request.
+ * Returning NBD_SERVER_RECV__TERMINATE: terminate request.
  */
 int nbd_server_recv_request(int clientfd, off_t disksize, uint32_t *iotype_arg, off_t *iofrom_arg,
 		size_t *iolen_arg, struct nbd_reply *reply)
@@ -219,7 +219,7 @@ int nbd_server_recv_request(int clientfd, off_t disksize, uint32_t *iotype_arg, 
 	// if (check_fin(ret, errno, sizeof(request))) {
 	if (ret < 0) {
 		warn("recv_request: peer closed or error");
-		return -3;
+		return NBD_SERVER_RECV__TERMINATE;
 	}
 
 	magic  = ntohl(request.magic);
@@ -229,7 +229,7 @@ int nbd_server_recv_request(int clientfd, off_t disksize, uint32_t *iotype_arg, 
 
 	if (iotype == NBD_CMD_DISC) {
 		info("recv_request: disconnect request");
-		return -3;
+		return NBD_SERVER_RECV__TERMINATE;
 	}
 
 	/* protocol violation */
@@ -237,7 +237,7 @@ int nbd_server_recv_request(int clientfd, off_t disksize, uint32_t *iotype_arg, 
 		warn("recv_request: magic mismatch, %u %u", magic, NBD_REQUEST_MAGIC);
 		nbd_request_dump(&request);
 		dump_buffer((char *) &request, sizeof(request));
-		return -2;
+		return NBD_SERVER_RECV__MAGIC_MISMATCH;
 	}
 
 	dbg("%s from %ju (%ju) len %u, ", nbd_get_iotype_string(iotype), iofrom, iofrom / 512U, iolen);
@@ -257,7 +257,7 @@ int nbd_server_recv_request(int clientfd, off_t disksize, uint32_t *iotype_arg, 
 		warn("error offset exceeds the end of disk, offset %ju (iofrom %ju + iolen %u) disksize %jd",
 				(iofrom + iolen), iofrom, iolen, disksize);
 		reply->error = htonl(EINVAL);
-		return -1;
+		return NBD_SERVER_RECV__BAD_REQUEST;
 	}
 
 	*iotype_arg = iotype;

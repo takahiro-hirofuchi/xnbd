@@ -196,17 +196,17 @@ int recv_request(struct proxy_session *ps)
 		goto err_handle;
 
 	ret = nbd_server_recv_request(nbd_client_fd, proxy->xnbd->disksize, &iotype, &iofrom, &iolen, &priv->reply);
-	if (ret == -1) {
+	if (ret == NBD_SERVER_RECV__BAD_REQUEST) {
 		/*
 		 * A request with an invalid offset was received. The proxy
 		 * server terminates this connection. This behavior is
 		 * different from the original NBD server.
 		 */
 		goto err_handle;
-	} else if (ret == -2) {
+	} else if (ret == NBD_SERVER_RECV__MAGIC_MISMATCH) {
 		warn("client bug: invalid header");
 		goto err_handle;
-	} else if (ret == -3) {
+	} else if (ret == NBD_SERVER_RECV__TERMINATE) {
 		goto err_handle;
 	}
 

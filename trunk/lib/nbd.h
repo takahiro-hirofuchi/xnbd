@@ -94,6 +94,10 @@ void nbd_request_dump(struct nbd_request *request);
 void nbd_reply_dump(struct nbd_reply *reply);
 
 
+#define NBD_SERVER_RECV__BAD_REQUEST     (-1)
+#define NBD_SERVER_RECV__MAGIC_MISMATCH  (-2)
+#define NBD_SERVER_RECV__TERMINATE       (-3)
+
 int  nbd_server_recv_request(int clientfd, off_t disksize, uint32_t *iotype_arg, off_t *iofrom_arg,
 		size_t *iolen_arg, struct nbd_reply *reply);
 

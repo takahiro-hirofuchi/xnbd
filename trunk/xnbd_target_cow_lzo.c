@@ -809,12 +809,12 @@ int target_mode_main_cow(struct xnbd_session *ses)
 		return -1;
 
 	ret = nbd_server_recv_request(csock, xnbd->disksize, &iotype, &iofrom, &iolen, &reply);
-	if (ret == -1) {
+	if (ret == NBD_SERVER_RECV__BAD_REQUEST) {
 		net_send_all_or_abort(csock, &reply, sizeof(reply));
 		return 0;
-	} else if (ret == -2)
+	} else if (ret == NBD_SERVER_RECV__MAGIC_MISMATCH)
 		err("client bug: invalid header");
-	else if (ret == -3)
+	else if (ret == NBD_SERVER_RECV__TERMINATE)
 		return ret;
 
 
