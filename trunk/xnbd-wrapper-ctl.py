@@ -59,18 +59,22 @@ class XNBDWrapperCtl:
         self.sock.recv(4096)  # drop unnecessary message
 
     def _read_response(self):
-        buf = ""
+        response = ""
         while True:
             try:
-                buf += self.sock.recv(4096)
+                buf = self.sock.recv(4096)
+                response += buf
+                if buf == "":
+                    print("Connection closed", file=sys.stderr)
+                    break
             except:
                 sys.stderr.write(sys.exc_info()[1])
                 break
 
-            if re.search(self.pattern, buf, re.S):
+            if re.search(self.pattern, response, re.S):
                 break
 
-        return re.sub("\(xnbd\) ", "", buf)
+        return re.sub("\(xnbd\) ", "", response)
 
     def send_cmd(self, cmd):
         self.sock.send(cmd + "\n")
