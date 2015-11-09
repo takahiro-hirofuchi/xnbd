@@ -26,10 +26,10 @@
 
 static void nbddev_watchdog_sigalarm_handler(int signum)
 {
-	info("sig: signal catched, code %d (%s)", signum, sys_siglist[signum]);
+	info("sig: signal catched, code %d (%s)", signum, strsignal(signum));
 
 	if (signum != SIGALRM)
-		warn("unexpected signal, code %d (%s)", signum, sys_siglist[signum]);
+		warn("unexpected signal, code %d (%s)", signum, strsignal(signum));
 }
 
 /* string is dummy */
