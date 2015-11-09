@@ -181,7 +181,7 @@ static volatile sig_atomic_t need_exit = 0;
 
 static void signal_handler(int signum)
 {
-	dbg("sig: signal catched, code %d (%s)", signum, sys_siglist[signum]);
+	dbg("sig: signal catched, code %d (%s)", signum, strsignal(signum));
 
 	if (signum == SIGCHLD)
 		got_sigchld = 1;
@@ -495,7 +495,7 @@ int master_server(int port, void *data, int connect_fd)
 					info("   with exit status=%d", WEXITSTATUS(status));
 
 				if (WIFSIGNALED(status))
-					info("   killed by signal=%d(%s)", WTERMSIG(status), sys_siglist[WTERMSIG(status)]);
+					info("   killed by signal=%d(%s)", WTERMSIG(status), strsignal(WTERMSIG(status)));
 			}
 
 			const bool single_client_at_most = (connect_fd != -1);
