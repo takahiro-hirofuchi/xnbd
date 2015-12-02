@@ -204,13 +204,13 @@ int target_mode_main_mmap(struct xnbd_session *ses)
 				iov[0].iov_len  = sizeof(reply);
 
 
-				int ret = lseek(xnbd->target_diskfd, iofrom, SEEK_SET);
+				off_t ret = lseek(xnbd->target_diskfd, iofrom, SEEK_SET);
 				if (ret < 0) {
 					/* We already confirmed the request
 					 * never exceeds the end of the file.
 					 * This lseek should never return an
 					 * error. */
-					err("CMD_READ: lseek %m");
+					err("CMD_READ: lseek (fd %d, iofrom %jd), %jd %m", xnbd->target_diskfd, iofrom, ret);
 				}
 
 				/* We expect a client never sends insane iolen.
