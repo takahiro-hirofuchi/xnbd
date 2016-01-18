@@ -29,6 +29,8 @@ Bugfixes
      (issue #11)
  * xnbd-wrapper: Fix crash from Unix socket piling up dead threads
  * configure: Fix explicit `--disable-debug`
+ * Fix compile errors on musl
+ * Fix the contact address
 
 Improvements
 ~~~~~~~~~~~~
