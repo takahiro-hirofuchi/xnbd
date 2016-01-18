@@ -3,4 +3,4 @@ Pavel Macheck (pavel@ucw.cz) and is now maintained by
 Paul Clements (Paul.Clements@steeleye.com).
 
 The xNBD userland programs have been written by
-Takahiro Hirofuchi (t.hirofuchi+xnbd@aist.go.jp).
+Takahiro Hirofuchi (t.hirofuchi@aist.go.jp).
