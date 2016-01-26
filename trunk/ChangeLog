@@ -47,6 +47,7 @@ Improvements
  * xnbd-server: Remove the limitation that the cache block size should be a
      multiple of 4096.  Now support any disk size that is a power of 2.
  * xnbd-server: Skip ftruncate() when a local cache image is larger than a remote one.
+ * xnbd-server (and xnbd-client): Add support for the flush command
  * xnbd-register: Make `--start/stop/restart/status` mutually exclusive
  * xnbd-register: Add `--reload` command
  * xnbd-register: Add `--verbose` switch
