@@ -29,7 +29,9 @@ const char *nbd_get_iotype_string(uint32_t iotype)
 		"NBD_CMD_READ",
 		"NBD_CMD_WRITE",
 		"NBD_CMD_DISC",
-		"NBD_CMD_BGCOPY",
+		"NBD_CMD_FLUSH",
+		"NBD_CMD_TRIM",
+		"NBD_CMD_CACHE",
 		"NBD_CMD_READ_COMPRESS",
 		"NBD_CMD_READ_COMPRESS_LZO",
 		"NBD_CMD_UNDEFINED"
