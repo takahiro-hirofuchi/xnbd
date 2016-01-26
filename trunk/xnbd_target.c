@@ -236,6 +236,24 @@ int target_mode_main_mmap(struct xnbd_session *ses)
 			}
 			break;
 
+		case NBD_CMD_FLUSH:
+			dbg("disk flush");
+
+			{
+				ret = fsync(xnbd->target_diskfd);
+				if (ret < 0) {
+					warn("CMD_FLUSH: fsync failed, %m");
+					if (errno == EIO) {
+						/* underlying disk might be broken */
+						reply.error = htonl(EIO);
+					} else
+						err("CMD_FLUSH: fatal error %m");
+				}
+
+				net_send_all_or_abort(csock, &reply, sizeof(reply));
+			}
+			break;
+
 		default:
 			err("unknown command in the target mode, %u (%s)", iotype, nbd_get_iotype_string(iotype));
 	}
