@@ -39,6 +39,7 @@
 #define NBD_SET_SIZE_BLOCKS     _IO( 0xab, 7 )
 #define NBD_DISCONNECT  _IO( 0xab, 8 )
 #define NBD_SET_TIMEOUT _IO( 0xab, 9 )
+#define NBD_SET_FLAGS   _IO( 0xab, 10)
 
 /* /usr/include/linux/fs.h: */
 #define BLKROSET   _IO(0x12,93) /* set device read-only (0 = read-write) */
@@ -412,6 +413,13 @@ static int xnbd_setup_client(const char *devpath, unsigned long blocksize, unsig
 
 	if (flags & NBD_FLAG_READ_ONLY)
 		nbddev_set_readonly(nbd);
+
+	if (flags & NBD_FLAG_HAS_FLAGS) {
+		info("applying flags 0x%x as proposed by the server", flags);
+		if (ioctl(nbd, NBD_SET_FLAGS, flags)) {
+			err("ioctl NBD_SET_FLAGS %s, ret %d, %m", devpath, nbd);
+		}
+	}
 
 	nbddev_set_timeout(nbd, timeout);
 
