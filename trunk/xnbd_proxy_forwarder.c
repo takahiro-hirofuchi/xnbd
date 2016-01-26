@@ -312,7 +312,7 @@ int forwarder_rx_thread_mainloop(struct xnbd_proxy *proxy)
 		return -1;
 
 	if (priv->need_exit)
-		goto got_stop_session;
+		goto hand_to_tx_queue;
 
 
 	struct mmap_block_region *mbr = mmap_block_region_create(proxy->cachefd, proxy->xnbd->disksize, priv->iofrom, priv->iolen, 0);
@@ -363,7 +363,35 @@ int forwarder_rx_thread_mainloop(struct xnbd_proxy *proxy)
 		} else if (priv->iotype == NBD_CMD_CACHE) {
 			/* NBD_CMD_CACHE does not do nothing here */
 			;
-		}
+
+		} else if (priv->iotype == NBD_CMD_FLUSH) {
+			dbg("disk flush");
+			/* FLUSH ensure that the data of all the blocks is
+			 * written out to the physical storage. If all the
+			 * blocks are already cached, the FLUSH command works
+			 * as intended.
+			 *
+			 * If some blocks are not yet cached, FLUSH cannot
+			 * ensure that the data of all the blocks is written
+			 * out to the physical storage of the proxy server. It
+			 * only ensures that the data of already-cached blocks
+			 * is written out.
+			 *
+			 * We can consider this behavior is okay because the
+			 * data of not-yet-cached blocks exit in the remote
+			 * server. Even if the proxy sever crashes before all
+			 * the blocks are cached, we will be able to recover
+			 * the disk data from the local and remote storage, in
+			 * theory.
+			 **/
+			ret = fsync(proxy->cachefd);
+			if (ret < 0)
+				err("fsync %m");
+
+			bitmap_sync_file(proxy->cbitmap, proxy->cbitmaplen);
+
+		} else
+			err("bug");
 	}
 
 	mmap_block_region_free(mbr);
@@ -374,7 +402,7 @@ int forwarder_rx_thread_mainloop(struct xnbd_proxy *proxy)
 		return 0;
 	}
 
-got_stop_session:
+hand_to_tx_queue:
 	/* do not touch priv after enqueue */
 	dbg("seqnum %lu", priv->seqnum);
 	g_async_queue_push(priv->tx_queue, priv);
