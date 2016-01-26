@@ -254,7 +254,7 @@ int recv_request(struct proxy_session *ps)
 	} else if (iotype == NBD_CMD_READ) {
 		priv->read_buff = g_malloc(iolen);
 
-	} else if (iotype == NBD_CMD_CACHE) {
+	} else if (iotype == NBD_CMD_CACHE || iotype == NBD_CMD_FLUSH) {
 		/* do nothing here */
 		;
 
