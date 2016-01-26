@@ -251,7 +251,7 @@ void *forwarder_tx_thread_main(void *arg)
 		if (!priv->prepare_done) {
 			if (priv->iotype == NBD_CMD_WRITE)
 				prepare_write_priv(proxy, priv);
-			else if (priv->iotype == NBD_CMD_READ || priv->iotype == NBD_CMD_BGCOPY)
+			else if (priv->iotype == NBD_CMD_READ || priv->iotype == NBD_CMD_CACHE)
 				prepare_read_priv(proxy, priv);
 
 			priv->seqnum = fwd_counter;
@@ -360,8 +360,8 @@ int forwarder_rx_thread_mainloop(struct xnbd_proxy *proxy)
 
 			/* Do not mark cbitmap here. */
 
-		} else if (priv->iotype == NBD_CMD_BGCOPY) {
-			/* NBD_CMD_BGCOPY does not do nothing here */
+		} else if (priv->iotype == NBD_CMD_CACHE) {
+			/* NBD_CMD_CACHE does not do nothing here */
 			;
 		}
 	}

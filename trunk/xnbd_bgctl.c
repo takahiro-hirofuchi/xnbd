@@ -554,7 +554,7 @@ void cache_all_blocks_async(char *unix_path, unsigned long *bm, off_t disksize, 
 				size_t iolen = (off_t)(after_last - first) * CBLOCKSIZE;
 				iolen = confine_iolen_within_disk(disksize, iofrom, iolen);
 
-				int ret = nbd_client_send_request_header(ctl_fd, NBD_CMD_BGCOPY, iofrom, iolen, (UINT64_MAX));
+				int ret = nbd_client_send_request_header(ctl_fd, NBD_CMD_CACHE, iofrom, iolen, (UINT64_MAX));
 				if (ret < 0) {
 					err("send_read_request, %m");
 				}

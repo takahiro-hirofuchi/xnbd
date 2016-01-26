@@ -14,6 +14,11 @@ xNBD Change Log
 0.3.1
 -----
 
+Protocol changes
+~~~~~~~~~~~~~~~~
+ * NBD_CMD_BGCOPY (value 3) has been turned into NBD_CMD_CACHE (value 5)
+   to get back in sync with the original NBD server and NBD in kernel
+
 Bugfixes
 ~~~~~~~~
  * xnbd-bgctl: Do not show misleading "100.0%" before all blocks are cached.
