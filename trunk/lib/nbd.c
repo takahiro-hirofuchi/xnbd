@@ -227,17 +227,17 @@ int nbd_server_recv_request(int clientfd, off_t disksize, uint32_t *iotype_arg, 
 	iofrom = ntohll(request.from);
 	iolen  = ntohl(request.len);
 
-	if (iotype == NBD_CMD_DISC) {
-		info("recv_request: disconnect request");
-		return NBD_SERVER_RECV__TERMINATE;
-	}
-
 	/* protocol violation */
 	if (magic != NBD_REQUEST_MAGIC) {
 		warn("recv_request: magic mismatch, %u %u", magic, NBD_REQUEST_MAGIC);
 		nbd_request_dump(&request);
 		dump_buffer((char *) &request, sizeof(request));
 		return NBD_SERVER_RECV__MAGIC_MISMATCH;
+	}
+
+	if (iotype == NBD_CMD_DISC) {
+		info("recv_request: disconnect request");
+		return NBD_SERVER_RECV__TERMINATE;
 	}
 
 	dbg("%s from %ju (%ju) len %u, ", nbd_get_iotype_string(iotype), iofrom, iofrom / 512U, iolen);
