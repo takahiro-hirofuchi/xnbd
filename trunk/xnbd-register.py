@@ -286,7 +286,7 @@ if (args.stop or args.restart):
 	for instance in client_device_names:
 		stop_client(instance, configuration[instance], args)
 
-	if wrapper_configured:
+	if wrapper_configured and wrapper_is_running(configuration[WRAPPER_KEY], args):
 		stop_wrapper(configuration[WRAPPER_KEY], args)
 		time.sleep(1)
 

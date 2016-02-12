@@ -34,6 +34,8 @@ Bugfixes
      (issue #11)
  * xnbd-register: Give xnbd-wrapper some time to shut down before returning
  * xnbd-wrapper: Fix crash from Unix socket piling up dead threads
+ * xnbd-wrapper: Suppress failure to stop xnbd-wrapper if it is not running.
+     This affects --restart as well.  Context is LSB init script compliance.
  * configure: Fix explicit `--disable-debug`
  * Fix compile errors on musl
  * Fix the contact address
