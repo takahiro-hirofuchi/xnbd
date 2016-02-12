@@ -520,6 +520,23 @@ static int xnbd_setup_client(const char *devpath, unsigned long blocksize, unsig
 }
 
 
+static void flush_device(const char * pathname) {
+	const int fd = open(pathname, O_WRONLY);
+	if (fd < 0) {
+		err("failed to open \"%s\": %m", pathname);
+	}
+
+	const int fsync_res = fsync(fd);
+	if (fsync_res < 0) {
+		err("failed to flush \"%s\": %m", pathname);
+	}
+
+	close(fd);
+
+	info("flushed \"%s\" successfully", pathname);
+}
+
+
 #include <getopt.h>
 
 static struct option longopts[] = {
@@ -528,6 +545,7 @@ static struct option longopts[] = {
 	{"check",	required_argument, NULL, 'c'},
 	{"help", 	no_argument, NULL, 'h'},
 	{"getsize64", no_argument, NULL, 's'},
+	{"flush", required_argument, NULL, 'f'},
 	/* insert new commands here to keep longopts[cmd].name further down working */
 
 	{"timeout",	required_argument, NULL, 't'},
@@ -546,8 +564,8 @@ enum {
 	cmd_check,
 	cmd_help,
 	cmd_getsize64,
+	cmd_flush,
 } cmd = cmd_unknown;
-
 
 
 static const char *help_string = "\
@@ -562,6 +580,9 @@ Usage: \n\
 \n\
   xnbd-client --check nbd_device \n\
   xnbd-client -c nbd_device \n\
+\n\
+  xnbd-client --flush nbd_device \n\
+  xnbd-client -f nbd_device \n\
 \n\
   xnbd-client --getsize64 [options] host port [host port] ... \n\
 \n\
@@ -633,6 +654,14 @@ int main(int argc, char *argv[]) {
 					show_help_and_exit("specify one mode");
 
 				cmd = cmd_check;
+				devpath = optarg;
+				break;
+
+			case 'f':
+				if (cmd != cmd_unknown)
+					show_help_and_exit("specify one mode");
+
+				cmd = cmd_flush;
 				devpath = optarg;
 				break;
 
@@ -771,6 +800,11 @@ int main(int argc, char *argv[]) {
 
 		case cmd_help:
 			show_help_and_exit(NULL);
+			break;
+
+		case cmd_flush:
+			flush_device(devpath);
+			exit(EXIT_SUCCESS);
 			break;
 
 		case cmd_unknown:

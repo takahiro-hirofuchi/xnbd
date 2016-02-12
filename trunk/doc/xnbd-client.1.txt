@@ -20,6 +20,8 @@ SYNOPSIS
 
 *xnbd-client* --check 'NBD-DEVICE'
 
+*xnbd-client* --flush 'NBD-DEVICE'
+
 *xnbd-client* ['OPTIONS'] --getsize64 'HOST' 'PORT' ['HOST' 'PORT' ..]
 
 
@@ -70,6 +72,9 @@ The following options are supported:
 *--disconnect*|*-d*::
     Disconnect the specified nbd device from the server. Terminates
     execution with an exit state of 0 on success.
+
+*--flush*|*-f*::
+    Flush the specified NBD device using `fsync(2)`.
 
 *--getsize64*::
     Report remote disk size in bytes, mimicking blockdev(8).
