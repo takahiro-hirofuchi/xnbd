@@ -27,6 +27,7 @@ import sys
 import subprocess
 import json
 import re
+import time
 
 
 VERBOSE = True
@@ -287,6 +288,7 @@ if (args.stop or args.restart):
 
 	if wrapper_configured:
 		stop_wrapper(configuration[WRAPPER_KEY], args)
+		time.sleep(1)
 
 if (args.start or args.restart):
 	# Start wrapper frist, it may be used our own clients

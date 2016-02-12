@@ -32,6 +32,7 @@ Bugfixes
  * xnbd-register: Wrapper options "max_buf_size" and "max_queue_size" were
      required rather than optional; a mis-leading error message made things worse
      (issue #11)
+ * xnbd-register: Give xnbd-wrapper some time to shut down before returning
  * xnbd-wrapper: Fix crash from Unix socket piling up dead threads
  * configure: Fix explicit `--disable-debug`
  * Fix compile errors on musl
