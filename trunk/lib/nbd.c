@@ -37,8 +37,9 @@ const char *nbd_get_iotype_string(uint32_t iotype)
 		"NBD_CMD_UNDEFINED"
 	};
 
+	/* UNDEFINED is one of the known commands. The others are unknown. */
 	if (iotype >= sizeof(nbd_iotype_string_table) / sizeof(nbd_iotype_string_table[0]))
-		return "NBD_CMD_UNDEFINED";
+		return "NBD_CMD_(unknown)";
 
 	return nbd_iotype_string_table[iotype];
 }

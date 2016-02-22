@@ -165,9 +165,11 @@ int target_mode_main_mmap(struct xnbd_session *ses)
 	else if (ret == NBD_SERVER_RECV__TERMINATE)
 		return ret;
 
-	if (xnbd->readonly && iotype == NBD_CMD_WRITE) {
-		/* do not read following write data */
-		err("NBD_CMD_WRITE to a readonly disk. disconnect.");
+	if (xnbd->readonly) {
+		if (iotype == NBD_CMD_WRITE || iotype == NBD_CMD_TRIM) {
+			/* do not read following write data */
+			err("%s to a readonly disk. disconnect.", nbd_get_iotype_string(iotype));
+		}
 	}
 
 	dbg("direct mode");
@@ -253,6 +255,11 @@ int target_mode_main_mmap(struct xnbd_session *ses)
 				net_send_all_or_abort(csock, &reply, sizeof(reply));
 			}
 			break;
+
+		case NBD_CMD_TRIM:
+			dbg("disk trim iofrom %ju iolen %zu", iofrom, iolen);
+
+			punch_hole(xnbd->target_diskfd, iofrom, iolen);
 
 		default:
 			err("unknown command in the target mode, %u (%s)", iotype, nbd_get_iotype_string(iotype));

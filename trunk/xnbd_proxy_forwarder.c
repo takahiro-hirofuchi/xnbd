@@ -390,6 +390,11 @@ int forwarder_rx_thread_mainloop(struct xnbd_proxy *proxy)
 
 			bitmap_sync_file(proxy->cbitmap, proxy->cbitmaplen);
 
+		} else if (priv->iotype == NBD_CMD_TRIM) {
+			/* If some blocks in the range are not yet cached, we
+			 * can mark them as cached. */
+			punch_hole(proxy->cachefd, priv->iofrom, priv->iolen);
+
 		} else
 			err("bug");
 	}
