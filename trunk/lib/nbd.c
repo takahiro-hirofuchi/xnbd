@@ -399,7 +399,7 @@ int nbd_negotiate_with_client_new_phase_1(int sockfd, off_t exportsize, int read
 	struct nbd_negotiate_pdu_new_2 pdu2;
 	memset(&pdu2, 0, sizeof(pdu2));
 
-	uint32_t flags = NBD_FLAG_HAS_FLAGS;
+	uint32_t flags = NBD_FLAG_HAS_FLAGS | NBD_FLAG_SEND_FLUSH;
 	if (readonly) {
 		info("nbd_negotiate: readonly");
 		flags |= NBD_FLAG_READ_ONLY;
@@ -519,7 +519,7 @@ static int nbd_negotiate_with_client_common(int sockfd, off_t exportsize, int re
 	struct nbd_negotiate_pdu_old pdu;
 	memset(&pdu, 0, sizeof(pdu));
 
-	uint32_t flags = NBD_FLAG_HAS_FLAGS;
+	uint32_t flags = NBD_FLAG_HAS_FLAGS | NBD_FLAG_SEND_FLUSH;
 	if (readonly) {
 		info("nbd_negotiate: readonly");
 		flags |= NBD_FLAG_READ_ONLY;

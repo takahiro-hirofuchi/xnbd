@@ -288,6 +288,7 @@ if (args.stop or args.restart):
 
 	if wrapper_configured and wrapper_is_running(configuration[WRAPPER_KEY], args):
 		stop_wrapper(configuration[WRAPPER_KEY], args)
+                # FIXME: Ideally, we should check the shutdown of the daemon somehow.
 		time.sleep(1)
 
 if (args.start or args.restart):

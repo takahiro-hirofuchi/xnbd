@@ -86,6 +86,9 @@ int nbd_negotiate_with_server_new(int sockfd, off_t *exportsize, uint32_t *expor
 
 #define NBD_FLAG_HAS_FLAGS      (1 << 0)
 #define NBD_FLAG_READ_ONLY      (1 << 1)
+#define NBD_FLAG_SEND_FLUSH     (1 << 2)
+/* skip _SEND_FUA and _ROTATIONAL */
+#define NBD_FLAG_SEND_TRIM      (1 << 5)
 
 
 
