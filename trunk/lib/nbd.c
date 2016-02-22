@@ -29,7 +29,9 @@ const char *nbd_get_iotype_string(uint32_t iotype)
 		"NBD_CMD_READ",
 		"NBD_CMD_WRITE",
 		"NBD_CMD_DISC",
-		"NBD_CMD_BGCOPY",
+		"NBD_CMD_FLUSH",
+		"NBD_CMD_TRIM",
+		"NBD_CMD_CACHE",
 		"NBD_CMD_READ_COMPRESS",
 		"NBD_CMD_READ_COMPRESS_LZO",
 		"NBD_CMD_UNDEFINED"
@@ -215,8 +217,6 @@ int nbd_server_recv_request(int clientfd, off_t disksize, uint32_t *iotype_arg, 
 	memset(&request, 0, sizeof(request));
 
 	ret = net_recv_all_or_error(clientfd, &request, sizeof(request));
-	// ret = net_recv_all(clientfd, &request, sizeof(request));
-	// if (check_fin(ret, errno, sizeof(request))) {
 	if (ret < 0) {
 		warn("recv_request: peer closed or error");
 		return NBD_SERVER_RECV__TERMINATE;
@@ -227,11 +227,6 @@ int nbd_server_recv_request(int clientfd, off_t disksize, uint32_t *iotype_arg, 
 	iofrom = ntohll(request.from);
 	iolen  = ntohl(request.len);
 
-	if (iotype == NBD_CMD_DISC) {
-		info("recv_request: disconnect request");
-		return NBD_SERVER_RECV__TERMINATE;
-	}
-
 	/* protocol violation */
 	if (magic != NBD_REQUEST_MAGIC) {
 		warn("recv_request: magic mismatch, %u %u", magic, NBD_REQUEST_MAGIC);
@@ -241,6 +236,12 @@ int nbd_server_recv_request(int clientfd, off_t disksize, uint32_t *iotype_arg, 
 	}
 
 	dbg("%s from %ju (%ju) len %u, ", nbd_get_iotype_string(iotype), iofrom, iofrom / 512U, iolen);
+
+	if (iotype == NBD_CMD_DISC) {
+		info("recv_request: disconnect request");
+		return NBD_SERVER_RECV__TERMINATE;
+	}
+
 
 	/* do not touch the handle value at the server side */
 	reply->handle = request.handle;
@@ -253,12 +254,21 @@ int nbd_server_recv_request(int clientfd, off_t disksize, uint32_t *iotype_arg, 
 	 **/
 
 	/* bad request */
+	if (iotype == NBD_CMD_FLUSH) {
+		if (!(iofrom == 0 && iolen == 0)) {
+			warn("recv_request: length and offset must be zero for NBD_CMD_FLUSH");
+			reply->error = htonl(EINVAL);
+			return NBD_SERVER_RECV__BAD_REQUEST;
+		}
+	}
+
 	if ((iofrom + iolen) > (uint64_t) disksize) {
 		warn("error offset exceeds the end of disk, offset %ju (iofrom %ju + iolen %u) disksize %jd",
 				(iofrom + iolen), iofrom, iolen, disksize);
 		reply->error = htonl(EINVAL);
 		return NBD_SERVER_RECV__BAD_REQUEST;
 	}
+
 
 	*iotype_arg = iotype;
 	*iofrom_arg = iofrom;  /* disksize is off_t, so checked already */

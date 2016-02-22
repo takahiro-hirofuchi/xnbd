@@ -70,7 +70,7 @@ void xnbd_proxy_control_cache_block(int ctl_fd, off_t disksize, unsigned long in
 	size_t iolen = nblocks * CBLOCKSIZE;
 	iolen = confine_iolen_within_disk(disksize, iofrom, iolen);
 
-	ret = nbd_client_send_request_header(ctl_fd, NBD_CMD_BGCOPY, iofrom, iolen, UINT64_MAX);
+	ret = nbd_client_send_request_header(ctl_fd, NBD_CMD_CACHE, iofrom, iolen, UINT64_MAX);
 	if (ret < 0)
 		err("send_read_request, %m");
 
@@ -254,7 +254,7 @@ int recv_request(struct proxy_session *ps)
 	} else if (iotype == NBD_CMD_READ) {
 		priv->read_buff = g_malloc(iolen);
 
-	} else if (iotype == NBD_CMD_BGCOPY) {
+	} else if (iotype == NBD_CMD_CACHE || iotype == NBD_CMD_FLUSH) {
 		/* do nothing here */
 		;
 

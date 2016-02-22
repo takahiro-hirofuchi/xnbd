@@ -14,6 +14,11 @@ xNBD Change Log
 0.3.1
 -----
 
+Protocol changes
+~~~~~~~~~~~~~~~~
+ * NBD_CMD_BGCOPY (value 3) has been turned into NBD_CMD_CACHE (value 5)
+   to get back in sync with the original NBD server and NBD in kernel
+
 Bugfixes
 ~~~~~~~~
  * xnbd-bgctl: Do not show misleading "100.0%" before all blocks are cached.
@@ -27,7 +32,10 @@ Bugfixes
  * xnbd-register: Wrapper options "max_buf_size" and "max_queue_size" were
      required rather than optional; a mis-leading error message made things worse
      (issue #11)
+ * xnbd-register: Give xnbd-wrapper some time to shut down before returning
  * xnbd-wrapper: Fix crash from Unix socket piling up dead threads
+ * xnbd-wrapper: Suppress failure to stop xnbd-wrapper if it is not running.
+     This affects --restart as well.  Context is LSB init script compliance.
  * configure: Fix explicit `--disable-debug`
  * Fix compile errors on musl
  * Fix the contact address
@@ -42,6 +50,7 @@ Improvements
  * xnbd-server: Remove the limitation that the cache block size should be a
      multiple of 4096.  Now support any disk size that is a power of 2.
  * xnbd-server: Skip ftruncate() when a local cache image is larger than a remote one.
+ * xnbd-server (and xnbd-client): Add support for the flush command
  * xnbd-register: Make `--start/stop/restart/status` mutually exclusive
  * xnbd-register: Add `--reload` command
  * xnbd-register: Add `--verbose` switch

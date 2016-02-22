@@ -878,6 +878,12 @@ int target_mode_main_cow(struct xnbd_session *ses)
 
 			break;
 
+		case NBD_CMD_FLUSH:
+			dbg("disk flush");
+
+			disk_stack_fsync(xnbd->cow_ds);
+			break;
+
 		default:
 			err("unknown command in the cow-target mode, %u (%s)", iotype, nbd_get_iotype_string(iotype));
 	}
