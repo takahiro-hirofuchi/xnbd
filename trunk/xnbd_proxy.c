@@ -770,9 +770,9 @@ void xnbd_proxy_start(struct xnbd_info *xnbd)
 	/* check the remote server and get a disksize */
 
 	if (xnbd->proxy_target_exportname)
-		ret = nbd_negotiate_with_server_new(remotefd, &xnbd->disksize, NULL, strlen(xnbd->proxy_target_exportname), xnbd->proxy_target_exportname);
+		ret = nbd_negotiate_v2_client_side(remotefd, &xnbd->disksize, NULL, strlen(xnbd->proxy_target_exportname), xnbd->proxy_target_exportname);
 	else
-		ret = nbd_negotiate_with_server(remotefd, &xnbd->disksize, NULL);
+		ret = nbd_negotiate_v1_client_side(remotefd, &xnbd->disksize, NULL);
 
 	if (ret < 0)
 		err("negotiation with %s:%s failed", xnbd->proxy_rhost, xnbd->proxy_rport);

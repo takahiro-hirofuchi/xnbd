@@ -1543,9 +1543,9 @@ static void query_remote_disk_size(off_t * p_disk_size_bytes, const char * host,
 
 	int ret;
 	if (exportname)
-		ret = nbd_negotiate_with_server_new(sockfd, p_disk_size_bytes, NULL, strlen(exportname), exportname);
+		ret = nbd_negotiate_v2_client_side(sockfd, p_disk_size_bytes, NULL, strlen(exportname), exportname);
 	else
-		ret = nbd_negotiate_with_server(sockfd, p_disk_size_bytes, NULL);
+		ret = nbd_negotiate_v1_client_side(sockfd, p_disk_size_bytes, NULL);
 
 	close(sockfd);
 
@@ -1931,7 +1931,7 @@ int main(int argc, char **argv) {
 					close(ux_sockfd);
 					close(sigfd);
 
-					if ((requested_img = nbd_negotiate_with_client_new_phase_0(conn_sockfd)) == NULL) {
+					if ((requested_img = nbd_negotiate_v2_server_phase0(conn_sockfd)) == NULL) {
 						warn("requested_img: NULL");
 						close(conn_sockfd);
 						_exit(EXIT_FAILURE);
@@ -1975,7 +1975,7 @@ int main(int argc, char **argv) {
 
 					info("disk_size_bytes: %jd", disk_size_bytes);
 
-					if (nbd_negotiate_with_client_new_phase_1(conn_sockfd, disk_size_bytes, 0)) {
+					if (nbd_negotiate_v2_server_phase1(conn_sockfd, disk_size_bytes, 0)) {
 						if(close(conn_sockfd))
 							warn("close(p2)");
 						_exit(EXIT_FAILURE);

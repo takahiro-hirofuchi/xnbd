@@ -382,9 +382,9 @@ int master_server(int port, void *data, int connect_fd)
 		if (connect_fd == 0) {
 			int ret;
 			if (xnbd->readonly)
-				ret = nbd_negotiate_with_client_readonly(connect_fd, xnbd->disksize);
+				ret = nbd_negotiate_v1_server_side_readonly(connect_fd, xnbd->disksize);
 			else
-				ret = nbd_negotiate_with_client(connect_fd, xnbd->disksize);
+				ret = nbd_negotiate_v1_server_side(connect_fd, xnbd->disksize);
 			if (ret < 0) {
 				warn("negotiation with the client failed");
 			} else {
@@ -657,9 +657,9 @@ skip_restarting:
 
 				int ret;
 				if (xnbd->readonly)
-					ret = nbd_negotiate_with_client_readonly(csockfd, xnbd->disksize);
+					ret = nbd_negotiate_v1_server_side_readonly(csockfd, xnbd->disksize);
 				else
-					ret = nbd_negotiate_with_client(csockfd, xnbd->disksize);
+					ret = nbd_negotiate_v1_server_side(csockfd, xnbd->disksize);
 				if (ret < 0) {
 					warn("negotiation with the client failed");
 					continue;

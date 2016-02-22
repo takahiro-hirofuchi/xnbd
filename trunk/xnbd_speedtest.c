@@ -52,7 +52,7 @@ const size_t cnst_iosize = 4096 * 4;
 static void speed_test(int remotefd)
 {
 	off_t disksize;
-	int ret = nbd_negotiate_with_server(remotefd, &disksize, NULL);
+	int ret = nbd_negotiate_v1_client_side(remotefd, &disksize, NULL);
 	if (ret < 0)
 		err("negotiation failed");
 	info("remote disk size %ju", disksize);

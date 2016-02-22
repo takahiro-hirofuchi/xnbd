@@ -74,14 +74,13 @@ enum {
 const char *nbd_get_iotype_string(uint32_t iotype);
 
 
-int nbd_negotiate_with_client(int sockfd, off_t exportsize);
-int nbd_negotiate_with_client_readonly(int sockfd, off_t exportsize);
+int nbd_negotiate_v1_server_side(int sockfd, off_t exportsize);
+int nbd_negotiate_v1_server_side_readonly(int sockfd, off_t exportsize);
+int nbd_negotiate_v1_client_side(int sockfd, off_t *exportsize, uint32_t *exportflags);
 
-char *nbd_negotiate_with_client_new_phase_0(int sockfd);
-int nbd_negotiate_with_client_new_phase_1(int sockfd, off_t exportsize, int readonly);
-
-int nbd_negotiate_with_server(int sockfd, off_t *exportsize, uint32_t *exportflags);
-int nbd_negotiate_with_server_new(int sockfd, off_t *exportsize, uint32_t *exportflags, size_t namesize, const char *target_name);
+char *nbd_negotiate_v2_server_phase0(int sockfd);
+int   nbd_negotiate_v2_server_phase1(int sockfd, off_t exportsize, int readonly);
+int   nbd_negotiate_v2_client_side(int sockfd, off_t *exportsize, uint32_t *exportflags, size_t namesize, const char *target_name);
 
 #define NBD_FLAG_HAS_FLAGS      (1 << 0)
 #define NBD_FLAG_READ_ONLY      (1 << 1)

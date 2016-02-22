@@ -156,9 +156,9 @@ void reconnect(char *unix_path, char *rhost, char *rport, const char *exportname
 
 	int ret;
 	if (exportname)
-		ret = nbd_negotiate_with_server_new(fwd_fd, NULL, NULL, strlen(exportname), exportname);
+		ret = nbd_negotiate_v2_client_side(fwd_fd, NULL, NULL, strlen(exportname), exportname);
 	else
-		ret = nbd_negotiate_with_server(fwd_fd, NULL, NULL);
+		ret = nbd_negotiate_v1_client_side(fwd_fd, NULL, NULL);
 
 	if (ret)
 		err("negotiation failed");
@@ -290,7 +290,7 @@ void cache_all_blocks_with_dedicated_connection(char *unix_path, unsigned long *
 		err("connect, %m");
 
 	off_t remote_disksize;
-	int ret = nbd_negotiate_with_server(remote_fd, &remote_disksize, NULL);
+	int ret = nbd_negotiate_v1_client_side(remote_fd, &remote_disksize, NULL);
 	if (ret < 0)
 		err("negotiation failed");
 	if (remote_disksize != query->disksize)

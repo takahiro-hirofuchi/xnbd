@@ -409,7 +409,7 @@ int test_direct_mode(char *srcdisk, char *tgtdisk, int remotefd, int cowmode, en
 	check_pendings = g_async_queue_new();
 
 	off_t disksize;
-	int ret = nbd_negotiate_with_server(remotefd, &disksize, NULL);
+	int ret = nbd_negotiate_v1_client_side(remotefd, &disksize, NULL);
 	if (ret < 0)
 		err("negociation failed");
 	info("remote disk size %ju", disksize);

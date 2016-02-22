@@ -290,27 +290,31 @@ int nbd_server_recv_request(int clientfd, off_t disksize, uint32_t *iotype_arg, 
 // const char nbd_password[8] = {'N', 'B', 'D', 'M', 'A', 'G', 'I', 'C'};
 const uint64_t NBD_PASSWD = 0x4e42444d41474943LL;
 
-const uint64_t NBD_NEGOTIATE_MAGIC_OLD = 0x0000420281861253LL;
-const uint64_t NBD_NEGOTIATE_MAGIC_NEW = 0x49484156454F5054LL;
-const uint32_t NBD_OPT_EXPORT_NAME = 1;
+const uint64_t NBD_NEGOTIATE_VERSION1_MAGIC = 0x0000420281861253LL;
+const uint64_t NBD_NEGOTIATE_VERSION2_MAGIC = 0x49484156454F5054LL;
+const uint32_t NBD_NEGOTIATE_VERSION2_OPT_EXPORT_NAME = 1;
 #define XNBD_EXPORT_NAME_MAXLEN (256)
 
 
+/*
+ * For the new negotination protocol.
+ * We name it VERSION 2.
+ **/
 
-struct nbd_negotiate_pdu_new_0 {
+struct nbd_negotiate_v2_pdu_type0 {
 	uint64_t passwd;
 	uint64_t magic;
 	uint16_t flag16;
 } __attribute__((__packed__));
 
-struct nbd_negotiate_pdu_new_1 {
+struct nbd_negotiate_v2_pdu_type1 {
 	uint32_t reserved;
 	uint64_t opt_magic;
 	uint32_t opt;
 	uint32_t namesize;
 } __attribute__((__packed__));
 
-struct nbd_negotiate_pdu_new_2 {
+struct nbd_negotiate_v2_pdu_type2 {
 	uint64_t size;
 	uint16_t flags;
 	char padding[124];
@@ -318,7 +322,7 @@ struct nbd_negotiate_pdu_new_2 {
 
 
 /*
- * The option NBD_OPT_EXPORT_NAME is introduced in the recent version of the
+ * The option NBD_NEGOTIATE_VERSION2_OPT_EXPORT_NAME is introduced in the recent version of the
  * original NBD. It allows a client to specify a target image name.
  *
  * I feel the negotiation phase of the NBD protocol is not so smart; it
@@ -339,65 +343,57 @@ struct nbd_negotiate_pdu_new_2 {
  * get a target name from a client.
  * Note: must free a returned buffer.
  **/
-char *nbd_negotiate_with_client_new_phase_0(int sockfd)
+char *nbd_negotiate_v2_server_phase0(int sockfd)
 {
-	int ret;
-
 	{
-		struct nbd_negotiate_pdu_new_0 pdu0;
-		memset(&pdu0, 0, sizeof(pdu0));
+		struct nbd_negotiate_v2_pdu_type0 pdu0;
 
 		pdu0.passwd = htonll(NBD_PASSWD);
-		pdu0.magic  = htonll(NBD_NEGOTIATE_MAGIC_NEW);
+		pdu0.magic  = htonll(NBD_NEGOTIATE_VERSION2_MAGIC);
 		pdu0.flag16 = 0;
 
-		ret = net_send_all_or_error(sockfd, &pdu0, sizeof(pdu0));
+		int ret = net_send_all_or_error(sockfd, &pdu0, sizeof(pdu0));
 		if (ret < 0)
-			goto err_out;
+			return NULL;
 	}
 
 
 	{
-		struct nbd_negotiate_pdu_new_1 pdu1;
+		struct nbd_negotiate_v2_pdu_type1 pdu1;
 
-		ret = net_recv_all_or_error(sockfd, &pdu1, sizeof(pdu1));
-		if (ntohll(pdu1.opt_magic) != NBD_NEGOTIATE_MAGIC_NEW ||
-				ntohl(pdu1.opt) != NBD_OPT_EXPORT_NAME) {
+		int ret = net_recv_all_or_error(sockfd, &pdu1, sizeof(pdu1));
+		if (ntohll(pdu1.opt_magic) != NBD_NEGOTIATE_VERSION2_MAGIC ||
+				ntohl(pdu1.opt) != NBD_NEGOTIATE_VERSION2_OPT_EXPORT_NAME) {
 			warn("header mismatch");
-			goto err_out;
+			return NULL;
 		}
 
 		uint32_t namesize = ntohl(pdu1.namesize);
 		if (namesize > XNBD_EXPORT_NAME_MAXLEN) {
 			warn("namesize error");
-			goto err_out;
+			return NULL;
 		}
 
 		char *target_name = g_malloc0(namesize + 1);
 
 		ret = net_recv_all_or_error(sockfd, target_name, namesize);
 		if (ret < 0)
-			goto err_out;
+			return NULL;
 
 		info("requested target_name %s", target_name);
 
 		return target_name;
 	}
-
-
-err_out:
-	return NULL;
 }
 
 
 /* return the size and readonly of the target image */
-int nbd_negotiate_with_client_new_phase_1(int sockfd, off_t exportsize, int readonly)
+int nbd_negotiate_v2_server_phase1(int sockfd, off_t exportsize, int readonly)
 {
 	g_assert(exportsize >= 0);
-	int ret;
 
-
-	struct nbd_negotiate_pdu_new_2 pdu2;
+	struct nbd_negotiate_v2_pdu_type2 pdu2;
+	/* clear the padding field with zero */
 	memset(&pdu2, 0, sizeof(pdu2));
 
 	uint32_t flags = NBD_FLAG_HAS_FLAGS | NBD_FLAG_SEND_FLUSH;
@@ -409,27 +405,24 @@ int nbd_negotiate_with_client_new_phase_1(int sockfd, off_t exportsize, int read
 	pdu2.size   = htonll(exportsize);
 	pdu2.flags  = htonl(flags);
 
-	ret = net_send_all_or_error(sockfd, &pdu2, sizeof(pdu2));
-	if (ret < 0)
-		goto err_out;
-
+	int ret = net_send_all_or_error(sockfd, &pdu2, sizeof(pdu2));
+	if (ret < 0) {
+		warn("negotiation failed");
+		return -1;
+	}
 
 	dbg("negotiate done");
 
 	return 0;
-
-err_out:
-	warn("negotiation failed");
-	return -1;
 }
 
 
-int nbd_negotiate_with_server_new(int sockfd, off_t *exportsize, uint32_t *exportflags, size_t namesize, const char *target_name)
+int nbd_negotiate_v2_client_side(int sockfd, off_t *exportsize, uint32_t *exportflags, size_t namesize, const char *target_name)
 {
 	int ret;
 
 	{
-		struct nbd_negotiate_pdu_new_0 pdu0;
+		struct nbd_negotiate_v2_pdu_type0 pdu0;
 
 		ret = net_recv_all_or_error(sockfd, &pdu0, sizeof(pdu0));
 		if (ret < 0)
@@ -440,23 +433,23 @@ int nbd_negotiate_with_server_new(int sockfd, off_t *exportsize, uint32_t *expor
 			goto err_out;
 		}
 
-		if (ntohll(pdu0.magic) == NBD_NEGOTIATE_MAGIC_OLD) {
-			warn("wrapped server expected, plain server found");
+		if (ntohll(pdu0.magic) == NBD_NEGOTIATE_VERSION1_MAGIC) {
+			warn("A wrapped server was expected, but a plain server is found");
 			goto err_out;
 		}
 
-		if (ntohll(pdu0.magic) != NBD_NEGOTIATE_MAGIC_NEW) {
-			warn("negotiate magic mismatch");
+		if (ntohll(pdu0.magic) != NBD_NEGOTIATE_VERSION2_MAGIC) {
+			warn("negotiate magic does not match VERSION 1");
 			goto err_out;
 		}
 	}
 
 
 	{
-		struct nbd_negotiate_pdu_new_1 pdu1;
+		struct nbd_negotiate_v2_pdu_type1 pdu1;
 		pdu1.reserved  = 0;
-		pdu1.opt_magic = htonll(NBD_NEGOTIATE_MAGIC_NEW);
-		pdu1.opt       = htonl(NBD_OPT_EXPORT_NAME);
+		pdu1.opt_magic = htonll(NBD_NEGOTIATE_VERSION2_MAGIC);
+		pdu1.opt       = htonl(NBD_NEGOTIATE_VERSION2_OPT_EXPORT_NAME);
 		pdu1.namesize  = htonl(namesize);
 
 		ret = net_send_all_or_error(sockfd, &pdu1, sizeof(pdu1));
@@ -470,7 +463,7 @@ int nbd_negotiate_with_server_new(int sockfd, off_t *exportsize, uint32_t *expor
 
 
 	{
-		struct nbd_negotiate_pdu_new_2 pdu2;
+		struct nbd_negotiate_v2_pdu_type2 pdu2;
 
 		ret = net_recv_all_or_error(sockfd, &pdu2, sizeof(pdu2));
 		if (ret < 0)
@@ -502,7 +495,12 @@ err_out:
 
 
 
-struct nbd_negotiate_pdu_old {
+/*
+ * For the old negotination protocol.
+ * We name it VERSION 1.
+ **/
+
+struct nbd_negotiate_v1_pdu {
 	uint64_t passwd;
 	uint64_t magic;
 	uint64_t size;
@@ -511,14 +509,11 @@ struct nbd_negotiate_pdu_old {
 } __attribute__((__packed__));
 
 
-
-static int nbd_negotiate_with_client_common(int sockfd, off_t exportsize, int readonly)
+static int nbd_negotiate_v1_server_side_main(int sockfd, off_t exportsize, int readonly)
 {
 	g_assert(exportsize >= 0);
 
-	int ret;
-
-	struct nbd_negotiate_pdu_old pdu;
+	struct nbd_negotiate_v1_pdu pdu;
 	memset(&pdu, 0, sizeof(pdu));
 
 	uint32_t flags = NBD_FLAG_HAS_FLAGS | NBD_FLAG_SEND_FLUSH;
@@ -528,11 +523,11 @@ static int nbd_negotiate_with_client_common(int sockfd, off_t exportsize, int re
 	}
 
 	pdu.passwd = htonll(NBD_PASSWD);
-	pdu.magic  = htonll(NBD_NEGOTIATE_MAGIC_OLD);
+	pdu.magic  = htonll(NBD_NEGOTIATE_VERSION1_MAGIC);
 	pdu.size   = htonll(exportsize);
 	pdu.flags  = htonl(flags);
 
-	ret = net_send_all_or_error(sockfd, &pdu, sizeof(pdu));
+	int ret = net_send_all_or_error(sockfd, &pdu, sizeof(pdu));
 	if (ret < 0)
 		goto err_out;
 
@@ -545,21 +540,19 @@ err_out:
 	return -1;
 }
 
-int nbd_negotiate_with_client_readonly(int sockfd, off_t exportsize)
+int nbd_negotiate_v1_server_side_readonly(int sockfd, off_t exportsize)
 {
-	return nbd_negotiate_with_client_common(sockfd, exportsize, 1);
+	return nbd_negotiate_v1_server_side_main(sockfd, exportsize, 1);
 }
 
-int nbd_negotiate_with_client(int sockfd, off_t exportsize)
+int nbd_negotiate_v1_server_side(int sockfd, off_t exportsize)
 {
-	return nbd_negotiate_with_client_common(sockfd, exportsize, 0);
+	return nbd_negotiate_v1_server_side_main(sockfd, exportsize, 0);
 }
 
-
-
-int nbd_negotiate_with_server(int sockfd, off_t *exportsize, uint32_t *exportflags)
+int nbd_negotiate_v1_client_side(int sockfd, off_t *exportsize, uint32_t *exportflags)
 {
-	struct nbd_negotiate_pdu_old pdu;
+	struct nbd_negotiate_v1_pdu pdu;
 
 	/* Since both <nbd_negotiate_pdu_old> and <nbd_negotiate_pdu_new_0>
 	 * share these first 128 bits
@@ -570,11 +563,11 @@ int nbd_negotiate_with_server(int sockfd, off_t *exportsize, uint32_t *exportfla
 	 * } __attribute__((__packed__));
 	 *
 	 * we first read 128 bits only.  From the magic value, we know if
-	 * we're daeling with a wrapper (NBD_NEGOTIATE_MAGIC_NEW) or a
-	 * plain server (NBD_NEGOTIATE_MAGIC_OLD).  That way we can produce
+	 * we're daeling with a wrapper (NBD_NEGOTIATE_VERSION2_MAGIC) or a
+	 * plain server (NBD_NEGOTIATE_VERSION1_MAGIC).  That way we can produce
 	 * a more helpful error and save waiting for more bytes without hope.
 	 */
-	const size_t passwd_plus_magic_len = sizeof(uint64_t) + sizeof(uint64_t);
+	const size_t passwd_plus_magic_len = sizeof(pdu.passwd) + sizeof(pdu.magic);
 	int ret = net_recv_all_or_error(sockfd, &pdu, passwd_plus_magic_len);
 	if (ret < 0) {
 		warn("receiving negotiate header failed");
@@ -586,8 +579,13 @@ int nbd_negotiate_with_server(int sockfd, off_t *exportsize, uint32_t *exportfla
 		return -1;
 	}
 
-	if (ntohll(pdu.magic) == NBD_NEGOTIATE_MAGIC_NEW) {
-		warn("plain server expected, wrapped server found");
+	if (ntohll(pdu.magic) == NBD_NEGOTIATE_VERSION2_MAGIC) {
+		warn("A plain server was expected, but a wrapped server is found");
+		return -1;
+	}
+
+	if (ntohll(pdu.magic) != NBD_NEGOTIATE_VERSION1_MAGIC) {
+		warn("negotiate magic does not match VERSION 1");
 		return -1;
 	}
 
@@ -597,23 +595,16 @@ int nbd_negotiate_with_server(int sockfd, off_t *exportsize, uint32_t *exportfla
 		return -1;
 	}
 
-	if (ntohll(pdu.magic) != NBD_NEGOTIATE_MAGIC_OLD) {
-		warn("negotiate magic mismatch");
-		return -1;
-	}
-
 
 	uint64_t size = ntohll(pdu.size);
 	uint32_t flags = ntohl(pdu.flags);
-
-	info("remote size: %ju bytes (%ju MBytes)", size, size /1024 /1024);
-
 
 	if (size > OFF_MAX) {
 		warn("remote size exceeds a local off_t(%zd bytes) value", sizeof(off_t));
 		return -1;
 	}
 
+	info("remote size: %ju bytes (%ju MBytes)", size, size /1024 /1024);
 
 
 	if (exportsize)
