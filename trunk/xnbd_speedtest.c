@@ -51,7 +51,10 @@ const size_t cnst_iosize = 4096 * 4;
 
 static void speed_test(int remotefd)
 {
-	off_t disksize = nbd_negotiate_with_server(remotefd);
+	off_t disksize;
+	int ret = nbd_negotiate_with_server(remotefd, &disksize, NULL);
+	if (ret < 0)
+		err("negotiation failed");
 	info("remote disk size %ju", disksize);
 
 	char *buff = g_malloc(cnst_iosize);

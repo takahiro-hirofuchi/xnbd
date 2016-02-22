@@ -1545,7 +1545,7 @@ static void query_remote_disk_size(off_t * p_disk_size_bytes, const char * host,
 	if (exportname)
 		ret = nbd_negotiate_with_server_new(sockfd, p_disk_size_bytes, NULL, strlen(exportname), exportname);
 	else
-		ret = nbd_negotiate_with_server2(sockfd, p_disk_size_bytes, NULL);
+		ret = nbd_negotiate_with_server(sockfd, p_disk_size_bytes, NULL);
 
 	close(sockfd);
 

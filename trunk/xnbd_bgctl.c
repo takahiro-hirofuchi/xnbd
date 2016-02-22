@@ -155,11 +155,10 @@ void reconnect(char *unix_path, char *rhost, char *rport, const char *exportname
 	int fwd_fd = net_connect(rhost, rport, SOCK_STREAM, IPPROTO_TCP);
 
 	int ret;
-	off_t size_dummy;
 	if (exportname)
-		ret = nbd_negotiate_with_server_new(fwd_fd, &size_dummy, NULL, strlen(exportname), exportname);
+		ret = nbd_negotiate_with_server_new(fwd_fd, NULL, NULL, strlen(exportname), exportname);
 	else
-		ret = nbd_negotiate_with_server2(fwd_fd, &size_dummy, NULL);
+		ret = nbd_negotiate_with_server(fwd_fd, NULL, NULL);
 
 	if (ret)
 		err("negotiation failed");
@@ -290,7 +289,10 @@ void cache_all_blocks_with_dedicated_connection(char *unix_path, unsigned long *
 	if (remote_fd < 0)
 		err("connect, %m");
 
-	off_t remote_disksize = nbd_negotiate_with_server(remote_fd);
+	off_t remote_disksize;
+	int ret = nbd_negotiate_with_server(remote_fd, &remote_disksize, NULL);
+	if (ret < 0)
+		err("negotiation failed");
 	if (remote_disksize != query->disksize)
 		err("disksize mismatch");
 

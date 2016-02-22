@@ -341,7 +341,7 @@ static void xnbd_connect_to_remote(GList *dst_list, int max_retry, const char *e
 			if (exportname)
 				ret = nbd_negotiate_with_server_new(sockfd, &disksize, &flags, strlen(exportname), exportname);
 			else
-				ret = nbd_negotiate_with_server2(sockfd, &disksize, &flags);
+				ret = nbd_negotiate_with_server(sockfd, &disksize, &flags);
 
 			if (ret < 0) {
 				warn("negotiation with %s:%s failed", host, port);

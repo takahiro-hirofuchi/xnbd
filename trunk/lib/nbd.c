@@ -486,7 +486,8 @@ int nbd_negotiate_with_server_new(int sockfd, off_t *exportsize, uint32_t *expor
 			return -1;
 		}
 
-		*exportsize  = (off_t) size;
+		if (exportsize)
+			*exportsize  = (off_t) size;
 		if (exportflags)
 			*exportflags = flags;
 	}
@@ -555,7 +556,7 @@ int nbd_negotiate_with_client(int sockfd, off_t exportsize)
 
 
 
-int nbd_negotiate_with_server2(int sockfd, off_t *exportsize, uint32_t *exportflags)
+int nbd_negotiate_with_server(int sockfd, off_t *exportsize, uint32_t *exportflags)
 {
 	struct nbd_negotiate_pdu_old pdu;
 
@@ -614,20 +615,10 @@ int nbd_negotiate_with_server2(int sockfd, off_t *exportsize, uint32_t *exportfl
 
 
 
-	*exportsize  = (off_t) size;
+	if (exportsize)
+		*exportsize  = (off_t) size;
 	if (exportflags)
 		*exportflags = flags;
 
 	return 0;
-}
-
-off_t nbd_negotiate_with_server(int sockfd)
-{
-	off_t size;
-
-	int ret = nbd_negotiate_with_server2(sockfd, &size, NULL);
-	if (ret < 0)
-		err("negotiate with server");
-
-	return size;
 }

@@ -408,7 +408,10 @@ int test_direct_mode(char *srcdisk, char *tgtdisk, int remotefd, int cowmode, en
 	reply_pendings = g_async_queue_new();
 	check_pendings = g_async_queue_new();
 
-	off_t disksize = nbd_negotiate_with_server(remotefd);
+	off_t disksize;
+	int ret = nbd_negotiate_with_server(remotefd, &disksize, NULL);
+	if (ret < 0)
+		err("negociation failed");
 	info("remote disk size %ju", disksize);
 
 	sleep(3);
@@ -421,7 +424,7 @@ int test_direct_mode(char *srcdisk, char *tgtdisk, int remotefd, int cowmode, en
 	if (tgtdiskfd < 0)
 		err("tgt disk open %s", strerror(errno));
 
-	int ret = ftruncate(tgtdiskfd, disksize);
+	ret = ftruncate(tgtdiskfd, disksize);
 	if (ret < 0)
 		err("ftruncate %m");
 
