@@ -11,6 +11,16 @@ Line width is meant to be 90 characters.
 xNBD Change Log
 ===============
 
+0.4.1
+-----
+
+Bugfixes
+~~~~~~~~
+ * xnbd-server: Fix the unexpected disconnect of a proxy session with the NBD
+ client of Linux 4.8 (issue #17)
+
+
+
 0.4.0
 -----
 

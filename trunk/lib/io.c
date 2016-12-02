@@ -346,13 +346,16 @@ struct mmap_region *mmap_region_create(int fd, off_t iofrom, size_t iolen, int r
 	size_t mmap_len = iolen + (iofrom - pa_iofrom); // be careful of overflow
 	void *mmap_buf = NULL;
 
-	if (readonly)
-		mmap_buf = mmap(NULL, mmap_len, PROT_READ, MAP_SHARED, fd, pa_iofrom);
-	else
-		mmap_buf = mmap(NULL, mmap_len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, pa_iofrom);
-	if (mmap_buf == MAP_FAILED)
-		err("disk mapping failed (iofrom %ju iolen %zu), %m", iofrom, iolen);
-
+	/* According to man mmap, Linux 2.6.12 and later will complain about
+	 * EINVAL when mmap_len is zero. */
+	if (mmap_len) {
+		if (readonly)
+			mmap_buf = mmap(NULL, mmap_len, PROT_READ, MAP_SHARED, fd, pa_iofrom);
+		else
+			mmap_buf = mmap(NULL, mmap_len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, pa_iofrom);
+		if (mmap_buf == MAP_FAILED)
+			err("disk mapping failed (iofrom %ju iolen %zu), %m", iofrom, iolen);
+	}
 
 	struct mmap_region *mr = g_slice_new(struct mmap_region);
 
@@ -366,15 +369,18 @@ struct mmap_region *mmap_region_create(int fd, off_t iofrom, size_t iolen, int r
 
 void mmap_region_free(struct mmap_region *mr)
 {
-	munmap_or_abort(mr->mmap_buf, mr->mmap_len);
+	if (mr->mmap_len)
+		munmap_or_abort(mr->mmap_buf, mr->mmap_len);
 	g_slice_free(struct mmap_region, mr);
 }
 
 void mmap_region_msync(struct mmap_region *mr)
 {
-	int ret = msync(mr->mmap_buf, mr->mmap_len, MS_SYNC);
-	if (ret < 0)
-		warn("msync failed, %m");
+	if (mr->mmap_len) {
+		int ret = msync(mr->mmap_buf, mr->mmap_len, MS_SYNC);
+		if (ret < 0)
+			warn("msync failed, %m");
+	}
 }
 
 
