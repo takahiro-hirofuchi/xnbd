@@ -23,6 +23,7 @@
 
 #include "nbd.h"
 
+
 const char *nbd_get_iotype_string(uint32_t iotype)
 {
 	const char *nbd_iotype_string_table[] = {
@@ -316,7 +317,7 @@ struct nbd_negotiate_v2_pdu_type1 {
 
 struct nbd_negotiate_v2_pdu_type2 {
 	uint64_t size;
-	uint16_t flags;
+	uint16_t tm_flags16;  // trasmission flags
 	char padding[124];
 } __attribute__((__packed__));
 
@@ -396,14 +397,14 @@ int nbd_negotiate_v2_server_phase1(int sockfd, off_t exportsize, int readonly)
 	/* clear the padding field with zero */
 	memset(&pdu2, 0, sizeof(pdu2));
 
-	uint32_t flags = NBD_FLAG_HAS_FLAGS | NBD_FLAG_SEND_FLUSH;
+	uint16_t tm_flags16 = NBD_FLAG_HAS_FLAGS | NBD_FLAG_SEND_FLUSH;
 	if (readonly) {
 		info("nbd_negotiate: readonly");
-		flags |= NBD_FLAG_READ_ONLY;
+		tm_flags16 |= NBD_FLAG_READ_ONLY;
 	}
 
-	pdu2.size   = htonll(exportsize);
-	pdu2.flags  = htonl(flags);
+	pdu2.size       = htonll(exportsize);
+	pdu2.tm_flags16 = htons(tm_flags16);
 
 	int ret = net_send_all_or_error(sockfd, &pdu2, sizeof(pdu2));
 	if (ret < 0) {
@@ -469,8 +470,8 @@ int nbd_negotiate_v2_client_side(int sockfd, off_t *exportsize, uint32_t *export
 		if (ret < 0)
 			goto err_out;
 
-		uint64_t size  = ntohll(pdu2.size);
-		uint32_t flags = ntohl(pdu2.flags);
+		uint64_t size       = ntohll(pdu2.size);
+		uint16_t tm_flags16 = ntohs(pdu2.tm_flags16);
 
 		info("remote size: %ju bytes (%ju MBytes)", size, size /1024 /1024);
 
@@ -483,7 +484,7 @@ int nbd_negotiate_v2_client_side(int sockfd, off_t *exportsize, uint32_t *export
 		if (exportsize)
 			*exportsize  = (off_t) size;
 		if (exportflags)
-			*exportflags = flags;
+			*exportflags = tm_flags16;
 	}
 
 
