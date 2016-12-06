@@ -305,7 +305,7 @@ const uint32_t NBD_NEGOTIATE_VERSION2_OPT_EXPORT_NAME = 1;
 struct nbd_negotiate_v2_pdu_type0 {
 	uint64_t passwd;
 	uint64_t magic;
-	uint16_t flag16;
+	uint16_t hs_flags16; // handshake flags
 } __attribute__((__packed__));
 
 struct nbd_negotiate_v2_pdu_type1 {
@@ -351,7 +351,7 @@ char *nbd_negotiate_v2_server_phase0(int sockfd)
 
 		pdu0.passwd = htonll(NBD_PASSWD);
 		pdu0.magic  = htonll(NBD_NEGOTIATE_VERSION2_MAGIC);
-		pdu0.flag16 = 0;
+		pdu0.hs_flags16 = 0;
 
 		int ret = net_send_all_or_error(sockfd, &pdu0, sizeof(pdu0));
 		if (ret < 0)
