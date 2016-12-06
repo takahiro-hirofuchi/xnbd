@@ -18,7 +18,8 @@ Bugfixes
 ~~~~~~~~
  * xnbd-server: Fix the unexpected disconnect of a proxy session with the NBD
  client of Linux 4.8 (issue #17)
-
+ * Fix the bug that FLUSH and READONLY flags are lost in negotiation phases
+ (issue #18)
 
 
 0.4.0
