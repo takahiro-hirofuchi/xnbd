@@ -1,6 +1,9 @@
 ACLOCAL_AMFLAGS = -I m4
 
-SUBDIRS = lib doc .
+SUBDIRS = lib .
+if INSTALL_DOCS
+SUBDIRS += doc
+endif
 
 
 sbin_PROGRAMS = \

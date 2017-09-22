@@ -62,6 +62,11 @@ if test "${DEBUGGING}" != no ; then
 	CPPFLAGS+="-DXNBD_DEBUG"
 fi
 
+# Docs
+AC_ARG_ENABLE([docs], AS_HELP_STRING([--enable-docs], [enable making docs [default=yes]]), [needdocs=${enableval}], [needdocs=yes])
+AM_CONDITIONAL(INSTALL_DOCS, test "${needdocs}" = yes)
+
+
 ac_temp_opt_flag=""
 for option in $CFLAGS
 do
