@@ -50,6 +50,7 @@ struct addrinfo *net_getaddrinfo(char *host, int port, int ai_family, int sockty
 unsigned int net_create_server_sockets(struct addrinfo *ai_head, int *fds, size_t nfds);
 int net_accept(int lsock);
 int net_set_reuseaddr(int sockfd);
+int net_set_keepalive(int sockfd);
 int net_set_nodelay(int sockfd);
 int net_set_bindv6only(int sockfd);
 int net_connect(const char *hostname, const char *service, int type, int proto);

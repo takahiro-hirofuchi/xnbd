@@ -90,6 +90,7 @@ unsigned int net_create_server_sockets(struct addrinfo *ai_head, int *fds, size_
 		char *name = get_nameinfo_string(ai);
 		int reuseaddr = 0;
 		int tcpnodelay = 0;
+		int keepalive = 0;
 
 
 		int sockfd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
@@ -108,6 +109,8 @@ unsigned int net_create_server_sockets(struct addrinfo *ai_head, int *fds, size_
 		if (ai->ai_socktype == SOCK_STREAM && ai->ai_protocol == IPPROTO_TCP) {
 			net_set_nodelay(sockfd);
 			tcpnodelay = 1;
+			net_set_keepalive(sockfd);
+			keepalive = 1;
 		}
 
 		if (ai->ai_family == AF_INET6)
@@ -135,6 +138,8 @@ unsigned int net_create_server_sockets(struct addrinfo *ai_head, int *fds, size_
 			g_string_append(gs, ",reuseaddr");
 		if (tcpnodelay)
 			g_string_append(gs, ",nodelay");
+		if (keepalive)
+			g_string_append(gs, ",keepalive");
 
 		info("%s", gs->str);
 		g_string_free(gs, TRUE);
