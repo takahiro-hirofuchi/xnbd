@@ -195,16 +195,16 @@ static void nbddev_set_sizes(int nbd, uint64_t disksize, unsigned long blocksize
 
 	ret = ioctl(nbd, NBD_SET_BLKSIZE, blocksize);
 	if (ret < 0)
-		err("NBD_SET_BLKSIZE, ret %d, %m", ret);
+		err("NBD_SET_BLKSIZE, %m");
 
 	ret = ioctl(nbd, NBD_SET_SIZE_BLOCKS, nblocks);
 	if (ret < 0)
-		err("NBD_SET_SIZE_BLOCKS, ret %d, %m", ret);
+		err("NBD_SET_SIZE_BLOCKS, %m");
 
 #if 0
 	ret = ioctl(nbd, NBD_CLEAR_SOCK);
 	if (ret < 0)
-		err("NBD_CLEAR_SOCK, ret %d, %m", ret);
+		err("NBD_CLEAR_SOCK, %m");
 #endif
 
 	info("blocksize %lu, disksize %ju (%lu blocks)", blocksize, disksize, nblocks);
@@ -216,7 +216,7 @@ void nbddev_set_readonly(int nbd)
 
 	int ret = ioctl(nbd, BLKROSET, &read_only);
 	if (ret < 0)
-		err("BLKROSET, ret %d, %m", ret);
+		err("BLKROSET, %m");
 
 	info("readyonly enabled");
 }
@@ -228,7 +228,7 @@ void nbddev_set_timeout(int nbd, unsigned int timeout)
 
 	int ret = ioctl(nbd, NBD_SET_TIMEOUT, (unsigned long) timeout);
 	if (ret < 0)
-		err("NBD_SET_TIMEOUT, ret %d, %m", ret);
+		err("NBD_SET_TIMEOUT, %m");
 
 	info("timeout %d", timeout);
 }
@@ -238,7 +238,7 @@ void nbddev_set_sockfd(int nbd, int sockfd)
 {
 	int ret = ioctl(nbd, NBD_SET_SOCK, sockfd);
 	if (ret < 0)
-		err("NBD_SET_SOCK, ret %d, %m", ret);
+		err("NBD_SET_SOCK, %m");
 }
 
 
@@ -262,15 +262,15 @@ static void xnbd_disconnect(const char *devpath)
 
 	ret = ioctl(nbd, NBD_CLEAR_QUE);
 	if (ret < 0)
-		err("NBD_CLEAR_QUE, ret %d, %m", ret);
+		err("NBD_CLEAR_QUE, %m");
 
 	ret = ioctl(nbd, NBD_DISCONNECT);
 	if (ret < 0)
-		err("NBD_DISCONNECT, ret %d, %m", ret);
+		err("NBD_DISCONNECT, %m");
 
 	ret = ioctl(nbd, NBD_CLEAR_SOCK);
 	if (ret < 0)
-		err("NBD_CLEAR_SOCK, ret %d, %m", ret);
+		err("NBD_CLEAR_SOCK, %m");
 
 	close(nbd);
 
@@ -419,7 +419,7 @@ static int xnbd_setup_client(const char *devpath, unsigned long blocksize, unsig
 	if (flags & NBD_FLAG_HAS_FLAGS) {
 		info("applying flags 0x%x as proposed by the server", flags);
 		if (ioctl(nbd, NBD_SET_FLAGS, flags)) {
-			err("ioctl NBD_SET_FLAGS %s, ret %d, %m", devpath, nbd);
+			err("ioctl NBD_SET_FLAGS %s, %m", devpath);
 		}
 	}
 
