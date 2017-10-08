@@ -189,7 +189,7 @@ static void nbddev_set_sizes(int nbd, uint64_t disksize, unsigned long blocksize
 	int ret;
 
 	if (disksize / blocksize > NBD_MAX_NBLOCKS)
-		err("Device too large.\n");
+		err_pe("Disksize too large");
 
 	unsigned long nblocks = (unsigned long) (disksize / blocksize);
 
@@ -248,7 +248,7 @@ static void xnbd_disconnect(const char *devpath)
 
 	pid_t nbd_pid = -1;
 	if (get_nbd_pid(devpath, &nbd_pid) != XNBD_PID_FOUND)
-		err("%s is not connected", devpath);
+		err_ue("%s is not connected", devpath);
 
 
 	ret = kill(nbd_pid, SIGUSR1);
@@ -258,7 +258,7 @@ static void xnbd_disconnect(const char *devpath)
 
 	int nbd = open(devpath, O_RDWR);
 	if (nbd < 0)
-		err("open %s, ret %d, %m", devpath, nbd);
+		err_ue("open %s, %m", devpath);
 
 	ret = ioctl(nbd, NBD_CLEAR_QUE);
 	if (ret < 0)
@@ -364,7 +364,7 @@ static void xnbd_connect_to_remote(GList *dst_list, int max_retry, const char *e
 			retry += 1;
 			continue;
 		} else
-			err("cannot establish a NBD session with any server");
+			err_ue("cannot establish a NBD session with any server");
 	}
 
 	/* so far, we get a negotiated socket */
@@ -407,7 +407,7 @@ static int xnbd_setup_client(const char *devpath, unsigned long blocksize, unsig
 
 	int nbd = open(devpath, O_RDWR);
 	if (nbd < 0)
-		err("open %s, ret %d, %m", devpath, nbd);
+		err_ue("open %s, %m", devpath);
 
 	nbddev_set_sockfd(nbd, sockfd);
 
@@ -526,7 +526,7 @@ static int xnbd_setup_client(const char *devpath, unsigned long blocksize, unsig
 static void flush_device(const char * pathname) {
 	const int fd = open(pathname, O_WRONLY);
 	if (fd < 0) {
-		err("failed to open \"%s\": %m", pathname);
+		err_ue("open %s, %m", pathname);
 	}
 
 	const int fsync_res = fsync(fd);
@@ -695,7 +695,7 @@ int main(int argc, char *argv[]) {
 				 * device.
 				 *
 				 **/
-				err("--timeout is currently disabled due to kernel bug. Use xnbd-watchdog instead!");
+				err_ue("--timeout is currently disabled due to kernel bug. Use xnbd-watchdog instead!");
 				break;
 
 			case 'b':
@@ -812,7 +812,7 @@ int main(int argc, char *argv[]) {
 
 		case cmd_unknown:
 		default:
-			err("never happen");
+			err_pe("never happen");
 	}
 
 

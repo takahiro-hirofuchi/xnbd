@@ -43,6 +43,18 @@
 		pthread_self(), __FUNCTION__,  ##args); \
 } while (0)
 
+/* programming error */
+#define err_pe(fmt, args...)	do { \
+		g_error("(tid:0x%lx) (%-12s) " fmt, \
+		pthread_self(), __FUNCTION__,  ##args); \
+} while (0)
+
+/* user error. arguments should state what should not fail. */
+#define err_ue(fmt, args...)	do { \
+		g_message("failure: " fmt, ##args); \
+		exit(EXIT_FAILURE); \
+} while (0)
+
 #define warn(fmt, args...)	do { \
 		g_warning(fmt, ##args); \
 } while (0)
