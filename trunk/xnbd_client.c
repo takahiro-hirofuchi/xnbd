@@ -86,7 +86,7 @@ void follow_symlink_chain(const char *devname, char ** p_devname_resolved)
 	assert(devname);
 	assert(p_devname_resolved);
 
-	GError * error = NULL;
+	GError *error = NULL;
 	char *resolved = g_strdup(devname);
 	unsigned int steps_taken = 0;
 	const unsigned long MAX_FOLLOW_STEPS = determine_SYMLOOP_MAX();
@@ -94,11 +94,13 @@ void follow_symlink_chain(const char *devname, char ** p_devname_resolved)
 	for (;;)
 	{
 		gchar * const points_to = g_file_read_link(resolved, &error);
-		if (! points_to || error) {
+		if (!points_to) {
 			*p_devname_resolved = resolved;
+			g_clear_error(&error);
 			return;
 		}
-		error = NULL;
+
+		assert(error == NULL);
 
 		steps_taken += 1;
 		if (steps_taken > MAX_FOLLOW_STEPS)
@@ -166,7 +168,7 @@ int get_nbd_pid(const char *devname, pid_t * p_pid)
 		pid = -1;
 	} else {
 		pid = atoi(g_strchomp(buf));
-		info("%s is ready for read/write (xnbd-client pid %d)", devname, pid);
+		info("%s is online by xnbd-client (pid %d)", devname, pid);
 	}
 
 	g_free(buf);
@@ -498,6 +500,7 @@ static int xnbd_setup_client(const char *devpath, unsigned long blocksize, unsig
 				g_spawn_command_line_async(recovery_command, &error);
 				if (error)
 					warn("%s", error->message);
+				g_clear_error(&error);
 			}
 			retcode = -2;
 		}
