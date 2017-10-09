@@ -401,6 +401,13 @@ static int xnbd_setup_client(const char *devpath, unsigned long blocksize, unsig
 	off_t disksize;
 	uint32_t flags;
 
+	{
+		pid_t nbd_pid;
+		int ret = get_nbd_pid(devpath, &nbd_pid);
+		if (ret == XNBD_PID_FOUND)
+			err_ue("%s is in use", devpath);
+	}
+
 	xnbd_connect_to_remote(dst_list, max_retry, exportname, &sockfd, &disksize, &flags);
 
 	int retcode = -3;
