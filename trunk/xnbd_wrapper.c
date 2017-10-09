@@ -157,7 +157,7 @@ static void about_to_execute(const char * const * argv) {
 		const char * const * walker = argv;
 		while (*walker)
 		{
-			info("[%ld] \"%s\"", walker - argv, *walker);
+			info("[%td] \"%s\"", walker - argv, *walker);
 			walker++;
 		}
 	}

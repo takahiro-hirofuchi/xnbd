@@ -253,7 +253,7 @@ static void xnbd_disconnect(const char *devpath)
 
 	ret = kill(nbd_pid, SIGUSR1);
 	if (ret < 0)
-		warn("%s is connected ?", devpath);
+		warn("failed to notify xnbd-client (pid %d, %s) of termination, %m", nbd_pid, devpath);
 
 
 	int nbd = open(devpath, O_RDWR);
@@ -538,7 +538,7 @@ static void flush_device(const char * pathname) {
 
 	const int fsync_res = fsync(fd);
 	if (fsync_res < 0) {
-		err("failed to flush \"%s\": %m", pathname);
+		err("flush %s, %m", pathname);
 	}
 
 	close(fd);
@@ -553,7 +553,7 @@ static struct option longopts[] = {
 	{"connect",	no_argument, NULL, 'C'},
 	{"disconnect",	required_argument, NULL, 'd'},
 	{"check",	required_argument, NULL, 'c'},
-	{"help", 	no_argument, NULL, 'h'},
+	{"help",	no_argument, NULL, 'h'},
 	{"getsize64", no_argument, NULL, 's'},
 	{"flush", required_argument, NULL, 'f'},
 	/* insert new commands here to keep longopts[cmd].name further down working */
@@ -796,6 +796,7 @@ int main(int argc, char *argv[]) {
 					info("%s is not used", devpath);
 					exit(EXIT_XNBD_DEVICE_UNUSED);
 				default:
+					info("%s is not a NBD device", devpath);
 					exit(EXIT_FAILURE);
 			}
 			break;

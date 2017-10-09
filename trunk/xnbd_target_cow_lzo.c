@@ -521,7 +521,7 @@ struct disk_stack_io *disk_stack_mmap(struct disk_stack *ds, off_t iofrom, size_
 					char *chunk_iobuf  = MAX(iobuf, (ba_iobuf + (index - index_sta) * CBLOCKSIZE));
 
 					g_assert(chunk_iolen <= CBLOCKSIZE);
-					dbg("bindex %zu [chunk_iofrom %ju chunk_ioend %ju (%zu)]",
+					dbg("bindex %lu [chunk_iofrom %ju chunk_ioend %ju (%zu)]",
 							index, chunk_iofrom, chunk_ioend, chunk_iolen);
 
 					iov[index - index_sta].iov_base = chunk_iobuf;

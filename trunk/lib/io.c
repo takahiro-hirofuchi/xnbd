@@ -354,7 +354,7 @@ struct mmap_region *mmap_region_create(int fd, off_t iofrom, size_t iolen, int r
 		else
 			mmap_buf = mmap(NULL, mmap_len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, pa_iofrom);
 		if (mmap_buf == MAP_FAILED)
-			err("disk mapping failed (iofrom %ju iolen %zu), %m", iofrom, iolen);
+			err("disk mapping failed (iofrom %lld iolen %zu), %m", iofrom, iolen);
 	}
 
 	struct mmap_region *mr = g_slice_new(struct mmap_region);
