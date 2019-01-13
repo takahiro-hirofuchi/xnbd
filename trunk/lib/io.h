@@ -34,6 +34,10 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 
+#ifdef __GNU_LIBRARY__
+#include <sys/sysmacros.h>
+#endif
+
 
 void read_all(int fd, void *buf, size_t len);
 void write_all(int fd, const void *buf, size_t len);
