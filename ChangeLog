@@ -13,6 +13,8 @@ xNBD Change Log
 
 0.4.1
 -----
+Since Bitbucket will shutdown Mercurial repositories, the repository is
+converted to Git and moved to GitHub.
 
 Bugfixes
 ~~~~~~~~
